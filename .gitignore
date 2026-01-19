@@ -1,0 +1,124 @@
+# Brain Sentry - Git Ignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.eclipse/
+.settings/
+.classpath
+.project
+.factorypath
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Backend - Java/Maven
+brain-sentry-backend/target/
+brain-sentry-backend/.mvn/
+brain-sentry-backend/mvnw
+brain-sentry-backend/mvnw.cmd
+brain-sentry-backend/META-INF/
+brain-sentry-backend/*.class
+brain-sentry-backend/.settings/
+brain-sentry-backend/.classpath
+brain-sentry-backend/.project
+brain-sentry-backend/*/target/
+
+# JaCoCo
+brain-sentry-backend/target/jacoco.exec
+brain-sentry-backend/target/site/jacoco*
+
+# Frontend - Node.js
+brain-sentry-frontend/node_modules/
+brain-sentry-frontend/dist/
+brain-sentry-frontend/dist-ssr/
+brain-sentry-frontend/build/
+brain-sentry-frontend/.turbo/
+brain-sentry-frontend/coverage/
+brain-sentry-frontend/nuxt/
+brain-sentry-frontend/.nitro/
+brain-sentry-frontend/cache/
+brain-sentry-frontend/.cache/
+
+# Frontend - Logs
+brain-sentry-frontend/npm-debug.log*
+brain-sentry-frontend/yarn-debug.log*
+brain-sentry-frontend/yarn-error.log*
+brain-sentry-frontend/pnpm-debug.log*
+brain-sentry-frontend/lerna-debug.log*
+
+# Frontend - Vite
+brain-sentry-frontend/.vite/
+
+# Docker
+*.dockerfile
+docker-compose.override.yml
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+ssl/
+
+# Database dumps
+*.sql
+*.dump
+*.bak
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Build artifacts
+build/
+out/
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Logs
+logs/
+*.log
+log/
+
+# Test artifacts
+test-results/
+.playwright/
+.nyc_output/
+
+# Misc
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*

@@ -1,0 +1,213 @@
+# Brain Sentry Application Configuration
+# Spring Boot 4.0
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+
+spring:
+  application:
+    name: brain-sentry
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:brainsentry}
+    username: ${POSTGRES_USER:brainsentry}
+    password: ${POSTGRES_PASSWORD:brainsentry_dev}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none  # We manage schema manually
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+          order_updates: true
+        # Enable multi-tenancy with Hibernate 6
+        tenant_identifier_resolver: com.integraltech.brainsentry.config.TenantIdentifierResolver
+
+  # Redis/FalkorDB Configuration
+  data:
+    redis:
+      host: ${FALKORDB_HOST:localhost}
+      port: ${FALKORDB_PORT:6379}
+      password: ${FALKORDB_PASSWORD:}
+      database: 0
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          time-between-eviction-runs: 60000ms
+
+# Brain Sentry Configuration
+brain-sentry:
+  # FalkorDB Graph Configuration
+  graph:
+    name: ${FALKORDB_GRAPH_NAME:brainsentry}
+
+  # OpenRouter / Grok Configuration
+  llm:
+    provider: openrouter
+    model: ${LLM_MODEL:x-ai/grok-4.1-fast}
+    api-key: ${OPENROUTER_API_KEY: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}
+    base-url: ${LLM_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+    temperature: ${LLM_TEMPERATURE:0.2}
+    max-tokens: ${LLM_MAX_TOKENS:500}
+    timeout: ${LLM_TIMEOUT:60000}
+    enable-thinking: ${LLM_ENABLE_THINKING:false}
+
+  # Embeddings Configuration
+  embedding:
+    model: ${EMBEDDING_MODEL:all-MiniLM-L6-v2}
+    dimensions: ${EMBEDDING_DIMENSIONS:384}
+    provider: ${EMBEDDING_PROVIDER:djl}
+
+  # Interception Configuration
+  interception:
+    quick-check-enabled: ${QUICK_CHECK_ENABLED:true}
+    deep-analysis-enabled: ${DEEP_ANALYSIS_ENABLED:true}
+    max-context-tokens: ${MAX_CONTEXT_TOKENS:500}
+    relevance-threshold: ${RELEVANCE_THRESHOLD:0.7}
+
+  # Memory Management
+  memory:
+    auto-capture: ${AUTO_CAPTURE:true}
+    auto-importance: ${AUTO_IMPORTANCE:true}
+    obsolete-threshold-days: ${OBSOLETE_THRESHOLD_DAYS:90}
+    default-importance: ${DEFAULT_IMPORTANCE:MINOR}
+    default-category: ${DEFAULT_CATEGORY:PATTERN}
+
+  # MCP Server Configuration
+  mcp:
+    enabled: ${MCP_ENABLED:true}
+    port: ${MCP_PORT:8081}
+    path: ${MCP_PATH:/mcp}
+
+  # Multi-tenancy
+  multi-tenancy:
+    enabled: ${MULTI_TENANCY_ENABLED:true}
+    default-tenant: ${DEFAULT_TENANT:default}
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.integraltech.brainsentry: ${LOG_LEVEL:DEBUG}
+    org.springframework: INFO
+    org.hibernate.SQL: ${SQL_LOGGING:WARN}
+    redis.clients: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/brain-sentry.log
+    max-size: 100MB
+    max-history: 30
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+
+# Security Configuration
+security:
+  jwt:
+    secret: ${JWT_SECRET:brain-sentry-secret-change-in-production}
+    expiration: ${JWT_EXPIRATION:86400000}  # 24 hours in milliseconds
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:6174}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    com.integraltech.brainsentry: DEBUG
+    org.hibernate.SQL: DEBUG
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    com.integraltech.brainsentry: INFO
+    org.hibernate.SQL: WARN
+
+server:
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 20
+
+
+# Springdoc OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    show:
+      operationId: true
+      login-page: true
+  group-configs:
+    group-by: tag
+    order-by: title
+  packages-to-scan:
+    - com.integraltech.brainsentry.controller
+  packages-to-exclude:
+    - org.springframework.boot
+    - org.springframework.cloud
+    - org.springframework.data.jpa
+    - org.springframework.kafka
+    - org.springframework.security
+    - org.springframework.web.servlet
+  show-javadoc: false
+  show-actuator: true
+

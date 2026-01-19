@@ -1,0 +1,73 @@
+# Brain Sentry - Development Environment
+# PostgreSQL 16 + FalkorDB for graph and vector storage
+
+version: '3.9'
+
+services:
+  # PostgreSQL 16 - Primary database for audit logs, users, analytics
+  postgres:
+    image: postgres:16-alpine
+    container_name: brainsentry-postgres
+    environment:
+      POSTGRES_DB: brainsentry
+      POSTGRES_USER: brainsentry
+      POSTGRES_PASSWORD: brainsentry_dev
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brainsentry -d brainsentry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - brainsentry-net
+
+  # FalkorDB - Graph database with vector search support
+  # FalkorDB is built on Redis with graph and vector capabilities
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: brainsentry-falkordb
+    environment:
+      FALKORDB_NAME: brainsentry
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - brainsentry-net
+
+  # Adminer - Database management UI (optional)
+  adminer:
+    image: adminer:latest
+    container_name: brainsentry-adminer
+    ports:
+      - "8081:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - brainsentry-net
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  falkordb_data:
+    driver: local
+
+networks:
+  brainsentry-net:
+    driver: bridge

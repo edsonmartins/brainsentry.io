@@ -1,0 +1,571 @@
+import { useState } from "react";
+import {
+  Users,
+  UserPlus,
+  Search,
+  Edit,
+  Trash2,
+  Mail,
+  Shield,
+  Clock,
+  Check,
+  X,
+  MoreVertical,
+  RefreshCw,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Input, SearchInput } from "@/components/ui/filter";
+import { Pagination, SimplePagination } from "@/components/ui/pagination";
+import { Spinner, Skeleton } from "@/components/ui/spinner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui";
+import { useFetch } from "@/hooks";
+import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+  tenantId: string;
+  roles?: string[];
+  active: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+interface CreateUserRequest {
+  email: string;
+  name?: string;
+  password: string;
+  tenantId?: string;
+  roles?: string[];
+}
+
+interface UpdateUserRequest {
+  name?: string;
+  active?: boolean;
+  roles?: string[];
+}
+
+const ROLE_OPTIONS = [
+  { value: "USER", label: "Usuário" },
+  { value: "ADMIN", label: "Administrador" },
+  { value: "MODERATOR", label: "Moderador" },
+];
+
+const ROLE_COLORS: Record<string, string> = {
+  ADMIN: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  MODERATOR: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  USER: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+};
+
+export function UsersPage() {
+  const { user: currentUser } = useAuth();
+  const { toast } = useToast();
+  const tenantId = currentUser?.tenantId || "default";
+
+  // State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [formData, setFormData] = useState<CreateUserRequest>({
+    email: "",
+    name: "",
+    password: "",
+    tenantId,
+    roles: ["USER"],
+  });
+
+  // Fetch users
+  const {
+    data: usersData,
+    isLoading,
+    error,
+    refetch,
+  } = useFetch<{ content: User[]; totalElements: number }>(
+    `${API_URL}/v1/users?page=${page - 1}&size=${pageSize}`
+  );
+
+  const users = usersData?.content || [];
+  const totalElements = usersData?.totalElements || 0;
+  const totalPages = Math.ceil(totalElements / pageSize);
+
+  // Filter users by search
+  const filteredUsers = users.filter(
+    (u) =>
+      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Create user
+  const handleCreateUser = async () => {
+    try {
+      const response = await fetch(`${API_URL}/v1/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": tenantId,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user");
+      }
+
+      toast({
+        title: "Usuário criado",
+        description: `O usuário "${formData.email}" foi criado com sucesso.`,
+        variant: "success",
+      });
+
+      setShowCreateDialog(false);
+      resetForm();
+      refetch?.();
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: (err as Error).message || "Não foi possível criar o usuário.",
+        variant: "error",
+      });
+    }
+  };
+
+  // Update user
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const response = await fetch(`${API_URL}/v1/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": tenantId,
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          active: formData.active ?? true,
+          roles: formData.roles,
+        } as UpdateUserRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update user");
+      }
+
+      toast({
+        title: "Usuário atualizado",
+        description: `O usuário "${selectedUser.email}" foi atualizado.`,
+        variant: "success",
+      });
+
+      setShowEditDialog(false);
+      setSelectedUser(null);
+      refetch?.();
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: (err as Error).message || "Não foi possível atualizar o usuário.",
+        variant: "error",
+      });
+    }
+  };
+
+  // Delete user
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${email}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/v1/users/${userId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": tenantId,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete user");
+      }
+
+      toast({
+        title: "Usuário excluído",
+        description: `O usuário "${email}" foi excluído.`,
+        variant: "success",
+      });
+
+      refetch?.();
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir o usuário.",
+        variant: "error",
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      email: "",
+      name: "",
+      password: "",
+      tenantId,
+      roles: ["USER"],
+    });
+  };
+
+  const openEditDialog = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      email: user.email,
+      name: user.name,
+      password: "",
+      tenantId: user.tenantId,
+      roles: user.roles || ["USER"],
+      active: user.active,
+    });
+    setShowEditDialog(true);
+  };
+
+  const toggleRole = (role: string) => {
+    const currentRoles = formData.roles || [];
+    const newRoles = currentRoles.includes(role)
+      ? currentRoles.filter((r) => r !== role)
+      : [...currentRoles, role];
+    setFormData({ ...formData, roles: newRoles });
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleString("pt-BR");
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">Usuários</h1>
+                <p className="text-sm text-muted-foreground">
+                  Gerencie os usuários do sistema
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => refetch?.()}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Novo Usuário
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8">
+        {/* Search */}
+        <div className="mb-6">
+          <SearchInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Buscar usuários por email ou nome..."
+          />
+        </div>
+
+        {/* Users List */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Usuários ({totalElements} {totalElements === 1 ? "usuário" : "usuários"})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                    <Skeleton variant="circular" width={40} height={40} />
+                    <Skeleton variant="text" width="30%" />
+                    <Skeleton variant="text" width="20%" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">
+                  {searchQuery ? "Nenhum usuário encontrado" : "Nenhum usuário cadastrado"}
+                </h3>
+                <p className="mb-4">
+                  {searchQuery
+                    ? "Tente buscar com outro termo."
+                    : "Comece adicionando um novo usuário ao sistema."}
+                </p>
+                {!searchQuery && (
+                  <Button onClick={() => setShowCreateDialog(true)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Adicionar Usuário
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left text-sm text-muted-foreground">
+                        <th className="p-4">Usuário</th>
+                        <th className="p-4">Roles</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Último Acesso</th>
+                        <th className="p-4">Criado em</th>
+                        <th className="p-4 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map((user) => (
+                        <tr key={user.id} className="border-b hover:bg-muted/50">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Mail className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{user.name || user.email}</p>
+                                <p className="text-sm text-muted-foreground">{user.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex gap-1 flex-wrap">
+                              {(user.roles || ["USER"]).map((role) => (
+                                <span
+                                  key={role}
+                                  className={`text-xs px-2 py-1 rounded-full ${ROLE_COLORS[role] || ROLE_COLORS.USER}`}
+                                >
+                                  {role.toLowerCase()}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            {user.active ? (
+                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
+                                <Check className="h-3 w-3" />
+                                Ativo
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-sm">
+                                <X className="h-3 w-3" />
+                                Inativo
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {formatDate(user.lastLoginAt)}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {formatDate(user.createdAt)}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditDialog(user)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteUser(user.id, user.email)}
+                                disabled={user.id === currentUser?.id}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-4">
+                    <SimplePagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={setPage}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </main>
+
+      {/* Create User Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Novo Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2">Email</label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="usuario@exemplo.com"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Nome</label>
+              <Input
+                type="text"
+                value={formData.name || ""}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Senha</label>
+              <Input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="••••••••"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Roles</label>
+              <div className="flex gap-2 flex-wrap">
+                {ROLE_OPTIONS.map((role) => (
+                  <button
+                    key={role.value}
+                    type="button"
+                    onClick={() => toggleRole(role.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      formData.roles?.includes(role.value)
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    {role.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateUser} disabled={!formData.email || !formData.password}>
+              Criar Usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2">Email</label>
+              <Input type="email" value={formData.email} disabled />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Nome</label>
+              <Input
+                type="text"
+                value={formData.name || ""}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Status</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, active: true })}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    formData.active !== false
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-muted hover:bg-muted/80"
+                  }`}
+                >
+                  Ativo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, active: false })}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    formData.active === false
+                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      : "bg-muted hover:bg-muted/80"
+                  }`}
+                >
+                  Inativo
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2">Roles</label>
+              <div className="flex gap-2 flex-wrap">
+                {ROLE_OPTIONS.map((role) => (
+                  <button
+                    key={role.value}
+                    type="button"
+                    onClick={() => toggleRole(role.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      formData.roles?.includes(role.value)
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    {role.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdateUser}>Salvar Alterações</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
