@@ -72,6 +72,53 @@ public class OpenRouterService {
     }
 
     /**
+     * Generic chat method for sending prompts to the LLM.
+     *
+     * @param systemPrompt the system prompt
+     * @param userPrompt the user prompt
+     * @return the LLM response
+     */
+    public String chat(String systemPrompt, String userPrompt) {
+        OpenRouterRequest request = new OpenRouterRequest(
+            config.getModel(),
+            List.of(
+                new Message("system", systemPrompt),
+                new Message("user", userPrompt)
+            ),
+            config.getTemperature(),
+            4000
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(config.getApiKey());
+        headers.set("HTTP-Referer", "https://brainsentry.io");
+        headers.set("X-Title", "Brain Sentry");
+
+        HttpEntity<OpenRouterRequest> entity = new HttpEntity<>(request, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                config.getBaseUrl(),
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                return root.path("choices").get(0).path("message").path("content").asText();
+            } else {
+                log.warn("OpenRouter returned status: {}", response.getStatusCode());
+                return "";
+            }
+        } catch (Exception e) {
+            log.error("Error calling OpenRouter API", e);
+            return "";
+        }
+    }
+
+    /**
      * Extract key patterns from content for relationship detection.
      *
      * @param content the content to analyze

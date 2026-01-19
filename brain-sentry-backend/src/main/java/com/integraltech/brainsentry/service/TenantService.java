@@ -187,7 +187,7 @@ public class TenantService {
         Tenant tenant = getTenant(tenantId);
 
         // Check if there are users in this tenant
-        long userCount = userRepo.countByTenant(tenantId);
+        long userCount = userRepo.countByTenantId(tenantId);
         if (userCount > 0) {
             throw new IllegalStateException("Cannot delete tenant with " + userCount + " users");
         }
@@ -206,8 +206,8 @@ public class TenantService {
     public TenantStats getTenantStats(String tenantId) {
         Tenant tenant = getTenant(tenantId);
 
-        long totalUsers = userRepo.countByTenant(tenantId);
-        long activeUsers = userRepo.countActiveByTenant(tenantId);
+        long totalUsers = userRepo.countByTenantId(tenantId);
+        long activeUsers = userRepo.countByTenantIdAndActive(tenantId, true);
 
         // Get recent activity timestamp from audit logs
         Instant lastActivityAt = auditLogRepo.findFirstByTenantIdOrderByTimestampDesc(tenantId)
@@ -335,7 +335,7 @@ public class TenantService {
         if (tenant.getMaxUsers() == 0) {
             return true; // unlimited
         }
-        long currentCount = userRepo.countByTenant(tenantId);
+        long currentCount = userRepo.countByTenantId(tenantId);
         return currentCount < tenant.getMaxUsers();
     }
 

@@ -125,15 +125,39 @@ brainsentry.io/
 │   │   │   ├── java/com/integraltech/brainsentry/
 │   │   │   │   ├── config/       # Configuraes (Security, DB, Cache, etc)
 │   │   │   │   ├── controller/   # REST Controllers
+│   │   │   │   │   ├── CompressionController.java
+│   │   │   │   │   ├── NoteTakingController.java
+│   │   │   │   │   └── ...
 │   │   │   │   ├── service/      # Business Logic
+│   │   │   │   │   ├── ArchitectService.java      # Context compression
+│   │   │   │   │   ├── NoteTakingService.java    # Session analysis
+│   │   │   │   │   ├── OpenRouterService.java
+│   │   │   │   │   └── ...
 │   │   │   │   ├── repository/   # JPA Repositories
+│   │   │   │   │   ├── HindsightNoteJpaRepository.java
+│   │   │   │   │   └── ...
 │   │   │   │   ├── domain/       # Entities (JPA)
+│   │   │   │   │   ├── HindsightNote.java
+│   │   │   │   │   ├── Memory.java
+│   │   │   │   │   └── ...
 │   │   │   │   ├── dto/          # Request/Response DTOs
+│   │   │   │   │   ├── request/
+│   │   │   │   │   │   ├── CompressionRequest.java
+│   │   │   │   │   │   ├── SessionAnalysisRequest.java
+│   │   │   │   │   │   └── CreateHindsightNoteRequest.java
+│   │   │   │   │   └── response/
+│   │   │   │   │       ├── CompressedContextResponse.java
+│   │   │   │   │       ├── SessionAnalysisResponse.java
+│   │   │   │   │       └── HindsightNoteResponse.java
 │   │   │   │   └── mapper/       # DTO Mappers
 │   │   │   └── resources/
 │   │   │       ├── application.yml
 │   │   │       └── application-prod.yml
 │   │   └── test/                 # Unit & Integration Tests
+│   │       └── java/
+│   │           └── .../
+│   │               ├── ArchitectServiceTest.java
+│   │               └── NoteTakingServiceTest.java
 │   ├── Dockerfile
 │   └── pom.xml
 │
@@ -396,6 +420,29 @@ curl -H "Authorization: Bearer <token>" \
 | GET | `/v1/audit-logs` | List audit logs |
 | GET | `/v1/stats/overview` | System overview |
 | GET | `/actuator/health` | Health check |
+
+#### Notes (Note-Taking Agent)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/notes/analyze` | Analyze session and extract insights |
+| GET | `/v1/notes/session/{id}` | Get notes for a session |
+| GET | `/v1/notes/session/{id}/md` | Export session notes as Markdown |
+| POST | `/v1/notes/hindsight` | Create hindsight note manually |
+| GET | `/v1/notes/hindsight` | List hindsight notes for tenant |
+| GET | `/v1/notes/hindsight/frequent` | Get frequent errors |
+| GET | `/v1/notes/insights` | Get insight notes for tenant |
+| POST | `/v1/notes/distill` | Distill session into persistent memories |
+
+#### Compression (Architect Agent)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/compression/compress` | Compress conversation context |
+| POST | `/v1/compression/summary` | Extract structured summary from messages |
+| POST | `/v1/compression/check` | Check if compression is needed |
+| POST | `/v1/compression/critical` | Identify critical messages |
+| GET | `/v1/compression/status` | Get compression status for tenant |
 
 ### OpenAPI/Swagger
 

@@ -1,6 +1,7 @@
 package com.integraltech.brainsentry.repository;
 
 import com.integraltech.brainsentry.domain.Memory;
+import com.integraltech.brainsentry.domain.enums.MemoryCategory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -27,6 +28,12 @@ public interface MemoryJpaRepository extends JpaRepository<Memory, String>, JpaS
      * Find memories by category (automatically filtered by current tenant).
      */
     List<Memory> findByCategory(String category);
+
+    /**
+     * Find memories by tenant ID and category enum.
+     * Note: tenantId is included for explicit queries when needed.
+     */
+    List<Memory> findByTenantIdAndCategory(String tenantId, MemoryCategory category);
 
     /**
      * Find memories by importance level (automatically filtered by current tenant).
