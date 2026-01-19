@@ -55,32 +55,7 @@
 
 ## Architecture
 
-```
-                               ┌─────────────────┐
-                               │   Frontend      │
-                               │  (React + TS)   │
-                               │   Porta: 80     │
-                               └────────┬────────┘
-                                        │ HTTP
-                               ┌────────▼────────┐
-                               │  Nginx Proxy    │
-                               │  (Opcional)     │
-                               └────────┬────────┘
-                                        │
-┌──────────────────┐              ┌─────▼─────┐              ┌──────────────────┐
-│   PostgreSQL     │◄─────────────┤  Backend  ├─────────────►    FalkorDB      │
-│  Porta: 5432     │   JPA/SQL    │(Spring Boot│   Graph/Vec  │   Porta: 6379    │
-│  - Audit Logs    │              │  Porta:    │              │  - Memrias      │
-│  - Users         │              │   8080)    │              │  - Embeddings    │
-│  - Tenants       │              └─────┬─────┘              │  - Grafo         │
-└──────────────────┘                    │                     └──────────────────┘
-                                        │
-                               ┌────────▼────────┐
-                               │  OpenRouter     │
-                               │   (LLM API)     │
-                               │  grok-4.1-fast  │
-                               └─────────────────┘
-```
+![Architecture](docs/architecture.svg)
 
 ### Componentes
 
