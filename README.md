@@ -51,6 +51,10 @@
 - Injeo automtica de contexto relevante
 - Auditvel e corrigvel
 
+### Infogrfico do Sistema
+
+![Infogrfico](docs/infografico.png)
+
 ---
 
 ## Architecture
