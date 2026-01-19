@@ -1,5 +1,6 @@
 package com.integraltech.brainsentry.domain;
 
+import com.integraltech.brainsentry.domain.enums.NoteSeverity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,7 +27,8 @@ import java.util.UUID;
         @Index(name = "idx_hindsight_tenant", columnList = "tenantId"),
         @Index(name = "idx_hindsight_session", columnList = "sessionId"),
         @Index(name = "idx_hindsight_error_type", columnList = "errorType"),
-        @Index(name = "idx_hindsight_created_at", columnList = "createdAt")
+        @Index(name = "idx_hindsight_created_at", columnList = "createdAt"),
+        @Index(name = "idx_hindsight_severity", columnList = "severity")
 })
 public class HindsightNote {
 
@@ -47,6 +49,44 @@ public class HindsightNote {
      */
     @Column(length = 100)
     private String sessionId;
+
+    // ==================== Note Metadata (from Confucius spec) ====================
+
+    /**
+     * Title of the hindsight note.
+     * Used for quick identification and display.
+     */
+    @Column(length = 500)
+    private String title;
+
+    /**
+     * Regex pattern extracted from error message.
+     * Used for pattern matching to find similar errors.
+     * KEY FEATURE from Confucius - enables proactive error detection.
+     */
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String errorPattern;
+
+    /**
+     * Severity level of this note.
+     * Determines how strongly it should be followed.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    @Builder.Default
+    private NoteSeverity severity = NoteSeverity.MEDIUM;
+
+    /**
+     * When this note was last accessed or suggested.
+     */
+    private Instant lastAccessedAt;
+
+    /**
+     * How many times this note has been accessed.
+     */
+    @Builder.Default
+    private Integer accessCount = 0;
 
     // ==================== Error Information ====================
 
@@ -217,9 +257,12 @@ public class HindsightNote {
 
     /**
      * Increment reference count when this note is suggested.
+     * Also updates lastAccessedAt and accessCount.
      */
     public void recordReference() {
         this.referenceCount++;
+        this.lastAccessedAt = Instant.now();
+        this.accessCount++;
     }
 
     /**
@@ -253,5 +296,43 @@ public class HindsightNote {
     @Transient
     public boolean isPreventionEffective() {
         return getPreventionEffectiveness() > 0.5;
+    }
+
+    /**
+     * Check if a given error message matches this note's error pattern.
+     * KEY FEATURE from Confucius - enables proactive error detection.
+     *
+     * @param errorMessage the error message to check
+     * @return true if the error message matches the pattern, false otherwise
+     */
+    @Transient
+    public boolean matchesError(String errorMessage) {
+        if (errorPattern == null || errorPattern.isBlank()) {
+            return false;
+        }
+        if (errorMessage == null) {
+            return false;
+        }
+        try {
+            return errorMessage.matches(errorPattern);
+        } catch (Exception e) {
+            // Invalid regex pattern
+            return false;
+        }
+    }
+
+    /**
+     * Check if this note should be suggested based on error type.
+     * Simple matching by error type when pattern matching is not available.
+     *
+     * @param errorType the error type to check
+     * @return true if error types match
+     */
+    @Transient
+    public boolean matchesErrorType(String errorType) {
+        if (this.errorType == null || errorType == null) {
+            return false;
+        }
+        return this.errorType.equalsIgnoreCase(errorType);
     }
 }

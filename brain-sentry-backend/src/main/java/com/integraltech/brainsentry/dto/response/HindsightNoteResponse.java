@@ -21,6 +21,13 @@ public class HindsightNoteResponse {
     private String tenantId;
     private String sessionId;
 
+    // Note metadata (from Confucius spec)
+    private String title;
+    private String errorPattern;
+    private String severity;  // NoteSeverity as string
+    private String lastAccessedAt;  // Instant as string
+    private Integer accessCount;
+
     // Error information
     private String errorType;
     private String errorMessage;

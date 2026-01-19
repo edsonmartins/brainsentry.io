@@ -1,6 +1,7 @@
 package com.integraltech.brainsentry.repository;
 
 import com.integraltech.brainsentry.domain.HindsightNote;
+import com.integraltech.brainsentry.domain.enums.NoteSeverity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -116,4 +117,25 @@ public interface HindsightNoteJpaRepository extends JpaRepository<HindsightNote,
     List<HindsightNote> findSimilarErrors(@Param("tenantId") String tenantId,
                                           @Param("errorType") String errorType,
                                           @Param("messageSnippet") String messageSnippet);
+
+    /**
+     * Find hindsight notes by severity level for a tenant.
+     */
+    List<HindsightNote> findByTenantIdAndSeverity(String tenantId, NoteSeverity severity);
+
+    /**
+     * Find critical and high severity notes for a tenant.
+     */
+    @Query("SELECT h FROM HindsightNote h WHERE h.tenantId = :tenantId " +
+           "AND h.severity IN ('CRITICAL', 'HIGH') " +
+           "ORDER BY h.severity, h.lastOccurrenceAt DESC")
+    List<HindsightNote> findCriticalByTenantId(@Param("tenantId") String tenantId);
+
+    /**
+     * Find most frequently accessed notes for a tenant.
+     */
+    @Query("SELECT h FROM HindsightNote h WHERE h.tenantId = :tenantId " +
+           "ORDER BY h.accessCount DESC, h.lastAccessedAt DESC")
+    List<HindsightNote> findMostAccessed(@Param("tenantId") String tenantId,
+                                        Pageable pageable);
 }
