@@ -14,6 +14,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import MemoryAdminPage from "./pages/MemoryAdminPage";
 import AnalyticsAdminPage from "./pages/AnalyticsAdminPage";
+import { LandingPage } from "./landing/pages/LandingPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -39,19 +40,22 @@ function App() {
         <ToastProviderComp>
           <AuthProvider>
             <Routes>
-              {/* Public Routes */}
+              {/* Landing Page - Public */}
+              <Route path="/" element={<LandingPage />} />
+
+              {/* Login Page */}
               <Route path="/login" element={<LoginPage />} />
 
-              {/* Protected Routes */}
+              {/* Protected Routes - App */}
               <Route
-                path="/"
+                path="/app"
                 element={
                   <ProtectedRoute>
                     <AdminLayout />
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="memories" element={<MemoryAdminPage />} />
                 <Route path="search" element={<SearchPage />} />
@@ -63,8 +67,11 @@ function App() {
                 <Route path="analytics" element={<AnalyticsAdminPage />} />
               </Route>
 
-              {/* Catch all - redirect to dashboard */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* Legacy redirect - /dashboard -> /app/dashboard */}
+              <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
+
+              {/* Catch all - redirect to landing */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AuthProvider>
         </ToastProviderComp>
