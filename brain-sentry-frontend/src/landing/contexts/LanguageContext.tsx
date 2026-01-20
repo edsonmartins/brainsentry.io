@@ -1,0 +1,718 @@
+import { createContext, useContext, useState, ReactNode } from "react";
+
+export type Language = "en" | "pt" | "es";
+
+interface LanguageContextValue {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: string) => string;
+}
+
+const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
+
+const translations: Record<Language, Record<string, string>> = {
+  en: {
+    // Header
+    "nav.features": "Features",
+    "nav.research": "Research",
+    "nav.comparison": "Comparison",
+    "nav.faq": "FAQ",
+    "nav.signIn": "Sign In",
+    "nav.getStarted": "Get Started",
+
+    // Hero
+    "hero.badge": "OPEN SOURCE",
+    "hero.title": "Your AI's Second Brain",
+    "hero.subtitle": "Graph-Native Agent Memory That Never Forgets",
+    "hero.description": "Stop reexplaining. Start building. Brain Sentry remembers your code decisions, patterns, and architecture—so your AI coding assistant doesn't have to ask twice.",
+    "hero.cta.primary": "Join Waitlist",
+    "hero.cta.secondary": "View on GitHub",
+    "hero.stat1": "8 Research Papers",
+    "hero.stat2": "4 Memory Types",
+    "hero.stat3": "Graph-Native",
+
+    // Problem Section
+    "problem.title": "AI Coding Assistants Have a Memory Problem",
+    "problem.description": "You've experienced it: explaining the same architecture decision for the third time this week. Your AI forgets your team's patterns, loses context across sessions, and can't connect the dots between related code changes.",
+    "problem.table.feature": "Feature",
+    "problem.table.without": "Without Brain Sentry",
+    "problem.table.with": "With Brain Sentry",
+    "problem.feature1": "Memory Retention",
+    "problem.feature1.without": "AI forgets past decisions",
+    "problem.feature1.with": "Persistent memory",
+    "problem.feature2": "Context Delivery",
+    "problem.feature2.without": "Repeat explanations",
+    "problem.feature2.with": "Context auto-injection",
+    "problem.feature3": "Code Consistency",
+    "problem.feature3.without": "Inconsistent patterns",
+    "problem.feature3.with": "Pattern enforcement",
+    "problem.feature4": "Knowledge Sharing",
+    "problem.feature4.without": "Lost tribal knowledge",
+    "problem.feature4.with": "Knowledge graph",
+    "problem.feature5": "Team Onboarding",
+    "problem.feature5.without": "Slow onboarding",
+    "problem.feature5.with": "Instant context",
+    "problem.footer": "Traditional RAG solutions offer read-only retrieval. They can't learn, can't understand relationships, and can't persist knowledge across sessions.",
+    "problem.footer.highlight": "There's a better way.",
+
+    // Solution Section
+    "solution.badge": "THE SOLUTION",
+    "solution.title": "Agent Memory for Developers",
+    "solution.pillar1.title": "Multi-Type Memory",
+    "solution.pillar1.desc": "Not all memories are the same. Brain Sentry implements four types optimized for specific retrieval scenarios:",
+    "solution.pillar1.type1": "Semantic",
+    "solution.pillar1.type1.desc": "Technical facts and concepts",
+    "solution.pillar1.type2": "Episodic",
+    "solution.pillar1.type2.desc": "Past events and decisions",
+    "solution.pillar1.type3": "Procedural",
+    "solution.pillar1.type3.desc": "Patterns and how-tos",
+    "solution.pillar1.type4": "Associative",
+    "solution.pillar1.type4.desc": "Relationships between components",
+    "solution.pillar2.title": "Autonomous Context Injection",
+    "solution.pillar2.desc": "No tool calls. No agent decisions. No missed context. Brain Sentry autonomously analyzes every query and injects relevant context automatically.",
+    "solution.pillar2.highlight": "Transparent, consistent, reliable.",
+    "solution.pillar3.title": "Graph-Native Architecture",
+    "solution.pillar3.desc": "FalkorDB combines graph and vector search in one database. Multi-hop relationship queries, conflict detection via graph analysis, impact analysis for refactoring, and network visualization.",
+    "solution.pillar3.item1": "Multi-hop queries",
+    "solution.pillar3.item1.desc": "Find dependencies across code",
+    "solution.pillar3.item2": "Conflict detection",
+    "solution.pillar3.item2.desc": "Auto-detect contradictions",
+    "solution.pillar3.item3": "Impact analysis",
+    "solution.pillar3.item3.desc": "What depends on this?",
+    "solution.pillar3.highlight": "Relationships are first-class citizens.",
+
+    // Footer
+    "footer.tagline": "Your AI's Second Brain",
+    "footer.product": "Product",
+    "footer.company": "Company",
+    "footer.resources": "Resources",
+    "footer.legal": "Legal",
+    "footer.rights": "All rights reserved.",
+    "footer.description": "Graph-Native Agent Memory That Never Forgets. Give your AI a second brain.",
+    "footer.link.features": "Features",
+    "footer.link.research": "Research",
+    "footer.link.roadmap": "Roadmap",
+    "footer.link.docs": "Documentation",
+    "footer.link.github": "GitHub",
+    "footer.link.papers": "Research Papers",
+    "footer.link.about": "About",
+    "footer.link.blog": "Blog",
+    "footer.link.contact": "Contact",
+    "footer.copyright": "© 2025 IntegrAllTech. Built with ❤️ in Brazil",
+    "footer.privacy": "Privacy",
+    "footer.terms": "Terms",
+    "footer.license": "License (Apache 2.0)",
+
+    // Hero Section
+    "hero.tagline": "Graph-Native Agent Memory That Never Forgets",
+    "hero.title": "Your AI's Second Brain",
+    "hero.subtitle1": "Stop reexplaining. Start building.",
+    "hero.subtitle2": "Brain Sentry remembers your code decisions, patterns, and architecture—so your AI coding assistant doesn't have to ask twice.",
+    "hero.subtitle3": "Autonomous context injection for Claude Code, Cursor, and GitHub Copilot.",
+    "hero.cta.primary": "Join Waitlist",
+    "hero.cta.secondary": "View on GitHub",
+    "hero.trust1": "Open Source (Apache 2.0)",
+    "hero.trust2": "Graph-Native Architecture",
+    "hero.trust3": "Production-Ready",
+    "hero.trust4": "Research-Validated",
+    "hero.stat1.label": "Memory Types",
+    "hero.stat2.label": "Audit Trail",
+    "hero.stat3.label": "Latency p95",
+
+    // How It Works Section
+    "how.badge": "HOW IT WORKS",
+    "how.title": "Always-On Context Injection",
+    "how.description": "Brain Sentry operates transparently, analyzing every query and enriching it with relevant context automatically.",
+    "how.step1.title": "INTERCEPT",
+    "how.step1.desc": "Developer sends query to AI",
+    "how.step2.title": "ANALYZE",
+    "how.step2.desc": "Brain Sentry analyzes relevance",
+    "how.step3.title": "RETRIEVE",
+    "how.step3.desc": "Searches graph for relevant memories",
+    "how.step4.title": "INJECT",
+    "how.step4.desc": "Enhanced prompt sent to AI",
+    "how.code1.comment": "// Traditional approach: Agent must remember to check",
+    "how.code2.comment": "// Brain Sentry: Always analyzes",
+    "how.code2.note": "// Agent receives pre-enriched context automatically",
+
+    // Features Section
+    "features.badge": "KEY FEATURES",
+    "features.title": "Everything You Need for Agent Memory",
+
+    // Comparison Section
+    "comparison.badge": "COMPARISON",
+    "comparison.title": "How Brain Sentry Compares",
+    "comparison.feature": "Feature",
+    "comparison.exclusive": "🌟 = Brain Sentry Exclusive",
+    "comparison.difference": "THE BRAIN SENTRY DIFFERENCE",
+    "comparison.diff1.title": "Graph-Native",
+    "comparison.diff1.desc": "Relationships are first-class citizens",
+    "comparison.diff2.title": "Autonomous",
+    "comparison.diff2.desc": "No tool calls, never forgets to check",
+    "comparison.diff3.title": "Developer-Focused",
+    "comparison.diff3.desc": "Built for code, not generic chat",
+    "comparison.diff4.title": "Production-Ready",
+    "comparison.diff4.desc": "Full audit + version + rollback",
+
+    // CTA Section
+    "cta.title": "Ready to Give Your AI a Second Brain?",
+    "cta.subtitle": "Join 500+ developers already on the waitlist",
+    "cta.placeholder": "Enter your email",
+    "cta.button": "Join Waitlist",
+    "cta.benefit1": "Early access to Beta (Q2 2025)",
+    "cta.benefit2": "Exclusive documentation",
+    "cta.benefit3": "Community Discord invite",
+    "cta.benefit4": "Influence roadmap",
+    "cta.or": "Or",
+    "cta.github": "Star on GitHub",
+
+    // Use Cases Section
+    "usecases.badge": "USE CASES",
+    "usecases.title": "Real-World Results",
+    "usecases.description": "See how development teams are transforming their workflows with Brain Sentry.",
+    "usecases.challenge": "CHALLENGE",
+    "usecases.solution": "SOLUTION",
+
+    // FAQ Section
+    "faq.badge": "FAQ",
+    "faq.title": "Frequently Asked Questions",
+
+    // Architecture Section
+    "architecture.badge": "ARCHITECTURE",
+    "architecture.title": "Built for Production",
+    "architecture.stack": "Tech Stack",
+
+    // Open Source Section
+    "opensource.badge": "OPEN SOURCE",
+    "opensource.title": "Community-Driven Development",
+    "opensource.license": "Licensed under",
+    "opensource.repo": "Repository:",
+    "opensource.value1": "Transparent",
+    "opensource.value2": "Collaborative",
+    "opensource.value3": "Extensible",
+    "opensource.value4": "No Lock-in",
+    "opensource.github": "GitHub",
+    "opensource.discord": "Discord",
+    "opensource.docs": "Docs",
+
+    // Credibility Badges Section
+    "credibility.title": "Validated By Leading Research Institutions",
+    "credibility.papers": "8 Research Papers",
+    "credibility.benchmarks": "4 Major Benchmarks",
+    "credibility.reference": "54.3% SWE-Bench-Pro (Reference)",
+
+    // Roadmap Section
+    "roadmap.badge": "ROADMAP",
+    "roadmap.title": "What's Coming Next",
+    "roadmap.current": "Current",
+    "roadmap.mvp": "MVP Target",
+    "roadmap.status.completed": "Completed",
+    "roadmap.status.inprogress": "In Progress",
+    "roadmap.status.planned": "Planned",
+
+    // Research Section
+    "research.badge": "RESEARCH BACKED",
+    "research.title": "Validated by Leading Research",
+    "research.subtitle": "Brain Sentry is built on insights from 8 groundbreaking papers",
+    "research.evolution.title": "Evolution of Agent Memory",
+    "research.evolution.rag": "RAG (Read-only)",
+    "research.evolution.memgpt": "MemGPT (Hierarchical)",
+    "research.evolution.modern": "Modern Era",
+    "research.evolution.current": "Current State",
+    "research.timeline.confucius": "Confucius (Meta/Harvard) 🏆",
+    "research.timeline.brainsentry": "BRAIN SENTRY 🌟",
+    "research.timeline.desc.confucius": "54.3% SWE-Bench-Pro",
+    "research.timeline.desc.brainsentry": "Graph-Native + Autonomous",
+    "research.viewPaper": "View Paper",
+    "research.keyFindings": "KEY FINDINGS",
+    "research.alignment": "ALIGNMENT",
+    "research.impact": "IMPACT ON BRAIN SENTRY",
+    "research.implemented": "WHAT WE IMPLEMENTED",
+    "research.benchmark": "SWE-BENCH PRO RESULTS",
+    "research.benchmark.confucius": "Confucius",
+    "research.benchmark.anthropic": "Anthropic",
+    "research.benchmark.target": "Our Target",
+    "research.gaps": "RESEARCH GAPS IDENTIFIED",
+    "research.fills": "BRAIN SENTRY FILLS ALL GAPS",
+    "research.limitations": "RAG LIMITATIONS (2020)",
+    "research.evolution": "BRAIN SENTRY EVOLUTION",
+  },
+  pt: {
+    // Header
+    "nav.features": "Recursos",
+    "nav.research": "Pesquisa",
+    "nav.comparison": "Comparação",
+    "nav.faq": "FAQ",
+    "nav.signIn": "Entrar",
+    "nav.getStarted": "Começar",
+
+    // Hero
+    "hero.badge": "OPEN SOURCE",
+    "hero.title": "O Segundo Cérebro da sua IA",
+    "hero.subtitle": "Memória de Agentes com Grafos que Nunca Esquece",
+    "hero.description": "Pare de reexplicar. Comece a construir. O Brain Sentry lembra das suas decisões de código, padrões e arquitetura—para que seu assistente de codificação IA não precise perguntar duas vezes.",
+    "hero.cta.primary": "Entrar na Lista",
+    "hero.cta.secondary": "Ver no GitHub",
+    "hero.stat1": "8 Artigos de Pesquisa",
+    "hero.stat2": "4 Tipos de Memória",
+    "hero.stat3": "Grafo-Nativo",
+
+    // Problem Section
+    "problem.title": "Assistentes de Codificação IA Têm um Problema de Memória",
+    "problem.description": "Você já experimentou: explicar a mesma decisão de arquitetura pela terceira vez esta semana. Sua IA esquece os padrões da sua equipe, perde o contexto entre sessões e não consegue conectar os pontos entre mudanças de código relacionadas.",
+    "problem.table.feature": "Recurso",
+    "problem.table.without": "Sem Brain Sentry",
+    "problem.table.with": "Com Brain Sentry",
+    "problem.feature1": "Retenção de Memória",
+    "problem.feature1.without": "IA esquece decisões passadas",
+    "problem.feature1.with": "Memória persistente",
+    "problem.feature2": "Entrega de Contexto",
+    "problem.feature2.without": "Repete explicações",
+    "problem.feature2.with": "Injeção automática de contexto",
+    "problem.feature3": "Consistência de Código",
+    "problem.feature3.without": "Padrões inconsistentes",
+    "problem.feature3.with": "Execução de padrões",
+    "problem.feature4": "Compartilhamento de Conhecimento",
+    "problem.feature4.without": "Conhecimento tribal perdido",
+    "problem.feature4.with": "Grafo de conhecimento",
+    "problem.feature5": "Onboarding da Equipe",
+    "problem.feature5.without": "Onboarding lento",
+    "problem.feature5.with": "Contexto instantâneo",
+    "problem.footer": "Soluções RAG tradicionais oferecem recuperação somente leitura. Elas não podem aprender, não entendem relacionamentos e não persistem conhecimento entre sessões.",
+    "problem.footer.highlight": "Existe uma maneira melhor.",
+
+    // Solution Section
+    "solution.badge": "A SOLUÇÃO",
+    "solution.title": "Memória de Agentes para Desenvolvedores",
+    "solution.pillar1.title": "Memória Multi-Tipo",
+    "solution.pillar1.desc": "Nem todas as memórias são iguais. O Brain Sentry implementa quatro tipos otimizados para cenários específicos:",
+    "solution.pillar1.type1": "Semântica",
+    "solution.pillar1.type1.desc": "Fatos e conceitos técnicos",
+    "solution.pillar1.type2": "Episódica",
+    "solution.pillar1.type2.desc": "Eventos e decisões passadas",
+    "solution.pillar1.type3": "Procedural",
+    "solution.pillar1.type3.desc": "Padrões e procedimentos",
+    "solution.pillar1.type4": "Associativa",
+    "solution.pillar1.type4.desc": "Relacionamentos entre componentes",
+    "solution.pillar2.title": "Injeção Autônoma de Contexto",
+    "solution.pillar2.desc": "Sem chamadas de ferramenta. Sem decisões de agente. Sem contexto perdido. O Brain Sentry analisa autonomamente cada consulta e injeta contexto relevante automaticamente.",
+    "solution.pillar2.highlight": "Transparente, consistente, confiável.",
+    "solution.pillar3.title": "Arquitetura Grafo-Nativa",
+    "solution.pillar3.desc": "FalkorDB combina grafo e busca vetorial em um banco. Consultas de relacionamento multi-hop, detecção de conflitos via análise de grafo, análise de impacto para refatoração e visualização de rede.",
+    "solution.pillar3.item1": "Consultas multi-hop",
+    "solution.pillar3.item1.desc": "Encontre dependências no código",
+    "solution.pillar3.item2": "Detecção de conflitos",
+    "solution.pillar3.item2.desc": "Detecte contradições automaticamente",
+    "solution.pillar3.item3": "Análise de impacto",
+    "solution.pillar3.item3.desc": "O que depende disso?",
+    "solution.pillar3.highlight": "Relacionamentos são cidadãos de primeira classe.",
+
+    // Footer
+    "footer.tagline": "O Segundo Cérebro da sua IA",
+    "footer.product": "Produto",
+    "footer.company": "Empresa",
+    "footer.resources": "Recursos",
+    "footer.legal": "Legal",
+    "footer.rights": "Todos os direitos reservados.",
+    "footer.description": "Memória de Agentes com Grafos que Nunca Esquece. Dê à sua IA um segundo cérebro.",
+    "footer.link.features": "Recursos",
+    "footer.link.research": "Pesquisa",
+    "footer.link.roadmap": "Roadmap",
+    "footer.link.docs": "Documentação",
+    "footer.link.github": "GitHub",
+    "footer.link.papers": "Artigos de Pesquisa",
+    "footer.link.about": "Sobre",
+    "footer.link.blog": "Blog",
+    "footer.link.contact": "Contato",
+    "footer.copyright": "© 2025 IntegrAllTech. Feito com ❤️ no Brasil",
+    "footer.privacy": "Privacidade",
+    "footer.terms": "Termos",
+    "footer.license": "Licença (Apache 2.0)",
+
+    // Hero Section
+    "hero.tagline": "Memória de Agentes com Grafos que Nunca Esquece",
+    "hero.title": "O Segundo Cérebro da sua IA",
+    "hero.subtitle1": "Pare de reexplicar. Comece a construir.",
+    "hero.subtitle2": "O Brain Sentry lembra das suas decisões de código, padrões e arquitetura—para que seu assistente de codificação IA não precise perguntar duas vezes.",
+    "hero.subtitle3": "Injeção autônoma de contexto para Claude Code, Cursor e GitHub Copilot.",
+    "hero.cta.primary": "Entrar na Lista",
+    "hero.cta.secondary": "Ver no GitHub",
+    "hero.trust1": "Open Source (Apache 2.0)",
+    "hero.trust2": "Arquitetura Grafo-Nativa",
+    "hero.trust3": "Pronto para Produção",
+    "hero.trust4": "Validado por Pesquisa",
+    "hero.stat1.label": "Tipos de Memória",
+    "hero.stat2.label": "Auditoria Completa",
+    "hero.stat3.label": "Latência p95",
+
+    // How It Works Section
+    "how.badge": "COMO FUNCIONA",
+    "how.title": "Injeção de Contexto Sempre Ativa",
+    "how.description": "O Brain Sentry opera de forma transparente, analisando cada consulta e enriquecendo-a com contexto relevante automaticamente.",
+    "how.step1.title": "INTERCEPTAR",
+    "how.step1.desc": "Desenvolvedor envia query para IA",
+    "how.step2.title": "ANALISAR",
+    "how.step2.desc": "Brain Sentry analisa relevância",
+    "how.step3.title": "RECUPERAR",
+    "how.step3.desc": "Busca grafo por memórias relevantes",
+    "how.step4.title": "INJETAR",
+    "how.step4.desc": "Prompt enriquecido enviado para IA",
+    "how.code1.comment": "// Abordagem tradicional: Agente deve lembrar de verificar",
+    "how.code2.comment": "// Brain Sentry: Sempre analisa",
+    "how.code2.note": "// Agente recebe contexto pré-enriquecido automaticamente",
+
+    // Features Section
+    "features.badge": "RECURSOS PRINCIPAIS",
+    "features.title": "Tudo Que Você Precisa para Memória de Agentes",
+
+    // Comparison Section
+    "comparison.badge": "COMPARAÇÃO",
+    "comparison.title": "Como o Brain Sentry se Compara",
+    "comparison.feature": "Recurso",
+    "comparison.exclusive": "🌟 = Exclusivo Brain Sentry",
+    "comparison.difference": "A DIFERENÇA BRAIN SENTRY",
+    "comparison.diff1.title": "Grafo-Nativo",
+    "comparison.diff1.desc": "Relacionamentos são cidadãos de primeira classe",
+    "comparison.diff2.title": "Autônomo",
+    "comparison.diff2.desc": "Sem chamadas de ferramenta, nunca esquece de verificar",
+    "comparison.diff3.title": "Focado em Desenvolvedores",
+    "comparison.diff3.desc": "Construído para código, não chat genérico",
+    "comparison.diff4.title": "Pronto para Produção",
+    "comparison.diff4.desc": "Auditoria completa + versão + rollback",
+
+    // CTA Section
+    "cta.title": "Pronto para Dar um Segundo Cérebro à sua IA?",
+    "cta.subtitle": "Junte-se a mais de 500 desenvolvedores na lista de espera",
+    "cta.placeholder": "Digite seu email",
+    "cta.button": "Entrar na Lista",
+    "cta.benefit1": "Acesso antecipado ao Beta (Q2 2025)",
+    "cta.benefit2": "Documentação exclusiva",
+    "cta.benefit3": "Convite para Discord da comunidade",
+    "cta.benefit4": "Influencie o roadmap",
+    "cta.or": "Ou",
+    "cta.github": "Estrela no GitHub",
+
+    // Use Cases Section
+    "usecases.badge": "CASOS DE USO",
+    "usecases.title": "Resultados Reais",
+    "usecases.description": "Veja como as equipes de desenvolvimento estão transformando seus fluxos de trabalho com o Brain Sentry.",
+    "usecases.challenge": "DESAFIO",
+    "usecases.solution": "SOLUÇÃO",
+
+    // FAQ Section
+    "faq.badge": "FAQ",
+    "faq.title": "Perguntas Frequentes",
+
+    // Architecture Section
+    "architecture.badge": "ARQUITETURA",
+    "architecture.title": "Construído para Produção",
+    "architecture.stack": "Stack Tecnológica",
+
+    // Open Source Section
+    "opensource.badge": "OPEN SOURCE",
+    "opensource.title": "Desenvolvimento Impulsionado pela Comunidade",
+    "opensource.license": "Licenciado sob",
+    "opensource.repo": "Repositório:",
+    "opensource.value1": "Transparente",
+    "opensource.value2": "Colaborativo",
+    "opensource.value3": "Extensível",
+    "opensource.value4": "Sem Lock-in",
+    "opensource.github": "GitHub",
+    "opensource.discord": "Discord",
+    "opensource.docs": "Docs",
+
+    // Credibility Badges Section
+    "credibility.title": "Validado por Instituições de Pesquisa Líderes",
+    "credibility.papers": "8 Artigos de Pesquisa",
+    "credibility.benchmarks": "4 Benchmarks Principais",
+    "credibility.reference": "54.3% SWE-Bench-Pro (Referência)",
+
+    // Roadmap Section
+    "roadmap.badge": "ROADMAP",
+    "roadmap.title": "O Que Vem Por Aí",
+    "roadmap.current": "Atual",
+    "roadmap.mvp": "Meta MVP",
+    "roadmap.status.completed": "Concluído",
+    "roadmap.status.inprogress": "Em Progresso",
+    "roadmap.status.planned": "Planejado",
+
+    // Research Section
+    "research.badge": "VALIDADO POR PESQUISA",
+    "research.title": "Validado por Pesquisa Líder",
+    "research.subtitle": "O Brain Sentry é construído com insights de 8 artigos inovadores",
+    "research.evolution.title": "Evolução da Memória de Agentes",
+    "research.evolution.rag": "RAG (Somente Leitura)",
+    "research.evolution.memgpt": "MemGPT (Hierárquico)",
+    "research.evolution.modern": "Era Moderna",
+    "research.evolution.current": "Estado Atual",
+    "research.timeline.confucius": "Confucius (Meta/Harvard) 🏆",
+    "research.timeline.brainsentry": "BRAIN SENTRY 🌟",
+    "research.timeline.desc.confucius": "54.3% SWE-Bench-Pro",
+    "research.timeline.desc.brainsentry": "Grafo-Nativo + Autônomo",
+    "research.viewPaper": "Ver Artigo",
+    "research.keyFindings": "PRINCIPAIS DESCOBERTAS",
+    "research.alignment": "ALINHAMENTO",
+    "research.impact": "IMPACTO NO BRAIN SENTRY",
+    "research.implemented": "O QUE IMPLEMENTAMOS",
+    "research.benchmark": "RESULTADOS SWE-BENCH PRO",
+    "research.benchmark.confucius": "Confucius",
+    "research.benchmark.anthropic": "Anthropic",
+    "research.benchmark.target": "Nosso Alvo",
+    "research.gaps": "LACUNAS DE PESQUISA IDENTIFICADAS",
+    "research.fills": "BRAIN SENTRY PREENCHE TODAS AS LACUNAS",
+    "research.limitations": "LIMITAÇÕES DO RAG (2020)",
+    "research.evolution": "EVOLUÇÃO BRAIN SENTRY",
+  },
+  es: {
+    // Header
+    "nav.features": "Características",
+    "nav.research": "Investigación",
+    "nav.comparison": "Comparación",
+    "nav.faq": "Preguntas",
+    "nav.signIn": "Iniciar Sesión",
+    "nav.getStarted": "Comenzar",
+
+    // Hero
+    "hero.badge": "OPEN SOURCE",
+    "hero.title": "El Segundo Cerebro de tu IA",
+    "hero.subtitle": "Memoria de Agentes con Grafos que Nunca Olvida",
+    "hero.description": "Deja de reexplicar. Empieza a construir. Brain Sentry recuerda tus decisiones de código, patrones y arquitectura—para que tu asistente de codificación IA no tenga que preguntar dos veces.",
+    "hero.cta.primary": "Unirse a la Lista",
+    "hero.cta.secondary": "Ver en GitHub",
+    "hero.stat1": "8 Artículos de Investigación",
+    "hero.stat2": "4 Tipos de Memoria",
+    "hero.stat3": "Grafo-Nativo",
+
+    // Problem Section
+    "problem.title": "Los Asistentes de Codificación IA Tienen un Problema de Memoria",
+    "problem.description": "Lo has experimentado: explicar la misma decisión de arquitectura por tercera vez esta semana. Tu IA olvida los patrones de tu equipo, pierde el contexto entre sesiones y no puede conectar los puntos entre cambios de código relacionados.",
+    "problem.table.feature": "Característica",
+    "problem.table.without": "Sin Brain Sentry",
+    "problem.table.with": "Con Brain Sentry",
+    "problem.feature1": "Retención de Memoria",
+    "problem.feature1.without": "LA IA olvida decisiones pasadas",
+    "problem.feature1.with": "Memoria persistente",
+    "problem.feature2": "Entrega de Contexto",
+    "problem.feature2.without": "Repite explicaciones",
+    "problem.feature2.with": "Inyección automática de contexto",
+    "problem.feature3": "Consistencia de Código",
+    "problem.feature3.without": "Patrones inconsistentes",
+    "problem.feature3.with": "Aplicación de patrones",
+    "problem.feature4": "Compartir Conocimiento",
+    "problem.feature4.without": "Conocimiento tribal perdido",
+    "problem.feature4.with": "Grafo de conocimiento",
+    "problem.feature5": "Incorporación de Equipo",
+    "problem.feature5.without": "Incorporación lenta",
+    "problem.feature5.with": "Contexto instantáneo",
+    "problem.footer": "Las soluciones RAG tradicionales ofrecen recuperación solo lectura. No pueden aprender, no entienden relaciones y no persisten conocimiento entre sesiones.",
+    "problem.footer.highlight": "Hay una manera mejor.",
+
+    // Solution Section
+    "solution.badge": "LA SOLUCIÓN",
+    "solution.title": "Memoria de Agentes para Desarrolladores",
+    "solution.pillar1.title": "Memoria Multi-Tipo",
+    "solution.pillar1.desc": "No todas las memorias son iguales. Brain Sentry implementa cuatro tipos optimizados para escenarios específicos:",
+    "solution.pillar1.type1": "Semántica",
+    "solution.pillar1.type1.desc": "Hechos y conceptos técnicos",
+    "solution.pillar1.type2": "Episódica",
+    "solution.pillar1.type2.desc": "Eventos y decisiones pasadas",
+    "solution.pillar1.type3": "Procedimental",
+    "solution.pillar1.type3.desc": "Patrones y procedimientos",
+    "solution.pillar1.type4": "Asociativa",
+    "solution.pillar1.type4.desc": "Relaciones entre componentes",
+    "solution.pillar2.title": "Inyección Autónoma de Contexto",
+    "solution.pillar2.desc": "Sin llamadas a herramientas. Sin decisiones de agente. Sin contexto perdido. Brain Sentry analiza autónomamente cada consulta e inyecta contexto relevante automáticamente.",
+    "solution.pillar2.highlight": "Transparente, consistente, confiable.",
+    "solution.pillar3.title": "Arquitectura Grafo-Nativa",
+    "solution.pillar3.desc": "FalkorDB combina grafo y búsqueda vectorial en una base. Consultas de relación multi-hop, detección de conflictos vía análisis de grafo, análisis de impacto para refactorización y visualización de red.",
+    "solution.pillar3.item1": "Consultas multi-hop",
+    "solution.pillar3.item1.desc": "Encuentra dependencias en el código",
+    "solution.pillar3.item2": "Detección de conflictos",
+    "solution.pillar3.item2.desc": "Detecta contradicciones automáticamente",
+    "solution.pillar3.item3": "Análisis de impacto",
+    "solution.pillar3.item3.desc": "¿Qué depende de esto?",
+    "solution.pillar3.highlight": "Las relaciones son ciudadanos de primera clase.",
+
+    // Footer
+    "footer.tagline": "El Segundo Cerebro de tu IA",
+    "footer.product": "Producto",
+    "footer.company": "Empresa",
+    "footer.resources": "Recursos",
+    "footer.legal": "Legal",
+    "footer.rights": "Todos los derechos reservados.",
+    "footer.description": "Memoria de Agentes con Grafos que Nunca Olvida. Dale a tu IA un segundo cerebro.",
+    "footer.link.features": "Características",
+    "footer.link.research": "Investigación",
+    "footer.link.roadmap": "Roadmap",
+    "footer.link.docs": "Documentación",
+    "footer.link.github": "GitHub",
+    "footer.link.papers": "Artículos de Investigación",
+    "footer.link.about": "Acerca de",
+    "footer.link.blog": "Blog",
+    "footer.link.contact": "Contacto",
+    "footer.copyright": "© 2025 IntegrAllTech. Hecho con ❤️ en Brasil",
+    "footer.privacy": "Privacidad",
+    "footer.terms": "Términos",
+    "footer.license": "Licencia (Apache 2.0)",
+
+    // Hero Section
+    "hero.tagline": "Memoria de Agentes con Grafos que Nunca Olvida",
+    "hero.title": "El Segundo Cerebro de tu IA",
+    "hero.subtitle1": "Deja de reexplicar. Empieza a construir.",
+    "hero.subtitle2": "Brain Sentry recuerda tus decisiones de código, patrones y arquitectura—para que tu asistente de codificación IA no tenga que preguntar dos veces.",
+    "hero.subtitle3": "Inyección autónoma de contexto para Claude Code, Cursor y GitHub Copilot.",
+    "hero.cta.primary": "Unirse a la Lista",
+    "hero.cta.secondary": "Ver en GitHub",
+    "hero.trust1": "Open Source (Apache 2.0)",
+    "hero.trust2": "Arquitectura Grafo-Nativa",
+    "hero.trust3": "Listo para Producción",
+    "hero.trust4": "Validado por Investigación",
+    "hero.stat1.label": "Tipos de Memoria",
+    "hero.stat2.label": "Auditoría Completa",
+    "hero.stat3.label": "Latencia p95",
+
+    // How It Works Section
+    "how.badge": "CÓMO FUNCIONA",
+    "how.title": "Inyección de Contexto Siempre Activa",
+    "how.description": "Brain Sentry opera de forma transparente, analizando cada consulta e enriqueciéndola con contexto relevante automáticamente.",
+    "how.step1.title": "INTERCEPTAR",
+    "how.step1.desc": "Desarrollador envía query a IA",
+    "how.step2.title": "ANALIZAR",
+    "how.step2.desc": "Brain Sentry analiza relevancia",
+    "how.step3.title": "RECUPERAR",
+    "how.step3.desc": "Busca grafo por memorias relevantes",
+    "how.step4.title": "INJECTAR",
+    "how.step4.desc": "Prompt enriquecido enviado a IA",
+    "how.code1.comment": "// Enfoque tradicional: El agente debe recordar verificar",
+    "how.code2.comment": "// Brain Sentry: Siempre analiza",
+    "how.code2.note": "// El agente recibe contexto pré-enriquecido automáticamente",
+
+    // Features Section
+    "features.badge": "CARACTERÍSTICAS CLAVE",
+    "features.title": "Todo Que Necesitas para Memoria de Agentes",
+
+    // Comparison Section
+    "comparison.badge": "COMPARACIÓN",
+    "comparison.title": "Cómo Brain Sentry se Compara",
+    "comparison.feature": "Característica",
+    "comparison.exclusive": "🌟 = Exclusivo de Brain Sentry",
+    "comparison.difference": "LA DIFERENCIA BRAIN SENTRY",
+    "comparison.diff1.title": "Grafo-Nativo",
+    "comparison.diff1.desc": "Los relacionamientos son ciudadanos de primera clase",
+    "comparison.diff2.title": "Autónomo",
+    "comparison.diff2.desc": "Sin llamadas a herramientas, nunca olvida verificar",
+    "comparison.diff3.title": "Enfocado en Desarrolladores",
+    "comparison.diff3.desc": "Construido para código, no chat genérico",
+    "comparison.diff4.title": "Listo para Producción",
+    "comparison.diff4.desc": "Auditoría completa + versión + rollback",
+
+    // CTA Section
+    "cta.title": "¿Listo para Dar un Segundo Cerebro a tu IA?",
+    "cta.subtitle": "Únete a más de 500 desarrolladores en la lista de espera",
+    "cta.placeholder": "Ingresa tu email",
+    "cta.button": "Unirse a la Lista",
+    "cta.benefit1": "Acceso anticipado al Beta (Q2 2025)",
+    "cta.benefit2": "Documentación exclusiva",
+    "cta.benefit3": "Invitación al Discord de la comunidad",
+    "cta.benefit4": "Influye en el roadmap",
+    "cta.or": "O",
+    "cta.github": "Estrella en GitHub",
+
+    // Use Cases Section
+    "usecases.badge": "CASOS DE USO",
+    "usecases.title": "Resultados Reales",
+    "usecases.description": "Veamos cómo los equipos de desarrollo están transformando sus flujos de trabajo con Brain Sentry.",
+    "usecases.challenge": "DESAFÍO",
+    "usecases.solution": "SOLUCIÓN",
+
+    // FAQ Section
+    "faq.badge": "FAQ",
+    "faq.title": "Preguntas Frecuentes",
+
+    // Architecture Section
+    "architecture.badge": "ARQUITECTURA",
+    "architecture.title": "Construido para Producción",
+    "architecture.stack": "Stack Tecnológica",
+
+    // Open Source Section
+    "opensource.badge": "OPEN SOURCE",
+    "opensource.title": "Desarrollo Impulsado por la Comunidad",
+    "opensource.license": "Licenciado bajo",
+    "opensource.repo": "Repositorio:",
+    "opensource.value1": "Transparente",
+    "opensource.value2": "Colaborativo",
+    "opensource.value3": "Extensible",
+    "opensource.value4": "Sin Lock-in",
+    "opensource.github": "GitHub",
+    "opensource.discord": "Discord",
+    "opensource.docs": "Docs",
+
+    // Credibility Badges Section
+    "credibility.title": "Validado por Instituciones de Investigación Líderes",
+    "credibility.papers": "8 Artículos de Investigación",
+    "credibility.benchmarks": "4 Benchmarks Principales",
+    "credibility.reference": "54.3% SWE-Bench-Pro (Referencia)",
+
+    // Roadmap Section
+    "roadmap.badge": "ROADMAP",
+    "roadmap.title": "Lo Que Viene",
+    "roadmap.current": "Actual",
+    "roadmap.mvp": "Meta MVP",
+    "roadmap.status.completed": "Completado",
+    "roadmap.status.inprogress": "En Progreso",
+    "roadmap.status.planned": "Planeado",
+
+    // Research Section
+    "research.badge": "VALIDADO POR INVESTIGACIÓN",
+    "research.title": "Validado por Investigación Líder",
+    "research.subtitle": "Brain Sentry está construido sobre insights de 8 artículos innovadores",
+    "research.evolution.title": "Evolución de Memoria de Agentes",
+    "research.evolution.rag": "RAG (Solo Lectura)",
+    "research.evolution.memgpt": "MemGPT (Jerárquico)",
+    "research.evolution.modern": "Era Moderna",
+    "research.evolution.current": "Estado Actual",
+    "research.timeline.confucius": "Confucius (Meta/Harvard) 🏆",
+    "research.timeline.brainsentry": "BRAIN SENTRY 🌟",
+    "research.timeline.desc.confucius": "54.3% SWE-Bench-Pro",
+    "research.timeline.desc.brainsentry": "Grafo-Nativo + Autónomo",
+    "research.viewPaper": "Ver Artículo",
+    "research.keyFindings": "HALLAZGOS CLAVE",
+    "research.alignment": "ALINEACIÓN",
+    "research.impact": "IMPACTO EN BRAIN SENTRY",
+    "research.implemented": "LO QUE IMPLEMENTAMOS",
+    "research.benchmark": "RESULTADOS SWE-BENCH PRO",
+    "research.benchmark.confucius": "Confucius",
+    "research.benchmark.anthropic": "Anthropic",
+    "research.benchmark.target": "Nuestro Objetivo",
+    "research.gaps": "LACUNAS DE INVESTIGACIÓN IDENTIFICADAS",
+    "research.fills": "BRAIN SENTRY LLENA TODAS LAS LACUNAS",
+    "research.limitations": "LIMITACIONES RAG (2020)",
+    "research.evolution": "EVOLUCIÓN BRAIN SENTRY",
+  },
+};
+
+interface LanguageProviderProps {
+  children: ReactNode;
+}
+
+export function LanguageProvider({ children }: LanguageProviderProps) {
+  const [language, setLanguage] = useState<Language>("en");
+
+  const t = (key: string): string => {
+    return translations[language][key] || key;
+  };
+
+  return (
+    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+}
+
+export function useLanguage() {
+  const context = useContext(LanguageContext);
+  if (!context) {
+    throw new Error("useLanguage must be used within a LanguageProvider");
+  }
+  return context;
+}

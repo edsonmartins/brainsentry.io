@@ -4,9 +4,9 @@
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-green.svg)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ---
 
@@ -94,7 +94,7 @@ Docs:         OpenAPI 3.0 (SpringDoc)
 
 ### Frontend
 ```yaml
-Framework:    React 18 + Vite
+Framework:    React 19 + Vite
 Language:     TypeScript 5.3
 UI Library:   Radix UI (headless)
 Styling:      Tailwind CSS
@@ -102,6 +102,7 @@ State:        React Context
 HTTP Client:  Fetch API
 Auth:         JWT (localStorage)
 Theme:        Dark/Light/System
+Landing:      Multi-language (EN/PT/ES)
 ```
 
 ### DevOps
@@ -164,13 +165,19 @@ brainsentry.io/
 ├── brain-sentry-frontend/         # Frontend React
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── ui/              # Componentes UI reutilizveis
+│   │   │   ├── ui/              # Componentes UI reutilizáveis
 │   │   │   ├── layout/          # Layout components
 │   │   │   └── ...              # Domain components
-│   │   ├── pages/               # Pgina da aplicao
+│   │   ├── landing/             # Landing Page (multi-language)
+│   │   │   ├── components/      # Hero, Features, Research, etc
+│   │   │   ├── contexts/        # Language context
+│   │   │   └── pages/           # LandingPage.tsx
+│   │   ├── pages/               # Página da aplicação
 │   │   ├── contexts/            # React Context (Auth, Theme)
 │   │   ├── lib/                 # Utilities
 │   │   └── main.tsx
+│   ├── public/
+│   │   └── images/              # Logos and assets
 │   ├── docker/
 │   │   └── nginx.conf
 │   ├── Dockerfile
@@ -202,10 +209,10 @@ brainsentry.io/
 
 ### Development Setup
 
-#### 1. Clone o Repositrio
+#### 1. Clone o Repositório
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/edsonmartins/brainsentry.io.git
 cd brainsentry.io
 ```
 
@@ -663,16 +670,15 @@ curl http://localhost:8080/actuator/prometheus
 
 ## License
 
-Copyright 2025 IntegrAllTech. All rights reserved.
+Apache License 2.0 - Copyright 2025 Edson Martins
 
 ---
 
 ## Support
 
-For issues, questions, or contributions, please contact the project team.
+For issues, questions, or contributions, please visit:
 
-**Project Lead**: Edson Martins
-**Company**: IntegrAllTech
+**GitHub**: https://github.com/edsonmartins/brainsentry.io
 
 ---
 
