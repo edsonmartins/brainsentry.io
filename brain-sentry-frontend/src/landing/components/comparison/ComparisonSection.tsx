@@ -100,7 +100,7 @@ export function ComparisonSection() {
         </div>
 
         <div className="mt-8 text-center">
-          <PillBadge variant="purple">
+          <PillBadge variant="accent">
             {t("comparison.exclusive")}
           </PillBadge>
         </div>

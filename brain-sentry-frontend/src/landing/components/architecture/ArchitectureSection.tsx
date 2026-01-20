@@ -99,9 +99,9 @@ export function ArchitectureSection() {
 
         {/* Badges */}
         <div className="mt-12 flex flex-wrap justify-center gap-4">
-          <PillBadge variant="blue" className="dark:border-border/60">Self-Hosted</PillBadge>
-          <PillBadge variant="purple" className="dark:border-border/60">Open Source</PillBadge>
-          <PillBadge variant="green" className="dark:border-border/60">Production-Ready</PillBadge>
+          <PillBadge variant="primary" className="dark:border-border/60">Self-Hosted</PillBadge>
+          <PillBadge variant="accent" className="dark:border-border/60">Open Source</PillBadge>
+          <PillBadge variant="success" className="dark:border-border/60">Production-Ready</PillBadge>
           <PillBadge variant="gray" className="dark:border-border/60">API-First</PillBadge>
         </div>
       </div>

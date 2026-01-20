@@ -20,17 +20,6 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.signIn": "Sign In",
     "nav.getStarted": "Get Started",
 
-    // Hero
-    "hero.badge": "OPEN SOURCE",
-    "hero.title": "Your AI's Second Brain",
-    "hero.subtitle": "Graph-Native Agent Memory That Never Forgets",
-    "hero.description": "Stop reexplaining. Start building. Brain Sentry remembers your code decisions, patterns, and architecture—so your AI coding assistant doesn't have to ask twice.",
-    "hero.cta.primary": "Join Waitlist",
-    "hero.cta.secondary": "View on GitHub",
-    "hero.stat1": "8 Research Papers",
-    "hero.stat2": "4 Memory Types",
-    "hero.stat3": "Graph-Native",
-
     // Problem Section
     "problem.title": "AI Coding Assistants Have a Memory Problem",
     "problem.description": "You've experienced it: explaining the same architecture decision for the third time this week. Your AI forgets your team's patterns, loses context across sessions, and can't connect the dots between related code changes.",
@@ -246,17 +235,6 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.signIn": "Entrar",
     "nav.getStarted": "Começar",
 
-    // Hero
-    "hero.badge": "OPEN SOURCE",
-    "hero.title": "O Segundo Cérebro da sua IA",
-    "hero.subtitle": "Memória de Agentes com Grafos que Nunca Esquece",
-    "hero.description": "Pare de reexplicar. Comece a construir. O Brain Sentry lembra das suas decisões de código, padrões e arquitetura—para que seu assistente de codificação IA não precise perguntar duas vezes.",
-    "hero.cta.primary": "Entrar na Lista",
-    "hero.cta.secondary": "Ver no GitHub",
-    "hero.stat1": "8 Artigos de Pesquisa",
-    "hero.stat2": "4 Tipos de Memória",
-    "hero.stat3": "Grafo-Nativo",
-
     // Problem Section
     "problem.title": "Assistentes de Codificação IA Têm um Problema de Memória",
     "problem.description": "Você já experimentou: explicar a mesma decisão de arquitetura pela terceira vez esta semana. Sua IA esquece os padrões da sua equipe, perde o contexto entre sessões e não consegue conectar os pontos entre mudanças de código relacionadas.",
@@ -471,17 +449,6 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.faq": "Preguntas",
     "nav.signIn": "Iniciar Sesión",
     "nav.getStarted": "Comenzar",
-
-    // Hero
-    "hero.badge": "OPEN SOURCE",
-    "hero.title": "El Segundo Cerebro de tu IA",
-    "hero.subtitle": "Memoria de Agentes con Grafos que Nunca Olvida",
-    "hero.description": "Deja de reexplicar. Empieza a construir. Brain Sentry recuerda tus decisiones de código, patrones y arquitectura—para que tu asistente de codificación IA no tenga que preguntar dos veces.",
-    "hero.cta.primary": "Unirse a la Lista",
-    "hero.cta.secondary": "Ver en GitHub",
-    "hero.stat1": "8 Artículos de Investigación",
-    "hero.stat2": "4 Tipos de Memoria",
-    "hero.stat3": "Grafo-Nativo",
 
     // Problem Section
     "problem.title": "Los Asistentes de Codificación IA Tienen un Problema de Memoria",
