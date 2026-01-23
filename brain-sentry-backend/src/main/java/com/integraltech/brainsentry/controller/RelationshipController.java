@@ -33,6 +33,40 @@ public class RelationshipController {
     private final RelationshipService relationshipService;
 
     /**
+     * List all relationships for the current tenant.
+     *
+     * GET /v1/relationships
+     */
+    @GetMapping
+    @Operation(summary = "Listar relacionamentos", description = "Lista todos os relacionamentos do tenant")
+    public ResponseEntity<java.util.Map<String, Object>> getAllRelationships(
+            @Parameter(description = "Página (0-indexed)")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Tamanho da página")
+            @RequestParam(defaultValue = "20") int size) {
+        String tenant = TenantContext.getTenantId();
+        log.info("GET /v1/relationships?page={}&size={} - tenant: {}", page, size, tenant);
+
+        List<MemoryRelationship> allRelationships = relationshipService.getAllRelationships(tenant);
+
+        // Paginate manually
+        int start = page * size;
+        int end = Math.min(start + size, allRelationships.size());
+        List<MemoryRelationship> pageContent = start < allRelationships.size()
+            ? allRelationships.subList(start, end)
+            : List.of();
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("relationships", pageContent);
+        response.put("totalElements", allRelationships.size());
+        response.put("page", page);
+        response.put("size", size);
+        response.put("totalPages", (int) Math.ceil((double) allRelationships.size() / size));
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Create a relationship between two memories.
      *
      * POST /v1/relationships

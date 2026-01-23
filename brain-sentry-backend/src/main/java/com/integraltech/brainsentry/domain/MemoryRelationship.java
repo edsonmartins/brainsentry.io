@@ -1,6 +1,7 @@
 package com.integraltech.brainsentry.domain;
 
 import com.integraltech.brainsentry.domain.enums.RelationshipType;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,11 +19,14 @@ import java.time.Instant;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Entity
+@Table(name = "memory_relationships")
 public class MemoryRelationship {
 
     /**
      * Unique identifier for this relationship.
      */
+    @Id
     private String id;
 
     /**
@@ -38,6 +42,7 @@ public class MemoryRelationship {
     /**
      * Type of relationship (USED_WITH, CONFLICTS_WITH, etc.)
      */
+    @Enumerated(EnumType.STRING)
     private RelationshipType type;
 
     // ==================== Metadata ====================

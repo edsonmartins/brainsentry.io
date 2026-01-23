@@ -136,6 +136,17 @@ public class RelationshipService {
     }
 
     /**
+     * Get all relationships for a tenant.
+     *
+     * @param tenantId tenant ID
+     * @return list of all relationships
+     */
+    @Transactional(readOnly = true)
+    public List<MemoryRelationship> getAllRelationships(String tenantId) {
+        return relationshipRepo.findByTenantId(tenantId);
+    }
+
+    /**
      * Get relationship between two specific memories.
      *
      * @param fromMemoryId source memory ID

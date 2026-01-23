@@ -95,21 +95,21 @@ export function DashboardPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
-        <div className="px-6 py-3">
+        <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Brain className="h-6 w-6 text-white" />
+              <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Brain className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Brain Sentry</h1>
-                <p className="text-sm text-white/80">
+                <h1 className="text-base font-bold leading-tight">Brain Sentry</h1>
+                <p className="text-xs text-white/80">
                   Sistema de Memória para Desenvolvedores
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-white/80">
+              <div className="text-xs text-white/80">
                 Tenant: <span className="font-medium text-white">{tenantId}</span>
               </div>
               <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={handleRefresh}>
@@ -264,7 +264,7 @@ function StatsCard({ title, value, icon, loading, suffix, trend }: StatsCardProp
             {loading ? (
               <Spinner size="sm" />
             ) : (
-              <p className="text-2xl font-bold">
+              <p className="text-base font-bold leading-tight">
                 {value}
                 {suffix}
               </p>

@@ -60,6 +60,11 @@ spring:
           min-idle: 5
           time-between-eviction-runs: 60000ms
 
+# Feature Flags
+features:
+  relationship:
+    enabled: true
+
 # Brain Sentry Configuration
 brain-sentry:
   # Redis/FalkorDB Configuration

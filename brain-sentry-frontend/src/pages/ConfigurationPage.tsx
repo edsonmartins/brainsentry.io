@@ -322,15 +322,15 @@ export function ConfigurationPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
-        <div className="px-6 py-3">
+        <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Settings className="h-6 w-6 text-white" />
+              <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Settings className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Configurações</h1>
-                <p className="text-sm text-white/80">
+                <h1 className="text-base font-bold leading-tight">Configurações</h1>
+                <p className="text-xs text-white/80">
                   Gerencie as configurações do sistema
                 </p>
               </div>
