@@ -13,13 +13,14 @@ import {
   Tag,
   CircleDot,
   Link2,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/filter";
 import { Spinner, Skeleton } from "@/components/ui/spinner";
 import { CategoryTag } from "@/components/ui/tags";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useDebounce } from "@/hooks";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -142,6 +143,13 @@ export function RelationshipsPage() {
   const [highlightedConnections, setHighlightedConnections] = useState<Relationship[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
 
+  // Dialog state for target memory selection
+  const [targetMemory, setTargetMemory] = useState<Memory | null>(null);
+  const [dialogSearchQuery, setDialogSearchQuery] = useState("");
+  const [dialogSearchResults, setDialogSearchResults] = useState<Memory[]>([]);
+  const [isDialogSearching, setIsDialogSearching] = useState(false);
+  const debouncedDialogSearch = useDebounce(dialogSearchQuery, 500);
+
   // Fetch knowledge graph
   const fetchKnowledgeGraph = useCallback(async () => {
     setIsLoadingGraph(true);
@@ -230,14 +238,76 @@ export function RelationshipsPage() {
     searchMemories();
   }, [searchMemories]);
 
+  // Effect to search in dialog when dialog search query changes
+  useEffect(() => {
+    const searchInDialog = async () => {
+      if (!debouncedDialogSearch || debouncedDialogSearch.length < 2) {
+        setDialogSearchResults([]);
+        return;
+      }
+      setIsDialogSearching(true);
+      try {
+        const response = await api.axiosInstance.post<Memory[]>(
+          `/v1/memories/search`,
+          { query: debouncedDialogSearch, limit: 10 }
+        );
+        // Filter out the source memory from results
+        const filtered = (response.data || []).filter(m => m.id !== selectedMemory?.id);
+        setDialogSearchResults(filtered);
+      } catch (err) {
+        console.error("Dialog search error:", err);
+        setDialogSearchResults([]);
+      } finally {
+        setIsDialogSearching(false);
+      }
+    };
+    searchInDialog();
+  }, [debouncedDialogSearch, selectedMemory?.id]);
+
+  // Reset dialog state when dialog closes
+  useEffect(() => {
+    if (!showCreateDialog) {
+      setTargetMemory(null);
+      setDialogSearchQuery("");
+      setDialogSearchResults([]);
+    }
+  }, [showCreateDialog]);
+
   const refetch = () => {
     fetchKnowledgeGraph();
     fetchRelationships();
   };
 
+  // Reprocess all memories to extract entities
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  const handleReprocessEntities = async () => {
+    setIsReprocessing(true);
+    try {
+      const response = await api.axiosInstance.post<string>(
+        `/v1/memories/extract-all-entities`
+      );
+      toast({
+        title: "Reprocessamento concluído",
+        description: response.data || "Entidades extraídas com sucesso.",
+        variant: "success",
+      });
+      // Refresh the knowledge graph after reprocessing
+      fetchKnowledgeGraph();
+    } catch (err) {
+      console.error("Error reprocessing:", err);
+      toast({
+        title: "Erro no reprocessamento",
+        description: (err as Error).message || "Não foi possível reprocessar as memórias.",
+        variant: "error",
+      });
+    } finally {
+      setIsReprocessing(false);
+    }
+  };
+
   // Create relationship
-  const handleCreateRelationship = async (toMemoryId: string) => {
-    if (!selectedMemory) return;
+  const handleCreateRelationship = async () => {
+    if (!selectedMemory || !targetMemory) return;
 
     try {
       const response = await fetch(`${API_URL}/v1/relationships`, {
@@ -248,7 +318,7 @@ export function RelationshipsPage() {
         },
         body: JSON.stringify({
           fromMemoryId: selectedMemory.id,
-          toMemoryId: toMemoryId,
+          toMemoryId: targetMemory.id,
           type: relationshipType,
           strength: 0.5,
         }),
@@ -260,13 +330,15 @@ export function RelationshipsPage() {
 
       toast({
         title: "Relacionamento criado",
-        description: `Memória "${selectedMemory.summary}" foi conectada.`,
+        description: `"${selectedMemory.summary}" → ${relationshipType} → "${targetMemory.summary}"`,
         variant: "success",
       });
 
       setShowCreateDialog(false);
       refetch();
       setSelectedMemory(null);
+      setTargetMemory(null);
+      setHighlightedMemory(null);
     } catch (err) {
       toast({
         title: "Erro",
@@ -326,9 +398,25 @@ export function RelationshipsPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={refetch}>
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+                onClick={handleReprocessEntities}
+                disabled={isReprocessing}
+              >
+                {isReprocessing ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-1" />
+                )}
+                {isReprocessing ? "Processando..." : "Reprocessar"}
+              </Button>
+              <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={refetch}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -724,65 +812,149 @@ export function RelationshipsPage() {
 
       {/* Create Relationship Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>
-              {selectedMemory
-                ? `Conectar "${selectedMemory.summary}"`
-                : "Selecionar Memória"}
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5 text-brain-primary" />
+              Criar Conexão entre Memórias
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 px-6 py-4">
-            {!selectedMemory ? (
-              <p className="text-sm text-muted-foreground">
-                Busque e selecione uma memória para conectar.
-              </p>
-            ) : (
-              <>
-                <div>
-                  <label className="text-sm font-medium mb-2">Tipo de Relacionamento</label>
-                  <select
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1"
-                    value={relationshipType}
-                    onChange={(e) => setRelationshipType(e.target.value)}
-                  >
-                    {RELATIONSHIP_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                {searchQuery && searchResults.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium mb-2">
-                      Selecionar memória destino
-                    </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {searchResults.map((memory) => (
-                        <button
-                          key={memory.id}
-                          onClick={() => handleCreateRelationship(memory.id)}
-                          className="w-full text-left p-3 border rounded-lg hover:bg-accent text-left"
-                        >
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm font-medium">{memory.summary}</p>
-                            <div className="flex items-center gap-2">
-                              <CategoryTag category={memory.category} />
-                              <span className="text-xs text-muted-foreground">
-                                {memory.tags?.slice(0, 2).join(", ") || "-"}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+          <div className="flex-1 overflow-y-auto space-y-6 py-4">
+            {/* Source Memory */}
+            {selectedMemory && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  Memória de Origem
+                </label>
+                <div className="p-4 border rounded-lg bg-brain-primary/5 border-brain-primary/30">
+                  <p className="font-medium">{selectedMemory.summary}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <CategoryTag category={selectedMemory.category} />
+                    <span className="text-xs text-muted-foreground">
+                      {selectedMemory.tags?.join(", ") || "-"}
+                    </span>
                   </div>
-                )}
-              </>
+                </div>
+              </div>
+            )}
+
+            {/* Relationship Type */}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Tipo de Relacionamento
+              </label>
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={relationshipType}
+                onChange={(e) => setRelationshipType(e.target.value)}
+              >
+                {RELATIONSHIP_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search for Target Memory */}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Buscar Memória de Destino
+              </label>
+              <SearchInput
+                value={dialogSearchQuery}
+                onChange={setDialogSearchQuery}
+                placeholder="Digite para buscar memórias..."
+              />
+
+              {/* Search Results */}
+              {isDialogSearching ? (
+                <div className="flex justify-center py-4">
+                  <Spinner />
+                </div>
+              ) : dialogSearchResults.length > 0 ? (
+                <div className="mt-3 space-y-2 max-h-[200px] overflow-y-auto border rounded-lg p-2">
+                  {dialogSearchResults.map((memory) => (
+                    <div
+                      key={memory.id}
+                      className={`p-3 border rounded-lg cursor-pointer transition-colors
+                        ${targetMemory?.id === memory.id
+                          ? 'bg-brain-accent/10 border-brain-accent'
+                          : 'hover:bg-accent'}`}
+                      onClick={() => setTargetMemory(memory)}
+                    >
+                      <p className="text-sm font-medium">{memory.summary}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <CategoryTag category={memory.category} />
+                        <span className="text-xs text-muted-foreground">
+                          {memory.tags?.slice(0, 2).join(", ") || "-"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : dialogSearchQuery.length >= 2 ? (
+                <p className="text-sm text-muted-foreground mt-3 text-center py-4">
+                  Nenhuma memória encontrada para "{dialogSearchQuery}"
+                </p>
+              ) : null}
+            </div>
+
+            {/* Selected Target Memory */}
+            {targetMemory && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  Memória de Destino Selecionada
+                </label>
+                <div className="p-4 border rounded-lg bg-brain-accent/5 border-brain-accent/30">
+                  <p className="font-medium">{targetMemory.summary}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <CategoryTag category={targetMemory.category} />
+                    <span className="text-xs text-muted-foreground">
+                      {targetMemory.tags?.join(", ") || "-"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Connection Preview */}
+            {selectedMemory && targetMemory && (
+              <div className="p-4 border-2 border-dashed rounded-lg bg-accent/30">
+                <p className="text-sm text-center text-muted-foreground mb-2">Prévia da conexão:</p>
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <span className="font-medium text-sm bg-brain-primary/10 px-3 py-1 rounded">
+                    {selectedMemory.summary.substring(0, 30)}...
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-brain-primary text-white text-xs font-medium">
+                    {RELATIONSHIP_TYPES.find(t => t.value === relationshipType)?.label || relationshipType}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium text-sm bg-brain-accent/10 px-3 py-1 rounded">
+                    {targetMemory.summary.substring(0, 30)}...
+                  </span>
+                </div>
+              </div>
             )}
           </div>
+
+          <DialogFooter className="border-t pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white"
+              onClick={handleCreateRelationship}
+              disabled={!selectedMemory || !targetMemory}
+            >
+              <Link2 className="h-4 w-4 mr-2" />
+              Criar Conexão
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
