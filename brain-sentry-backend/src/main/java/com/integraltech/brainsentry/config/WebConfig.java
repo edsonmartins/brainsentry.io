@@ -31,7 +31,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Configuration
     @RequiredArgsConstructor
     public static class CorsProperties {
-        private String[] allowedOrigins = new String[]{"http://localhost:5173"};
+        private String[] allowedOrigins = new String[]{"http://localhost:3000", "http://localhost:5173"};
         private String[] allowedMethods = new String[]{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"};
         private String[] allowedHeaders = new String[]{"*"};
         private Boolean allowCredentials = true;
