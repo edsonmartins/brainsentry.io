@@ -56,8 +56,9 @@ public class MemoryController {
     /**
      * Get a memory by ID.
      * GET /api/v1/memories/{id}
+     * Note: Uses regex to avoid matching literal paths like /knowledge-graph
      */
-    @GetMapping("/{id}")
+    @GetMapping("/{id:^(?!knowledge-graph|by-category|by-importance|relationships|search|reprocess-graph|extract-all-entities).*$}")
     public ResponseEntity<MemoryResponse> getMemory(@PathVariable String id) {
         log.info("GET /v1/memories/{}", id);
         MemoryResponse response = memoryService.getMemory(id);
