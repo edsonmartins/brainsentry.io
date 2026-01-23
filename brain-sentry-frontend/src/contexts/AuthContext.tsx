@@ -27,7 +27,7 @@ const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 
 const TOKEN_KEY = "brain_sentry_token";
 const USER_KEY = "brain_sentry_user";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
 interface AuthProviderProps {
   children: React.ReactNode;

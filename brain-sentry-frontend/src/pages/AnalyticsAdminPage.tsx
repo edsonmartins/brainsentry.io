@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Zap, TrendingUp, Loader2 } from "lucide-react";
+import { Activity, Zap, TrendingUp, Loader2, BarChart3 } from "lucide-react";
 import { api, getErrorMessage } from "@/lib/api";
 
 export default function AnalyticsAdminPage() {
   const [stats, setStats] = useState({
     totalMemories: 0,
-    byCategory: {} as Record<string, number>,
-    byImportance: {} as Record<string, number>,
-    avgInjectionRate: 0,
-    avgHelpfulnessRate: 0,
+    memoriesByCategory: {} as Record<string, number>,
+    memoriesByImportance: {} as Record<string, number>,
+    requestsToday: 0,
+    injectionRate: 0,
+    avgLatencyMs: 0,
+    helpfulnessRate: 0,
+    totalInjections: 0,
+    activeMemories24h: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,14 +43,14 @@ export default function AnalyticsAdminPage() {
     },
     {
       title: "Taxa de Injeção",
-      value: `${(stats.avgInjectionRate * 100).toFixed(1)}%`,
+      value: `${(stats.injectionRate * 100).toFixed(1)}%`,
       change: "+2.3%",
       icon: Zap,
       color: "text-green-600",
     },
     {
       title: "Satisfação",
-      value: `${(stats.avgHelpfulnessRate * 100).toFixed(0)}%`,
+      value: `${(stats.helpfulnessRate * 100).toFixed(0)}%`,
       change: "+5%",
       icon: TrendingUp,
       color: "text-purple-600",
@@ -79,33 +83,44 @@ export default function AnalyticsAdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground">
-          Métricas e estatísticas do sistema
-        </p>
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+              <BarChart3 className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Analytics</h1>
+              <p className="text-sm text-white/80">
+                Métricas e estatísticas do sistema
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statsData.map((stat) => (
-          <Card key={stat.title}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                  <p className="text-2xl font-bold">{stat.value}</p>
+      <main className="container mx-auto px-4 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {statsData.map((stat) => (
+            <Card key={stat.title} className="shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                    <p className="text-2xl font-bold">{stat.value}</p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg text-white">
+                    <stat.icon className="h-5 w-5" />
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">{stat.change}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="text-xs text-green-600 dark:text-green-400">{stat.change}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -116,7 +131,7 @@ export default function AnalyticsAdminPage() {
           <CardContent>
             <div className="h-64 flex items-center justify-center">
               <div className="w-full space-y-3">
-                {Object.entries(stats.byCategory).map(([category, count]) => (
+                {Object.entries(stats.memoriesByCategory).map(([category, count]) => (
                   <div key={category}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-muted-foreground">{category}</span>
@@ -128,7 +143,7 @@ export default function AnalyticsAdminPage() {
                     ></div>
                   </div>
                 ))}
-                {Object.keys(stats.byCategory).length === 0 && (
+                {Object.keys(stats.memoriesByCategory).length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-8">
                     Nenhuma memória cadastrada
                   </p>
@@ -145,7 +160,7 @@ export default function AnalyticsAdminPage() {
           <CardContent>
             <div className="h-64 flex items-center justify-center">
               <div className="w-full space-y-3">
-                {Object.entries(stats.byImportance).map(([importance, count]) => (
+                {Object.entries(stats.memoriesByImportance).map(([importance, count]) => (
                   <div key={importance}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-muted-foreground">{importance}</span>
@@ -161,7 +176,7 @@ export default function AnalyticsAdminPage() {
                     ></div>
                   </div>
                 ))}
-                {Object.keys(stats.byImportance).length === 0 && (
+                {Object.keys(stats.memoriesByImportance).length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-8">
                     Nenhuma memória cadastrada
                   </p>
@@ -171,6 +186,7 @@ export default function AnalyticsAdminPage() {
           </CardContent>
         </Card>
       </div>
+      </main>
     </div>
   );
 }

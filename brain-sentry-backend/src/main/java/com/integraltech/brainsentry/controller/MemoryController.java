@@ -3,6 +3,7 @@ package com.integraltech.brainsentry.controller;
 import com.integraltech.brainsentry.dto.request.CreateMemoryRequest;
 import com.integraltech.brainsentry.dto.request.SearchRequest;
 import com.integraltech.brainsentry.dto.request.UpdateMemoryRequest;
+import com.integraltech.brainsentry.dto.response.GraphRelationshipResponse;
 import com.integraltech.brainsentry.dto.response.MemoryListResponse;
 import com.integraltech.brainsentry.dto.response.MemoryResponse;
 import com.integraltech.brainsentry.service.MemoryService;
@@ -168,5 +169,32 @@ public class MemoryController {
         log.info("POST /v1/memories/{}/feedback - helpful: {}", id, helpful);
         memoryService.recordFeedback(id, helpful);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Reprocess all memories to FalkorDB graph.
+     * POST /api/v1/memories/reprocess-graph
+     *
+     * This endpoint reprocesses all existing memories and stores them in FalkorDB
+     * with proper embeddings and relationships.
+     */
+    @PostMapping("/reprocess-graph")
+    public ResponseEntity<String> reprocessGraph() {
+        log.info("POST /v1/memories/reprocess-graph - Starting graph reprocessing");
+        int count = memoryService.reprocessToGraph();
+        return ResponseEntity.ok("Reprocessed " + count + " memories to FalkorDB graph");
+    }
+
+    /**
+     * Get all graph relationships from FalkorDB.
+     * GET /api/v1/memories/relationships
+     *
+     * Returns all relationships between memories stored in the FalkorDB graph.
+     */
+    @GetMapping("/relationships")
+    public ResponseEntity<List<GraphRelationshipResponse>> getGraphRelationships() {
+        log.info("GET /v1/memories/relationships - Fetching all graph relationships");
+        List<GraphRelationshipResponse> relationships = memoryService.getGraphRelationships();
+        return ResponseEntity.ok(relationships);
     }
 }

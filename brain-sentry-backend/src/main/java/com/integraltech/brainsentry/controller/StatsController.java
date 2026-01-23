@@ -1,6 +1,8 @@
 package com.integraltech.brainsentry.controller;
 
 import com.integraltech.brainsentry.config.TenantContext;
+import com.integraltech.brainsentry.domain.enums.ImportanceLevel;
+import com.integraltech.brainsentry.domain.enums.MemoryCategory;
 import com.integraltech.brainsentry.dto.response.StatsResponse;
 import com.integraltech.brainsentry.repository.MemoryJpaRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,22 +39,26 @@ public class StatsController {
         log.info("GET /v1/stats/overview - tenant: {}", tenant);
 
         long totalMemories = memoryJpaRepository.count();
-        long totalDecisions = memoryJpaRepository.countByCategory("DECISION");
-        long totalPatterns = memoryJpaRepository.countByCategory("PATTERN");
-        long totalCritical = memoryJpaRepository.countByImportance("CRITICAL");
+
+        Map<String, Long> memoriesByCategory = new HashMap<>();
+        memoriesByCategory.put("DECISION", memoryJpaRepository.countByCategory(MemoryCategory.DECISION));
+        memoriesByCategory.put("PATTERN", memoryJpaRepository.countByCategory(MemoryCategory.PATTERN));
+        memoriesByCategory.put("ANTIPATTERN", memoryJpaRepository.countByCategory(MemoryCategory.ANTIPATTERN));
+        memoriesByCategory.put("BUG", memoryJpaRepository.countByCategory(MemoryCategory.BUG));
+        memoriesByCategory.put("OPTIMIZATION", memoryJpaRepository.countByCategory(MemoryCategory.OPTIMIZATION));
+        memoriesByCategory.put("DOMAIN", memoryJpaRepository.countByCategory(MemoryCategory.DOMAIN));
+        memoriesByCategory.put("INTEGRATION", memoryJpaRepository.countByCategory(MemoryCategory.INTEGRATION));
+
+        Map<String, Long> memoriesByImportance = Map.of(
+            "CRITICAL", memoryJpaRepository.countByImportance(ImportanceLevel.CRITICAL),
+            "IMPORTANT", memoryJpaRepository.countByImportance(ImportanceLevel.IMPORTANT),
+            "MINOR", memoryJpaRepository.countByImportance(ImportanceLevel.MINOR)
+        );
 
         StatsResponse response = StatsResponse.builder()
             .totalMemories(totalMemories)
-            .memoriesByCategory(Map.of(
-                "DECISION", totalDecisions,
-                "PATTERN", totalPatterns
-                // TODO: Add other categories
-            ))
-            .memoriesByImportance(Map.of(
-                "CRITICAL", totalCritical,
-                "IMPORTANT", memoryJpaRepository.countByImportance("IMPORTANT"),
-                "MINOR", memoryJpaRepository.countByImportance("MINOR")
-            ))
+            .memoriesByCategory(memoriesByCategory)
+            .memoriesByImportance(memoriesByImportance)
             .requestsToday(0L)  // TODO: Implement from audit logs
             .injectionRate(0.0)  // TODO: Implement from audit logs
             .avgLatencyMs(0.0)   // TODO: Implement from audit logs

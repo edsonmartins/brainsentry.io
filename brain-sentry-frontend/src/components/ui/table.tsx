@@ -222,4 +222,5 @@ export {
   TableCell,
   TableCaption,
   DataTable,
+  type DataTableProps,
 };

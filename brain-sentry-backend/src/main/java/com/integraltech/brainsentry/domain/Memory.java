@@ -3,6 +3,7 @@ package com.integraltech.brainsentry.domain;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.integraltech.brainsentry.domain.enums.ImportanceLevel;
 import com.integraltech.brainsentry.domain.enums.MemoryCategory;
+import com.integraltech.brainsentry.config.FloatArrayConverter;
 import com.integraltech.brainsentry.domain.enums.ValidationStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -41,7 +42,6 @@ public class Memory {
     @Column(length = 100)
     private String id;
 
-    @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
@@ -69,13 +69,18 @@ public class Memory {
      * 384 dimensions for all-MiniLM-L6-v2 model.
      * Stored as array of floats in FalkorDB, serialized in PostgreSQL.
      */
-    @Lob
+    @Convert(converter = FloatArrayConverter.class)
+    @Column(columnDefinition = "bytea")
     private float[] embedding;
 
     // ==================== Metadata ====================
 
-    @Transient
+    @Lob
+    @Column(columnDefinition = "jsonb")
     private Map<String, Object> metadata;
+
+    // @Transient  // Temporarily disabled - using DB storage
+    // private Map<String, Object> metadata;
 
     @ElementCollection
     @CollectionTable(name = "memory_tags", joinColumns = @JoinColumn(name = "memory_id"))
@@ -131,7 +136,6 @@ public class Memory {
 
     // ==================== Code Example ====================
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     private String codeExample;
 

@@ -133,26 +133,26 @@ export function AuditPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Shield className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Shield className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Auditoria</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Logs de operações do sistema
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => refetch?.()}>
+              <Button variant="outline" size="sm" className="bg-white/20 text-white border-white/30 hover:bg-white/30" onClick={() => refetch?.()}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="h-4 w-4" />
+              <Button variant="outline" size="sm" className="bg-white text-brain-primary hover:bg-white/90 border-0" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" />
                 Exportar
               </Button>
             </div>
@@ -253,7 +253,10 @@ export function AuditPage() {
                         <tr key={log.id} className="border-b hover:bg-muted/50">
                           <td className="p-3">
                             <div className="flex items-center gap-2">
-                              {getEventIcon(log.eventType)}
+                              {(() => {
+                                const Icon = getEventIcon(log.eventType);
+                                return <Icon className="h-4 w-4" />;
+                              })()}
                               <span className="text-sm">
                                 {EVENT_TYPE_LABELS[log.eventType] || log.eventType}
                               </span>
@@ -355,7 +358,7 @@ function StatCard({ title, value, icon, loading }: StatCardProps) {
             )}
           </div>
           {icon && (
-            <div className="p-3 bg-primary/10 rounded-lg text-primary">
+            <div className="p-3 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg text-white">
               {icon}
             </div>
           )}

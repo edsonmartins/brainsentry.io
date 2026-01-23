@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -91,7 +92,11 @@ class ArchitectServiceTest {
         @DisplayName("Should compress with default threshold when null provided")
         void testCompressContext_NullThreshold_UsesDefault() {
             // Given
-            List<CompressionRequest.Message> messages = Collections.emptyList();
+            // Create a large message list that exceeds default threshold (100k tokens)
+            List<CompressionRequest.Message> messages = new ArrayList<>();
+            for (int i = 0; i < 10000; i++) {
+                messages.add(createMessage("user", "Large message content to exceed threshold ".repeat(10)));
+            }
 
             when(openRouterService.chat(anyString(), anyString()))
                 .thenReturn("{\"summary\": {}}");
@@ -192,8 +197,8 @@ class ArchitectServiceTest {
             List<CompressionRequest.Message> critical =
                 architectService.identifyCriticalMessages(messages, keywords);
 
-            // Then
-            assertThat(critical).hasSize(2);
+            // Then - All 4 messages contain either "backup" or "deploy"
+            assertThat(critical).hasSize(4);
         }
 
         @Test

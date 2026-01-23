@@ -260,5 +260,60 @@ class NoteRetrievalServiceTest {
                 return savedNote.getReferenceCount() == 3 && savedNote.getAccessCount() == 3;
             }));
         }
+
+        @Test
+        @DisplayName("Should find notes by error type")
+        void testFindByErrorType() {
+            // Given
+            String tenantId = "tenant-123";
+            String errorType = "NullPointerException";
+
+            HindsightNote note = HindsightNote.builder()
+                .id("note-1")
+                .tenantId(tenantId)
+                .errorType(errorType)
+                .build();
+
+            when(hindsightNoteRepo.findByErrorTypeAndTenantId(errorType, tenantId))
+                .thenReturn(Arrays.asList(note));
+
+            // When
+            List<HindsightNote> results = noteRetrievalService.findByErrorType(errorType, tenantId);
+
+            // Then
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).getErrorType()).isEqualTo(errorType);
+        }
+
+        @Test
+        @DisplayName("Should return empty list when no notes match error type")
+        void testFindByErrorType_NotFound() {
+            // Given
+            when(hindsightNoteRepo.findByErrorTypeAndTenantId(anyString(), anyString()))
+                .thenReturn(Collections.emptyList());
+
+            // When
+            List<HindsightNote> results = noteRetrievalService.findByErrorType("UnknownError", "tenant-123");
+
+            // Then
+            assertThat(results).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Should handle null error message gracefully")
+        void testSearchHindsightNotes_NullErrorMessage() {
+            // Given
+            String tenantId = "tenant-123";
+
+            when(hindsightNoteRepo.findByTenantId(tenantId))
+                .thenReturn(Collections.emptyList());
+
+            // When
+            List<HindsightNote> results = noteRetrievalService.searchHindsightNotes(null, "SomeError", tenantId);
+
+            // Then
+            assertThat(results).isNotNull();
+            assertThat(results).isEmpty();
+        }
     }
 }

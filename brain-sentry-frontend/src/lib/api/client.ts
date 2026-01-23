@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from "axios";
 
 // Configuração base da API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 // Tipos de resposta da API
 export interface ApiResponse<T> {
@@ -24,8 +24,8 @@ export interface Memory {
   tenantId?: string;
   content: string;
   summary: string;
-  category: MemoryCategory;
-  importance: ImportanceLevel;
+  category: MemoryCategory | string;
+  importance: ImportanceLevel | string;
   tags: string[];
   createdAt: string;
   updatedAt?: string;
@@ -66,18 +66,29 @@ export interface SearchRequest {
 
 export interface MemoryStats {
   totalMemories: number;
-  byCategory: Record<string, number>;
-  byImportance: Record<string, number>;
-  avgInjectionRate: number;
-  avgHelpfulnessRate: number;
+  memoriesByCategory: Record<string, number>;
+  memoriesByImportance: Record<string, number>;
+  requestsToday: number;
+  injectionRate: number;
+  avgLatencyMs: number;
+  helpfulnessRate: number;
+  totalInjections: number;
+  activeMemories24h: number;
 }
 
 // Interceptador para adicionar headers de autenticação
 const authRequestInterceptor = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   // Adicionar tenant ID se disponível
   const tenantId = localStorage.getItem("tenant_id") || "default";
+
+  // Adicionar token JWT se disponível
+  const token = localStorage.getItem("brain_sentry_token");
+
   if (config.headers) {
     config.headers["X-Tenant-ID"] = tenantId;
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+    }
   }
   return config;
 };

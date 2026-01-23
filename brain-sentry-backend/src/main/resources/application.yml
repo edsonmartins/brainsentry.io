@@ -48,9 +48,9 @@ spring:
   # Redis/FalkorDB Configuration
   data:
     redis:
-      host: ${FALKORDB_HOST:localhost}
-      port: ${FALKORDB_PORT:6379}
-      password: ${FALKORDB_PASSWORD:}
+      host: ${FALKORDB_HOST:192.168.100.1}
+      port: ${FALKORDB_PORT:6380}
+      password: ${FALKORDB_PASSWORD:Relevant727204}
       database: 0
       timeout: 2000ms
       lettuce:
@@ -62,20 +62,29 @@ spring:
 
 # Brain Sentry Configuration
 brain-sentry:
+  # Redis/FalkorDB Configuration
+  redis:
+    host: ${FALKORDB_HOST:192.168.100.1}
+    port: ${FALKORDB_PORT:6380}
+    password: ${FALKORDB_PASSWORD:Relevant727204}
+    database: 0
+    timeout: 2000
+
   # FalkorDB Graph Configuration
   graph:
     name: ${FALKORDB_GRAPH_NAME:brainsentry}
 
   # OpenRouter / Grok Configuration
   llm:
-    provider: openrouter
-    model: ${LLM_MODEL:x-ai/grok-4.1-fast}
-    api-key: ${OPENROUTER_API_KEY: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}
-    base-url: ${LLM_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
-    temperature: ${LLM_TEMPERATURE:0.2}
+    provider: ${BRAINSENTRY_AI_AGENTIC_MODEL_PROVIDER:OPENROUTER}
+    model: ${BRAINSENTRY_AI_AGENTIC_MODEL_MODEL:x-ai/grok-4-fast}
+    api-key: ${BRAINSENTRY_AI_AGENTIC_MODEL_API_KEY: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}
+    base-url: ${BRAINSENTRY_AI_AGENTIC_MODEL_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+    temperature: ${BRAINSENTRY_AI_AGENTIC_MODEL_TEMPERATURE:0.2}
     max-tokens: ${LLM_MAX_TOKENS:500}
     timeout: ${LLM_TIMEOUT:60000}
-    enable-thinking: ${LLM_ENABLE_THINKING:false}
+    max-retries: ${BRAINSENTRY_AI_AGENTIC_MODEL_MAX_RETRIES:3}
+    enable-thinking: ${BRAINSENTRY_AI_AGENTIC_MODEL_ENABLE_THINKING:false}
 
   # Embeddings Configuration
   embedding:

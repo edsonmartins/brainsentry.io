@@ -45,6 +45,7 @@ public class HindsightNoteResponse {
     // Metadata
     private List<String> tags;
     private List<String> relatedMemoryIds;
+    private List<String> relatedNoteIds;  // Links to generic Note entities
 
     // Usage tracking
     private Integer occurrenceCount;

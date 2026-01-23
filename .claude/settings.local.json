@@ -26,7 +26,16 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git add:*)",
-      "Bash(./mvnw:*)"
+      "Bash(./mvnw:*)",
+      "Bash(javap:*)",
+      "Bash(timeout:*)",
+      "Bash(npm run dev)",
+      "Bash(npx vite build:*)",
+      "Bash(psql:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(python3:*)",
+      "Bash(PGPASSWORD=brainsentry_dev psql:*)"
     ]
   }
 }

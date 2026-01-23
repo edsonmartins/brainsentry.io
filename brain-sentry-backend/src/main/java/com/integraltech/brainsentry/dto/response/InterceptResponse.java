@@ -42,6 +42,11 @@ public class InterceptResponse {
     private List<MemoryReference> memoriesUsed;
 
     /**
+     * Notes that were used for context (Confucius integration).
+     */
+    private List<NoteReference> notesUsed;
+
+    /**
      * Operation latency in milliseconds.
      */
     private Integer latencyMs;
@@ -79,6 +84,21 @@ public class InterceptResponse {
         private String category;
         private String importance;
         private Double relevanceScore;
+        private String excerpt;
+    }
+
+    /**
+     * Reference to a note used in context (Confucius integration).
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class NoteReference {
+        private String id;
+        private String title;
+        private String type;  // NoteType: HINDSIGHT, INSIGHT, PATTERN, etc.
+        private String severity;  // For hindsight notes
         private String excerpt;
     }
 }

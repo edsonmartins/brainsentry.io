@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Menu, X, Sun, Moon, Globe } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 export function LandingHeader() {
+  const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -114,10 +116,10 @@ export function LandingHeader() {
               )}
             </button>
 
-            <Button variant="ghost" size="sm" className="dark:text-gray-300 dark:hover:text-white">
+            <Button variant="ghost" size="sm" className="dark:text-gray-300 dark:hover:text-white" onClick={() => navigate("/login")}>
               {t("nav.signIn")}
             </Button>
-            <Button size="sm" className="bg-brain-primary hover:bg-brain-primary/90">
+            <Button size="sm" className="bg-brain-primary hover:bg-brain-primary/90" onClick={() => navigate("/login")}>
               {t("nav.getStarted")}
             </Button>
           </div>
@@ -186,10 +188,10 @@ export function LandingHeader() {
               </div>
 
               <div className="flex flex-col gap-2 mt-4">
-                <Button variant="ghost" size="sm" className="justify-start dark:text-gray-300 dark:hover:text-white">
+                <Button variant="ghost" size="sm" className="justify-start dark:text-gray-300 dark:hover:text-white" onClick={() => navigate("/login")}>
                   {t("nav.signIn")}
                 </Button>
-                <Button size="sm" className="bg-brain-primary hover:bg-brain-primary/90">
+                <Button size="sm" className="bg-brain-primary hover:bg-brain-primary/90" onClick={() => navigate("/login")}>
                   {t("nav.getStarted")}
                 </Button>
               </div>

@@ -160,11 +160,21 @@ public class HindsightNote {
 
     /**
      * Related memory IDs (memories that would have prevented this error).
+     * Graph edges: HindsightNote -[:PREVENTED_BY]-> Memory
      */
     @ElementCollection
     @CollectionTable(name = "hindsight_related_memories", joinColumns = @JoinColumn(name = "hindsight_id"))
     @Column(name = "memory_id")
     private java.util.List<String> relatedMemoryIds;
+
+    /**
+     * IDs of related notes (generic Note entity connections).
+     * Graph edges: HindsightNote -[:RELATED_TO]-> Note
+     */
+    @ElementCollection
+    @CollectionTable(name = "hindsight_related_notes", joinColumns = @JoinColumn(name = "hindsight_id"))
+    @Column(name = "related_note_id")
+    private java.util.List<String> relatedNoteIds;
 
     // ==================== Usage Tracking ====================
 
@@ -334,5 +344,35 @@ public class HindsightNote {
             return false;
         }
         return this.errorType.equalsIgnoreCase(errorType);
+    }
+
+    /**
+     * Add a related note ID.
+     * Graph relationship: HindsightNote -[:RELATED_TO]-> Note
+     *
+     * @param noteId the note ID to add
+     */
+    public void addRelatedNote(String noteId) {
+        if (this.relatedNoteIds == null) {
+            this.relatedNoteIds = new java.util.ArrayList<>();
+        }
+        if (!this.relatedNoteIds.contains(noteId)) {
+            this.relatedNoteIds.add(noteId);
+        }
+    }
+
+    /**
+     * Add a related memory ID.
+     * Graph relationship: HindsightNote -[:PREVENTED_BY]-> Memory
+     *
+     * @param memoryId the memory ID to add
+     */
+    public void addRelatedMemory(String memoryId) {
+        if (this.relatedMemoryIds == null) {
+            this.relatedMemoryIds = new java.util.ArrayList<>();
+        }
+        if (!this.relatedMemoryIds.contains(memoryId)) {
+            this.relatedMemoryIds.add(memoryId);
+        }
     }
 }

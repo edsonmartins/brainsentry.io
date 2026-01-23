@@ -2,6 +2,7 @@ package com.integraltech.brainsentry.service;
 
 import com.integraltech.brainsentry.domain.HindsightNote;
 import com.integraltech.brainsentry.domain.Memory;
+import com.integraltech.brainsentry.domain.Note;
 import com.integraltech.brainsentry.dto.request.CreateHindsightNoteRequest;
 import com.integraltech.brainsentry.dto.request.SessionAnalysisRequest;
 import com.integraltech.brainsentry.dto.response.HindsightNoteResponse;
@@ -9,6 +10,7 @@ import com.integraltech.brainsentry.dto.response.SessionAnalysisResponse;
 import com.integraltech.brainsentry.repository.AuditLogJpaRepository;
 import com.integraltech.brainsentry.repository.HindsightNoteJpaRepository;
 import com.integraltech.brainsentry.repository.MemoryJpaRepository;
+import com.integraltech.brainsentry.repository.NoteJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -42,6 +45,9 @@ class NoteTakingServiceTest {
 
     @Mock
     private MemoryJpaRepository memoryRepo;
+
+    @Mock
+    private NoteJpaRepository noteRepo;
 
     @Mock
     private OpenRouterService openRouterService;
@@ -305,6 +311,189 @@ class NoteTakingServiceTest {
             // Then
             assertThat(memories).isNotNull();
             verify(memoryRepo, atLeastOnce()).save(any(Memory.class));
+        }
+    }
+
+    @DisplayName("Confucius Spec Methods Tests")
+    @Nested
+    class ConfuciusSpecMethodsTests {
+
+        @Test
+        @DisplayName("Should extract insights from session")
+        void testExtractInsights() {
+            // Given
+            String sessionId = "session-123";
+            String tenantId = "tenant-abc";
+
+            when(auditLogRepo.findByTenantIdAndTimestampBetween(
+                eq(tenantId), any(Instant.class), any(Instant.class)
+            )).thenReturn(Collections.emptyList());
+
+            when(openRouterService.chat(anyString(), anyString()))
+                .thenReturn("{insights: [{title: 'Test Insight', content: 'Test content', category: 'PATTERN', keywords: ['test']}]");
+
+            Note savedNote = Note.builder()
+                .id("note-123")
+                .title("Session Insight")
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenReturn(savedNote);
+
+            // When
+            List<Note> insights = noteTakingService.extractInsights(sessionId, tenantId);
+
+            // Then
+            assertThat(insights).isNotNull();
+            verify(noteRepo).save(any(Note.class));
+        }
+
+        @Test
+        @DisplayName("Should extract hindsights from errors")
+        void testExtractHindsights() {
+            // Given
+            String sessionId = "session-123";
+            String tenantId = "tenant-abc";
+
+            when(auditLogRepo.findByTenantIdAndTimestampBetween(
+                eq(tenantId), any(Instant.class), any(Instant.class)
+            )).thenReturn(Collections.emptyList());
+
+            Note savedNote = Note.builder()
+                .id("note-456")
+                .type(com.integraltech.brainsentry.domain.enums.NoteType.HINDSIGHT)
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenReturn(savedNote);
+
+            // When
+            List<Note> hindsights = noteTakingService.extractHindsights(sessionId, tenantId);
+
+            // Then
+            assertThat(hindsights).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Should identify patterns from session")
+        void testIdentifyPatterns() {
+            // Given
+            String sessionId = "session-123";
+            String tenantId = "tenant-abc";
+
+            when(auditLogRepo.findByTenantIdAndTimestampBetween(
+                eq(tenantId), any(Instant.class), any(Instant.class)
+            )).thenReturn(Collections.emptyList());
+
+            when(openRouterService.chat(anyString(), anyString()))
+                .thenReturn("{patterns: [{title: 'Test Pattern', description: 'Found pattern', type: 'DESIGN', keywords: ['pattern']}]");
+
+            Note savedNote = Note.builder()
+                .id("note-789")
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenReturn(savedNote);
+
+            // When
+            List<Note> patterns = noteTakingService.identifyPatterns(sessionId, tenantId);
+
+            // Then
+            assertThat(patterns).isNotNull();
+            verify(noteRepo).save(any(Note.class));
+        }
+
+        @Test
+        @DisplayName("Should extract architectural decisions")
+        void testExtractArchitecturalDecisions() {
+            // Given
+            String sessionId = "session-123";
+            String tenantId = "tenant-abc";
+
+            when(auditLogRepo.findByTenantIdAndTimestampBetween(
+                eq(tenantId), any(Instant.class), any(Instant.class)
+            )).thenReturn(Collections.emptyList());
+
+            when(openRouterService.chat(anyString(), anyString()))
+                .thenReturn("{decisions: [{title: 'Use PostgreSQL', rationale: 'Scalability', impact: 'High', alternatives: ['MySQL']}]");
+
+            Note savedNote = Note.builder()
+                .id("note-arch")
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenReturn(savedNote);
+
+            // When
+            List<Note> decisions = noteTakingService.extractArchitecturalDecisions(sessionId, tenantId);
+
+            // Then
+            assertThat(decisions).isNotNull();
+            verify(noteRepo).save(any(Note.class));
+        }
+
+        @Test
+        @DisplayName("Should link notes to memories")
+        void testLinkToMemories() {
+            // Given
+            String noteId = "note-123";
+            List<String> memoryIds = Arrays.asList("mem-1", "mem-2");
+
+            Note existingNote = Note.builder()
+                .id(noteId)
+                .relatedMemoryIds(new ArrayList<>())
+                .build();
+
+            when(noteRepo.findById(noteId)).thenReturn(java.util.Optional.of(existingNote));
+
+            Note updatedNote = Note.builder()
+                .id(noteId)
+                .relatedMemoryIds(memoryIds)
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenReturn(updatedNote);
+
+            // When
+            noteTakingService.linkToMemories(noteId, memoryIds);
+
+            // Then
+            verify(noteRepo).save(any(Note.class));
+        }
+
+        @Test
+        @DisplayName("Should generate session summary")
+        void testGenerateSessionSummary() {
+            // Given
+            String sessionId = "session-456";
+            String tenantId = "tenant-xyz";
+
+            List<Note> notes = Arrays.asList(
+                Note.builder()
+                    .id("note-1")
+                    .type(com.integraltech.brainsentry.domain.enums.NoteType.INSIGHT)
+                    .title("Insight 1")
+                    .content("Content 1")
+                    .build(),
+                Note.builder()
+                    .id("note-2")
+                    .type(com.integraltech.brainsentry.domain.enums.NoteType.HINDSIGHT)
+                    .title("Hindsight 1")
+                    .content("Resolution 1")
+                    .build()
+            );
+
+            Note savedSummary = Note.builder()
+                .id("summary-123")
+                .title("Session Summary: session-456")
+                .build();
+
+            when(noteRepo.save(any(Note.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            // When
+            Note summary = noteTakingService.generateSessionSummary(sessionId, notes);
+
+            // Then
+            assertThat(summary).isNotNull();
+            assertThat(summary.getTitle()).contains("Session Summary");
+            assertThat(summary.getContent()).contains("## Insights Captured");
+            assertThat(summary.getContent()).contains("## Failures & Resolutions");
+            verify(noteRepo).save(any(Note.class));
         }
     }
 }

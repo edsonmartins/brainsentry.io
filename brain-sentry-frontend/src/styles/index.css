@@ -24,28 +24,46 @@
     --input: 240 5.9% 90%;
     --ring: 240 5.9% 10%;
     --radius: 0.5rem;
+
+    /* Brain Sentry Brand Colors (Laranja/Cobre) */
+    --brain-primary: 23 75% 59%;     /* #E67E50 - Laranja principal */
+    --brain-primary-dark: 24 70% 56%; /* #D97642 - Laranja escuro (logo) */
+    --brain-primary-light: 24 88% 69%; /* #F29A6E - Laranja claro */
+
+    --brain-accent: 38 96% 56%;      /* #F59E0B - Laranja vibrante (CTAs) */
+    --brain-accent-dark: 35 92% 46%;  /* #DC7609 - Laranja queimado */
+    --brain-gold: 45 92% 56%;         /* #FBBF24 - Dourado */
+
+    /* Backgrounds for dark theme */
+    --brain-bg-dark: 228 24% 13%;     /* #1A1D29 - Background escuro */
+    --brain-bg-darker: 225 25% 8%;    /* #0F1117 - Background mais escuro */
+    --brain-bg-lighter: 225 22% 18%;  /* #252936 - Cards/sections */
+
+    /* Semantic colors */
+    --brain-success: 142 76% 36%;     /* #10B981 - Verde */
+    --brain-error: 0 84% 60%;         /* #EF4444 - Vermelho */
   }
 
   .dark {
-    --background: 240 10% 3.9%;
+    --background: 228 24% 13%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 225 22% 18%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 228 24% 13%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
+    --secondary: 225 22% 18%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
+    --muted: 225 22% 25%;
+    --muted-foreground: 217 10% 65%;
+    --accent: 23 75% 59%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 225 22% 25%;
+    --input: 225 22% 25%;
+    --ring: 23 75% 59%;
   }
 }
 

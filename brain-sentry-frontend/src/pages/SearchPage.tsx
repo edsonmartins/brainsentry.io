@@ -1,14 +1,15 @@
-import { useState, useCallback } from "react";
-import { Search, SlidersHorizontal, Sparkles, Clock } from "lucide-react";
-import { useFetch, useDebounce } from "@/hooks";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Search, Sparkles } from "lucide-react";
+import { useDebounce } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
-import { Input, SearchInput, FilterBar, AdvancedFilters } from "@/components/ui/filter";
+import { Input, SearchInput, FilterSelect } from "@/components/ui/filter";
 import { Spinner, Skeleton } from "@/components/ui/spinner";
 import { Pagination } from "@/components/ui/pagination";
 import { useToast } from "@/components/ui/toast";
 import { MemoryCard } from "@/components/memory";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api/client";
 
 interface SearchResponse {
   query: string;
@@ -24,6 +25,18 @@ interface SearchResponse {
   }>;
   totalResults: number;
   searchTimeMs: number;
+}
+
+interface MemoryResponse {
+  id: string;
+  content: string;
+  summary: string;
+  category: string;
+  importance: string;
+  validationStatus: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CategoryOption {
@@ -54,46 +67,69 @@ const IMPORTANCE_OPTIONS: CategoryOption[] = [
 export function SearchPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const tenantId = user?.tenantId || "default";
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebounce(searchQuery, 500);
   const [category, setCategory] = useState("");
   const [importance, setImportance] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(12);
+  const [pageSize, setPageSize] = useState(12);
+
+  // Results state
+  const [searchResults, setSearchResults] = useState<MemoryResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   // Build search query
   const shouldSearch = debouncedQuery.length >= 2 || category || importance;
 
-  // Fetch search results
-  const {
-    data: searchResults,
-    isLoading,
-    error,
-    refetch,
-  } = useFetch<SearchResponse>(
-    shouldSearch
-      ? `${API_URL}/v1/memories/search`
-      : null,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: debouncedQuery || "*",
-        category: category || undefined,
-        importance: importance || undefined,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-      }),
-      skip: !shouldSearch,
-    }
-  );
+  // Memoize search params to prevent unnecessary re-renders
+  const searchParams = useMemo(() => ({
+    query: debouncedQuery || "*",
+    category: category || undefined,
+    importance: importance || undefined,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  }), [debouncedQuery, category, importance, pageSize, page]);
 
-  const results = searchResults?.results || [];
-  const totalResults = searchResults?.totalResults || 0;
+  // Fetch search results
+  const performSearch = useCallback(async () => {
+    if (!shouldSearch) {
+      setSearchResults([]);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.axiosInstance.post<MemoryResponse[]>(
+        "/v1/memories/search",
+        searchParams
+      );
+      setSearchResults(response.data);
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      toast({
+        title: "Erro na busca",
+        description: error.message,
+        variant: "error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [shouldSearch, searchParams, toast]);
+
+  // Auto-search when params change (debounced)
+  useEffect(() => {
+    performSearch();
+  }, [performSearch]);
+
+  const results = searchResults || [];
+  const totalResults = results.length;
   const totalPages = Math.ceil(totalResults / pageSize);
 
   const handleSearch = () => {
@@ -105,7 +141,7 @@ export function SearchPage() {
       });
       return;
     }
-    refetch?.();
+    performSearch();
   };
 
   const handleClearFilters = () => {
@@ -123,16 +159,16 @@ export function SearchPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Sparkles className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Sparkles className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Busca Semântica</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Encontre memórias usando IA
                 </p>
               </div>
@@ -148,42 +184,45 @@ export function SearchPage() {
             <div className="flex flex-col gap-4">
               {/* Main Search Bar */}
               <div className="flex gap-2">
-                <div className="flex-1">
-                  <SearchInput
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
                     value={searchQuery}
-                    onChange={setSearchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Digite sua dúvida ou contexto técnico..."
-                    className="h-12"
+                    className="pl-10 h-12"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSearch();
+                    }}
                   />
                 </div>
-                <Button size="lg" onClick={handleSearch}>
-                  <Search className="h-5 w-5" />
+                <Button size="lg" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleSearch}>
+                  <Search className="h-5 w-5 mr-2" />
                   Buscar
                 </Button>
               </div>
 
               {/* Filters */}
-              <FilterBar
-                searchValue={searchQuery}
-                onSearchChange={setSearchQuery}
-                filters={[
-                  {
-                    key: "category",
-                    label: "Categoria",
-                    options: CATEGORY_OPTIONS,
-                    value: category,
-                    onChange: setCategory,
-                  },
-                  {
-                    key: "importance",
-                    label: "Importância",
-                    options: IMPORTANCE_OPTIONS,
-                    value: importance,
-                    onChange: setImportance,
-                  },
-                ]}
-                onClearFilters={handleClearFilters}
-              />
+              <div className="flex flex-wrap gap-4 items-end">
+                <FilterSelect
+                  label="Categoria"
+                  options={CATEGORY_OPTIONS}
+                  value={category}
+                  onChange={setCategory}
+                />
+                <FilterSelect
+                  label="Importância"
+                  options={IMPORTANCE_OPTIONS}
+                  value={importance}
+                  onChange={setImportance}
+                />
+                {(searchQuery || category || importance) && (
+                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                    Limpar filtros
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -244,12 +283,6 @@ export function SearchPage() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>{totalResults} resultados encontrados</span>
-                {searchResults?.searchTimeMs && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {searchResults.searchTimeMs}ms
-                  </span>
-                )}
               </div>
             </div>
 
@@ -283,8 +316,8 @@ export function SearchPage() {
           <Card>
             <CardContent className="p-12 text-center">
               <div className="max-w-md mx-auto">
-                <div className="p-4 bg-primary/10 rounded-full w-16 h-16 mx-auto mb-4">
-                  <Search className="h-8 w-8 text-primary mx-auto mt-4" />
+                <div className="p-4 bg-gradient-to-br from-brain-primary/20 to-brain-accent/20 rounded-full w-16 h-16 mx-auto mb-4">
+                  <Search className="h-8 w-8 text-brain-primary mx-auto mt-4" />
                 </div>
                 <h3 className="text-lg font-semibold mb-2">
                   Busque em suas memórias

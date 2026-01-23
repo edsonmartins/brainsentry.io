@@ -1,0 +1,258 @@
+package com.integraltech.brainsentry.domain;
+
+import com.integraltech.brainsentry.domain.enums.NoteCategory;
+import com.integraltech.brainsentry.domain.enums.NoteSeverity;
+import com.integraltech.brainsentry.domain.enums.NoteType;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.TenantId;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * Generic Note entity for storing various types of learning and documentation.
+ *
+ * Inspired by Confucius Code Agent's note system.
+ * Supports INSIGHT, HINDSIGHT, PATTERN, ANTIPATTERN, ARCHITECTURE, and INTEGRATION notes.
+ *
+ * This is the generic note entity. For specialized hindsight notes with error tracking,
+ * see {@link HindsightNote}.
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "notes", indexes = {
+        @Index(name = "idx_note_tenant", columnList = "tenantId"),
+        @Index(name = "idx_note_session", columnList = "sessionId"),
+        @Index(name = "note_project", columnList = "projectId"),
+        @Index(name = "idx_note_type", columnList = "type"),
+        @Index(name = "idx_note_category", columnList = "category"),
+        @Index(name = "idx_note_severity", columnList = "severity"),
+        @Index(name = "idx_note_created", columnList = "createdAt")
+})
+public class Note {
+
+    @Id
+    @Column(length = 100)
+    @Builder.Default
+    private String id = UUID.randomUUID().toString();
+
+    /**
+     * Tenant ID for multi-tenancy support.
+     */
+    @TenantId
+    @Column(length = 100, nullable = false)
+    private String tenantId;
+
+    /**
+     * Session ID that generated this note.
+     */
+    @Column(length = 100, nullable = false)
+    private String sessionId;
+
+    // ==================== Note Classification ====================
+
+    /**
+     * Type of the note.
+     * Determines what kind of information this note contains.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private NoteType type;
+
+    /**
+     * Title of the note.
+     * Short, descriptive title for quick identification.
+     */
+    @Column(length = 500, nullable = false)
+    private String title;
+
+    /**
+     * Content of the note in Markdown format.
+     * Can include code snippets, explanations, etc.
+     */
+    @Lob
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String content;
+
+    /**
+     * Keywords for categorizing and searching notes.
+     */
+    @ElementCollection
+    @CollectionTable(name = "note_keywords", joinColumns = @JoinColumn(name = "note_id"))
+    @Column(name = "keyword")
+    private java.util.List<String> keywords;
+
+    /**
+     * Category of the note.
+     * Determines scope: project-specific, team-shared, or generic.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    @Builder.Default
+    private NoteCategory category = NoteCategory.PROJECT_SPECIFIC;
+
+    /**
+     * Project ID (null if shared or generic).
+     */
+    @Column(length = 100)
+    private String projectId;
+
+    /**
+     * Severity level for this note.
+     * Important for hindsight notes.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @Builder.Default
+    private NoteSeverity severity = NoteSeverity.MEDIUM;
+
+    /**
+     * Error pattern for hindsight notes.
+     * Used for pattern matching to detect similar errors.
+     */
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String errorPattern;
+
+    // ==================== Timestamps ====================
+
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
+
+    private Instant lastAccessedAt;
+
+    /**
+     * When this error was last encountered (for hindsight notes).
+     */
+    private Instant lastOccurrenceAt;
+
+    /**
+     * Access tracking for popularity analysis.
+     */
+    @Builder.Default
+    private Integer accessCount = 0;
+
+    // ==================== Graph Relationships ====================
+
+    /**
+     * IDs of related memory nodes.
+     * Graph edges: Note -[:DOCUMENTS]-> Memory
+     */
+    @ElementCollection
+    @CollectionTable(name = "note_related_memories", joinColumns = @JoinColumn(name = "note_id"))
+    @Column(name = "memory_id")
+    private java.util.List<String> relatedMemoryIds;
+
+    /**
+     * IDs of related notes.
+     * Graph edges: Note -[:RELATED_TO]-> Note
+     */
+    @ElementCollection
+    @CollectionTable(name = "note_related_notes", joinColumns = @JoinColumn(name = "note_id"))
+    @Column(name = "related_note_id")
+    private java.util.List<String> relatedNoteIds;
+
+    // ==================== Provenance ====================
+
+    /**
+     * User who created this note.
+     */
+    @Column(length = 100)
+    private String createdBy;
+
+    /**
+     * Whether this note was generated automatically by the system.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean autoGenerated = false;
+
+    // ==================== Lifecycle Callbacks ====================
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = Instant.now();
+        lastAccessedAt = createdAt;
+        if (type == null) {
+            type = NoteType.INSIGHT;
+        }
+    }
+
+    // ==================== Business Logic ====================
+
+    /**
+     * Record that this note was accessed.
+     */
+    public void recordAccess() {
+        this.accessCount++;
+        this.lastAccessedAt = Instant.now();
+    }
+
+    /**
+     * Check if this note is considered frequently accessed.
+     */
+    @Transient
+    public boolean isFrequentlyAccessed() {
+        return accessCount > 5;
+    }
+
+    /**
+     * Get a brief preview of the note content.
+     */
+    @Transient
+    public String getPreview() {
+        if (content == null) {
+            return "";
+        }
+        String preview = content;
+        if (preview.length() > 200) {
+            preview = preview.substring(0, 197) + "...";
+        }
+        return preview;
+    }
+
+    /**
+     * Check if this note is applicable to a specific project.
+     */
+    @Transient
+    public boolean isApplicableTo(String projectId) {
+        if (category == NoteCategory.GENERIC) {
+            return true;
+        }
+        if (category == NoteCategory.SHARED) {
+            return true;  // Or check team membership
+        }
+        return projectId != null && projectId.equals(this.projectId);
+    }
+
+    /**
+     * Add a related memory ID.
+     */
+    public void addRelatedMemory(String memoryId) {
+        if (this.relatedMemoryIds == null) {
+            this.relatedMemoryIds = new java.util.ArrayList<>();
+        }
+        if (!this.relatedMemoryIds.contains(memoryId)) {
+            this.relatedMemoryIds.add(memoryId);
+        }
+    }
+
+    /**
+     * Add a related note ID.
+     */
+    public void addRelatedNote(String noteId) {
+        if (this.relatedNoteIds == null) {
+            this.relatedNoteIds = new java.util.ArrayList<>();
+        }
+        if (!this.relatedNoteIds.contains(noteId)) {
+            this.relatedNoteIds.add(noteId);
+        }
+    }
+}

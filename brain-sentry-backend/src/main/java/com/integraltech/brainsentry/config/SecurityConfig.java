@@ -42,18 +42,25 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints
                 .requestMatchers(
-                    "/actuator/health",
-                    "/actuator/info",
+                    "/actuator/**",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html"
                 ).permitAll()
+                // Auth endpoints
+                .requestMatchers("/v1/auth/**").permitAll()
+                // Stats/health endpoints (for testing)
+                .requestMatchers("/v1/stats/**").permitAll()
+                // Memories endpoints (for development testing)
+                .requestMatchers("/v1/memories/**").permitAll()
+                // All other public endpoints for development
+                .requestMatchers("/v1/intercepts/**").permitAll()
+                .requestMatchers("/v1/notes/**").permitAll()
+                .requestMatchers("/v1/relationships/**").permitAll()
+                .requestMatchers("/v1/users/**").permitAll()
+                .requestMatchers("/v1/tenants/**").permitAll()
                 // Allow OPTIONS for CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS).permitAll()
-                // Auth endpoints
-                .requestMatchers("/api/v1/auth/**").permitAll()
-                // Stats/health endpoints (for testing)
-                .requestMatchers("/api/v1/stats/**").permitAll()
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
@@ -63,7 +70,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
     }
 }

@@ -1,11 +1,16 @@
 package com.integraltech.brainsentry.service;
 
+import com.integraltech.brainsentry.config.TenantContext;
+import com.integraltech.brainsentry.domain.ContextSummary;
 import com.integraltech.brainsentry.dto.request.CompressionRequest;
 import com.integraltech.brainsentry.dto.response.CompressedContextResponse;
+import com.integraltech.brainsentry.repository.ContextSummaryJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,11 +28,17 @@ import java.util.stream.Collectors;
 public class ArchitectService {
 
     private final OpenRouterService openRouterService;
+    private final ContextSummaryJpaRepository contextSummaryRepo;
 
     /**
      * Default token threshold for compression.
      */
     private static final int DEFAULT_TOKEN_THRESHOLD = 100000;
+
+    /**
+     * Default recent window size (messages to keep in full).
+     */
+    private static final int DEFAULT_RECENT_WINDOW = 10;
 
     /**
      * Compress context history when it exceeds the threshold.
@@ -36,7 +47,28 @@ public class ArchitectService {
      * @param threshold the token threshold for compression
      * @return compressed context
      */
+    @Transactional
     public CompressedContextResponse compressContext(List<CompressionRequest.Message> messages, Integer threshold) {
+        return compressContext(messages, threshold, null, null);
+    }
+
+    /**
+     * Compress context history when it exceeds the threshold, with session tracking.
+     * KEY FEATURE from Confucius spec - saves ContextSummary for audit trail.
+     *
+     * @param messages the conversation history
+     * @param threshold the token threshold for compression
+     * @param sessionId the session ID for tracking
+     * @param tenantId the tenant ID
+     * @return compressed context
+     */
+    @Transactional
+    public CompressedContextResponse compressContext(
+            List<CompressionRequest.Message> messages,
+            Integer threshold,
+            String sessionId,
+            String tenantId) {
+
         if (threshold == null) {
             threshold = DEFAULT_TOKEN_THRESHOLD;
         }
@@ -53,7 +85,14 @@ public class ArchitectService {
         log.info("Compressing context: {} tokens -> target {}", estimatedTokens, threshold);
 
         // Compress using LLM
-        return compressWithLLM(messages, threshold);
+        CompressedContextResponse response = compressWithLLM(messages, threshold);
+
+        // Save ContextSummary for audit trail (Confucius spec requirement)
+        if (sessionId != null && tenantId != null && response.getCompressed()) {
+            saveContextSummary(sessionId, tenantId, messages, response);
+        }
+
+        return response;
     }
 
     /**
@@ -339,5 +378,101 @@ public class ArchitectService {
         }
 
         return errors;
+    }
+
+    /**
+     * Save ContextSummary for audit trail.
+     * KEY FEATURE from Confucius spec - enables analysis of compression effectiveness.
+     *
+     * @param sessionId the session ID
+     * @param tenantId the tenant ID
+     * @param originalMessages the original messages before compression
+     * @param response the compression response
+     */
+    private void saveContextSummary(
+            String sessionId,
+            String tenantId,
+            List<CompressionRequest.Message> originalMessages,
+            CompressedContextResponse response) {
+
+        try {
+            CompressedContextResponse.StructuredSummary summary = response.getSummary();
+            if (summary == null) {
+                summary = CompressedContextResponse.StructuredSummary.builder().build();
+            }
+
+            ContextSummary contextSummary = ContextSummary.builder()
+                .tenantId(tenantId)
+                .sessionId(sessionId)
+                .originalTokenCount(response.getOriginalTokenCount())
+                .compressedTokenCount(response.getCompressedTokenCount())
+                .compressionRatio(response.getCompressionRatio())
+                .summary(formatSummaryAsMarkdown(summary))
+                .goals(summary.getTaskGoal() != null ? List.of(summary.getTaskGoal()) : List.of())
+                .decisions(summary.getKeyDecisions() != null ? summary.getKeyDecisions() : List.of())
+                .errors(extractErrorMessages(summary.getCriticalErrors()))
+                .todos(summary.getOpenTodos() != null ? summary.getOpenTodos() : List.of())
+                .recentWindowSize(DEFAULT_RECENT_WINDOW)
+                .modelUsed("llm-compression")
+                .compressionMethod("LLM")
+                .createdAt(Instant.now())
+                .build();
+
+            contextSummaryRepo.save(contextSummary);
+            log.info("Saved ContextSummary for session: {}, ratio: {:.2f}",
+                sessionId, response.getCompressionRatio());
+        } catch (Exception e) {
+            log.warn("Failed to save ContextSummary: {}", e.getMessage());
+            // Don't fail compression if summary save fails
+        }
+    }
+
+    /**
+     * Format structured summary as Markdown.
+     */
+    private String formatSummaryAsMarkdown(CompressedContextResponse.StructuredSummary summary) {
+        StringBuilder md = new StringBuilder();
+
+        if (summary.getTaskGoal() != null) {
+            md.append("## Goal\n\n").append(summary.getTaskGoal()).append("\n\n");
+        }
+
+        if (summary.getKeyDecisions() != null && !summary.getKeyDecisions().isEmpty()) {
+            md.append("## Decisions\n\n");
+            for (String decision : summary.getKeyDecisions()) {
+                md.append("- ").append(decision).append("\n");
+            }
+            md.append("\n");
+        }
+
+        if (summary.getCriticalErrors() != null && !summary.getCriticalErrors().isEmpty()) {
+            md.append("## Errors\n\n");
+            for (CompressedContextResponse.CriticalError error : summary.getCriticalErrors()) {
+                md.append("- **").append(error.getErrorType())
+                  .append("**: ").append(error.getDescription()).append("\n");
+            }
+            md.append("\n");
+        }
+
+        if (summary.getOpenTodos() != null && !summary.getOpenTodos().isEmpty()) {
+            md.append("## TODOs\n\n");
+            for (String todo : summary.getOpenTodos()) {
+                md.append("- ").append(todo).append("\n");
+            }
+        }
+
+        return md.toString();
+    }
+
+    /**
+     * Extract error messages from CriticalError list.
+     */
+    private List<String> extractErrorMessages(List<CompressedContextResponse.CriticalError> errors) {
+        if (errors == null || errors.isEmpty()) {
+            return List.of();
+        }
+        return errors.stream()
+            .map(e -> e.getErrorType() + ": " + e.getDescription())
+            .collect(Collectors.toList());
     }
 }

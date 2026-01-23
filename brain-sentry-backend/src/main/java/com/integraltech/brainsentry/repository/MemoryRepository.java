@@ -85,6 +85,15 @@ public interface MemoryRepository {
     List<Memory> findRelated(String memoryId, int depth, String tenantId);
 
     /**
+     * Execute a raw Cypher query and return the ResultSet.
+     * Used for custom graph queries.
+     *
+     * @param query the Cypher query string
+     * @return ResultSet from FalkorDB
+     */
+    com.falkordb.ResultSet query(String query);
+
+    /**
      * Delete a memory by ID (soft delete).
      *
      * @param id the memory ID
@@ -115,4 +124,12 @@ public interface MemoryRepository {
      * @return list of version numbers
      */
     List<Integer> getVersionHistory(String memoryId, String tenantId);
+
+    /**
+     * Create all graph relationships for a tenant's memories.
+     * This is typically called after reprocessing memories to the graph.
+     *
+     * @param tenantId the tenant ID
+     */
+    void createAllRelationships(String tenantId);
 }

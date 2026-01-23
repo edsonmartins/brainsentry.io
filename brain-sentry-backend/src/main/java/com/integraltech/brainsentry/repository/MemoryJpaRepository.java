@@ -1,6 +1,7 @@
 package com.integraltech.brainsentry.repository;
 
 import com.integraltech.brainsentry.domain.Memory;
+import com.integraltech.brainsentry.domain.enums.ImportanceLevel;
 import com.integraltech.brainsentry.domain.enums.MemoryCategory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -66,12 +67,14 @@ public interface MemoryJpaRepository extends JpaRepository<Memory, String>, JpaS
     /**
      * Count memories by category.
      */
-    long countByCategory(String category);
+    @Query("SELECT COUNT(m) FROM Memory m WHERE m.category = :category")
+    long countByCategory(@Param("category") MemoryCategory category);
 
     /**
      * Count memories by importance level.
      */
-    long countByImportance(String importance);
+    @Query("SELECT COUNT(m) FROM Memory m WHERE m.importance = :importance")
+    long countByImportance(@Param("importance") ImportanceLevel importance);
 
     /**
      * Find recently accessed memories (top 10).
@@ -91,4 +94,16 @@ public interface MemoryJpaRepository extends JpaRepository<Memory, String>, JpaS
      * Count memories created by a specific user.
      */
     long countByCreatedBy(String createdBy);
+
+    /**
+     * Full-text search on memory content and summary.
+     * Uses PostgreSQL's native full-text search with tsvector.
+     */
+    @Query("""
+        SELECT m FROM Memory m WHERE
+        LOWER(m.content) LIKE LOWER(CONCAT('%', :query, '%'))
+        OR LOWER(m.summary) LIKE LOWER(CONCAT('%', :query, '%'))
+        ORDER BY m.importance DESC, m.createdAt DESC
+        """)
+    List<Memory> fullTextSearch(@Param("query") String query);
 }

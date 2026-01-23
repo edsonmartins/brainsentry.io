@@ -321,30 +321,30 @@ export function ConfigurationPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Settings className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Settings className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Configurações</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Gerencie as configurações do sistema
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {hasChanges && (
-                <Button variant="outline" onClick={handleReset} disabled={isSaving}>
+                <Button variant="outline" className="bg-white/20 text-white border-white/30 hover:bg-white/30" onClick={handleReset} disabled={isSaving}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Resetar
                 </Button>
               )}
-              <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
+              <Button className="bg-white text-brain-primary hover:bg-white/90" onClick={handleSave} disabled={!hasChanges || isSaving}>
                 {isSaving ? (
-                  <Spinner size="sm" variant="primary" />
+                  <Spinner size="sm" />
                 ) : (
                   <Save className="h-4 w-4 mr-2" />
                 )}
@@ -370,14 +370,14 @@ export function ConfigurationPage() {
                     onClick={() => setActiveSection(section.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
                       isActive
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-gradient-to-r from-brain-primary to-brain-accent text-white shadow-md"
                         : "hover:bg-accent"
                     }`}
                   >
                     <Icon className="h-5 w-5" />
                     <div className="flex-1">
                       <p className="text-sm font-medium">{section.title}</p>
-                      <p className={`text-xs ${isActive ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                      <p className={`text-xs ${isActive ? "text-white/70" : "text-muted-foreground"}`}>
                         {section.description}
                       </p>
                     </div>
@@ -394,8 +394,8 @@ export function ConfigurationPage() {
               <CardHeader>
                 <div className="flex items-center gap-3">
                   {currentSection && (
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <currentSection.icon className="h-5 w-5 text-primary" />
+                    <div className="p-2 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg">
+                      <currentSection.icon className="h-5 w-5 text-white" />
                     </div>
                   )}
                   <div>

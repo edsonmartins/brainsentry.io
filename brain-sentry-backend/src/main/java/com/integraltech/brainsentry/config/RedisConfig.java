@@ -25,6 +25,7 @@ public class RedisConfig {
     private String host = "localhost";
     private int port = 6379;
     private String password;
+    private String user = "default";  // FalkorDB/Redis ACL username
     private int database = 0;
     private int timeout = 2000;
 
@@ -39,8 +40,16 @@ public class RedisConfig {
         poolConfig.setMinEvictableIdleTimeMillis(Duration.ofSeconds(60).toMillis());
         poolConfig.setTimeBetweenEvictionRunsMillis(Duration.ofSeconds(30).toMillis());
 
+        // For FalkorDB with ACL, use user parameter
+        // If password is provided, use the constructor with user and password
         if (password != null && !password.isEmpty()) {
-            return new JedisPool(poolConfig, host, port, timeout, password, database);
+            // Try with user (for Redis 6+ ACL)
+            try {
+                return new JedisPool(poolConfig, host, port, timeout, user, password, database);
+            } catch (NoSuchMethodError e) {
+                // Fallback for older Jedis versions without user parameter
+                return new JedisPool(poolConfig, host, port, timeout, password, database);
+            }
         } else {
             return new JedisPool(poolConfig, host, port, timeout, null, database);
         }

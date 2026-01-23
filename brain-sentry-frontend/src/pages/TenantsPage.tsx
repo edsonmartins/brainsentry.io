@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input, SearchInput } from "@/components/ui/filter";
 import { Pagination, SimplePagination } from "@/components/ui/pagination";
 import { Spinner, Skeleton } from "@/components/ui/spinner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useFetch } from "@/hooks";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,6 +47,7 @@ interface CreateTenantRequest {
   maxMemories?: number;
   maxUsers?: number;
   settings?: Record<string, unknown>;
+  active?: boolean;
 }
 
 interface UpdateTenantRequest {
@@ -262,25 +263,25 @@ export function TenantsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Building2 className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Building2 className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Tenants</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Gerencie as organizações do sistema
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => refetch?.()}>
+              <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={() => refetch?.()}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              <Button onClick={() => setShowCreateDialog(true)}>
+              <Button className="bg-white text-brain-primary hover:bg-white/90" onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Tenant
               </Button>
@@ -325,7 +326,7 @@ export function TenantsPage() {
                   : "Comece adicionando um novo tenant ao sistema."}
               </p>
               {!searchQuery && (
-                <Button onClick={() => setShowCreateDialog(true)}>
+                <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => setShowCreateDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Adicionar Tenant
                 </Button>
@@ -460,7 +461,7 @@ export function TenantsPage() {
           <DialogHeader>
             <DialogTitle>Novo Tenant</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 px-6 py-4">
             <div>
               <label className="text-sm font-medium mb-2">Nome</label>
               <Input
@@ -526,7 +527,7 @@ export function TenantsPage() {
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCreateTenant} disabled={!formData.name || !formData.slug}>
+            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleCreateTenant} disabled={!formData.name || !formData.slug}>
               Criar Tenant
             </Button>
           </DialogFooter>
@@ -539,7 +540,7 @@ export function TenantsPage() {
           <DialogHeader>
             <DialogTitle>Editar Tenant</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 px-6 py-4">
             <div>
               <label className="text-sm font-medium mb-2">Nome</label>
               <Input
@@ -615,7 +616,7 @@ export function TenantsPage() {
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleUpdateTenant}>Salvar Alterações</Button>
+            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleUpdateTenant}>Salvar Alterações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

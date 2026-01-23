@@ -1,6 +1,8 @@
 package com.integraltech.brainsentry.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integraltech.brainsentry.domain.enums.ImportanceLevel;
+import com.integraltech.brainsentry.domain.enums.MemoryCategory;
 import com.integraltech.brainsentry.repository.MemoryJpaRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,11 +59,11 @@ class StatsControllerTest {
         void shouldReturnStatsOverview() throws Exception {
             // Mock repository responses
             Mockito.when(memoryJpaRepository.count()).thenReturn(150L);
-            Mockito.when(memoryJpaRepository.countByCategory(eq("DECISION"))).thenReturn(45L);
-            Mockito.when(memoryJpaRepository.countByCategory(eq("PATTERN"))).thenReturn(60L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("CRITICAL"))).thenReturn(20L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("IMPORTANT"))).thenReturn(65L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("MINOR"))).thenReturn(65L);
+            Mockito.when(memoryJpaRepository.countByCategory(eq(MemoryCategory.DECISION))).thenReturn(45L);
+            Mockito.when(memoryJpaRepository.countByCategory(eq(MemoryCategory.PATTERN))).thenReturn(60L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.CRITICAL))).thenReturn(20L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.IMPORTANT))).thenReturn(65L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.MINOR))).thenReturn(65L);
 
             mockMvc.perform(get("/v1/stats/overview"))
                     .andExpect(status().isOk())
@@ -95,11 +97,11 @@ class StatsControllerTest {
         @DisplayName("Should return stats with large numbers")
         void shouldReturnStatsWithLargeNumbers() throws Exception {
             Mockito.when(memoryJpaRepository.count()).thenReturn(10000L);
-            Mockito.when(memoryJpaRepository.countByCategory(eq("DECISION"))).thenReturn(3500L);
-            Mockito.when(memoryJpaRepository.countByCategory(eq("PATTERN"))).thenReturn(4500L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("CRITICAL"))).thenReturn(500L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("IMPORTANT"))).thenReturn(6000L);
-            Mockito.when(memoryJpaRepository.countByImportance(eq("MINOR"))).thenReturn(3500L);
+            Mockito.when(memoryJpaRepository.countByCategory(eq(MemoryCategory.DECISION))).thenReturn(3500L);
+            Mockito.when(memoryJpaRepository.countByCategory(eq(MemoryCategory.PATTERN))).thenReturn(4500L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.CRITICAL))).thenReturn(500L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.IMPORTANT))).thenReturn(6000L);
+            Mockito.when(memoryJpaRepository.countByImportance(eq(ImportanceLevel.MINOR))).thenReturn(3500L);
 
             mockMvc.perform(get("/v1/stats/overview"))
                     .andExpect(status().isOk())

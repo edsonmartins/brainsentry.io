@@ -68,8 +68,8 @@ const Pagination = ({
     return pages;
   };
 
-  const startIndex = totalItems ? (currentPage - 1) * pageSize + 1 : 0;
-  const endIndex = totalItems ? Math.min(currentPage * pageSize, totalItems) : 0;
+  const startIndex = totalItems && pageSize ? (currentPage - 1) * pageSize + 1 : 0;
+  const endIndex = totalItems && pageSize ? Math.min(currentPage * pageSize, totalItems) : 0;
 
   return (
     <div className={cn("flex flex-col sm:flex-row items-center justify-between gap-4", className)}>

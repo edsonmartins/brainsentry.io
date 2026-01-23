@@ -1,54 +1,27 @@
-import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
-const spinnerVariants = cva(
-  "inline-block animate-spin rounded-full border-solid",
-  {
-    variants: {
-      size: {
-        xs: "h-3 w-3 border-2",
-        sm: "h-4 w-4 border-2",
-        md: "h-6 w-6 border-2",
-        lg: "h-8 w-8 border-3",
-        xl: "h-12 w-12 border-4",
-      },
-      variant: {
-        default: "border-primary border-t-transparent",
-        muted: "border-muted-foreground/30 border-t-transparent",
-        white: "border-white/30 border-t-transparent",
-      },
-    },
-    defaultVariants: {
-      size: "md",
-      variant: "default",
-    },
-  }
-);
-
-export interface SpinnerProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof spinnerVariants> {
+interface SpinnerProps extends React.HTMLAttributes<HTMLDivElement> {
+  size?: "sm" | "md" | "lg";
   label?: string;
+  className?: string;
 }
 
-const Spinner = React.forwardRef<HTMLDivElement, SpinnerProps>(
-  ({ className, size, variant, label, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={cn("flex flex-col items-center justify-center gap-2", className)}
-        {...props}
-      >
-        <div className={cn(spinnerVariants({ size, variant }))} />
-        {label && <p className="text-sm text-muted-foreground">{label}</p>}
-      </div>
-    );
-  }
-);
-Spinner.displayName = "Spinner";
+const sizeClasses = {
+  sm: "h-4 w-4",
+  md: "h-6 w-6",
+  lg: "h-8 w-8",
+};
 
-// Full page loading overlay
+function Spinner({ size = "md", label, className }: SpinnerProps) {
+  return (
+    <div className="flex items-center gap-2">
+      <Loader2 className={`animate-spin ${sizeClasses[size]} ${className}`} />
+      {label && <span className="text-sm text-muted-foreground">{label}</span>}
+    </div>
+  );
+}
+
 interface LoadingOverlayProps {
   isLoading: boolean;
   label?: string;
@@ -63,7 +36,7 @@ function LoadingOverlay({ isLoading, label = "Carregando...", className }: Loadi
       className={cn(
         "fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm",
         className
-      )
+      )}
     >
       <Spinner size="lg" label={label} />
     </div>
@@ -94,25 +67,15 @@ interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
 }
 
-const skeletonVariants = cva(
-  "animate-pulse bg-muted",
-  {
-    variants: {
-      variant: {
-        text: "h-4 w-full rounded",
-        circular: "rounded-full",
-        rectangular: "rounded-md",
-        rounded: "rounded-lg",
-      },
-    },
-    defaultVariants: {
-      variant: "rectangular",
-    },
-  }
-);
+const skeletonVariants = {
+  text: "h-4 w-full rounded",
+  circular: "rounded-full",
+  rectangular: "rounded-md",
+  rounded: "rounded-lg",
+};
 
 function Skeleton({
-  variant,
+  variant = "rectangular",
   width,
   height,
   className,
@@ -120,7 +83,7 @@ function Skeleton({
 }: SkeletonProps) {
   return (
     <div
-      className={cn(skeletonVariants({ variant }), className)}
+      className={cn("animate-pulse bg-muted", skeletonVariants[variant], className)}
       style={{ width, height }}
       {...props}
     />
@@ -131,11 +94,11 @@ function Skeleton({
 function CardSkeleton({ className }: { className?: string }) {
   return (
     <div className={cn("rounded-lg border bg-card p-6 space-y-4", className)}>
-      <Skeleton variant="text" width="60%" />
-      <Skeleton variant="text" className="h-16" />
+      <Skeleton width="60%" />
+      <Skeleton className="h-16" />
       <div className="flex gap-2">
-        <Skeleton variant="text" width="20%" />
-        <Skeleton variant="text" width="20%" />
+        <Skeleton width="20%" />
+        <Skeleton width="20%" />
       </div>
     </div>
   );
@@ -147,13 +110,13 @@ function TableSkeleton({ rows = 5, columns = 4, className }: { rows?: number; co
     <div className={cn("space-y-2", className)}>
       <div className="flex gap-4 p-2 border-b">
         {Array.from({ length: columns }).map((_, i) => (
-          <Skeleton key={i} variant="text" width={`${100 / columns}%`} />
+          <Skeleton key={i} width={`${100 / columns}%`} />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex gap-4 p-2">
           {Array.from({ length: columns }).map((_, j) => (
-            <Skeleton key={j} variant="text" width={`${100 / columns}%`} />
+            <Skeleton key={j} width={`${100 / columns}%`} />
           ))}
         </div>
       ))}

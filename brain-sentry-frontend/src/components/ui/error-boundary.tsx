@@ -8,13 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "./card";
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
-  errorInfo: React.ComponentInfo | null;
+  errorInfo: React.ErrorInfo | null;
+}
+
+interface FallbackProps {
+  error: Error;
+  resetErrorBoundary: () => void;
 }
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
-  fallback?: React.Component<{ error: Error; resetErrorBoundary: () => void }>;
-  onError?: (error: Error, errorInfo: React.ComponentInfo) => void;
+  fallback?: React.ComponentType<FallbackProps>;
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
 }
 
 export class ErrorBoundary extends React.Component<
@@ -34,7 +39,7 @@ export class ErrorBoundary extends React.Component<
     };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ComponentInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     this.setState({
       error,
       errorInfo,
@@ -55,9 +60,9 @@ export class ErrorBoundary extends React.Component<
     if (this.state.hasError) {
       // Use custom fallback if provided
       if (this.props.fallback) {
-        const FallbackComponent = this.props.fallback;
+        const Fallback = this.props.fallback;
         return (
-          <FallbackComponent
+          <Fallback
             error={this.state.error!}
             resetErrorBoundary={this.handleReset}
           />
@@ -173,13 +178,12 @@ export function LoadingError({
   children,
 }: LoadingErrorProps) {
   if (isLoading) {
-    return (
-      loadingComponent || (
-        <div className="flex justify-center p-8">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      );
-    }
+    return loadingComponent || (
+      <div className="flex justify-center p-8">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -207,10 +211,10 @@ interface AsyncErrorBoundaryState {
 
 export function AsyncErrorBoundary({
   children,
-  fallback,
+  fallback: Fallback,
 }: {
   children: React.ReactNode;
-  fallback?: React.Component<{ error: Error; resetError: () => void }>;
+  fallback?: React.ComponentType<{ error: Error; resetError: () => void }>;
 }) {
   const [state, setState] = React.useState<AsyncErrorBoundaryState>({ error: null });
 
@@ -222,11 +226,15 @@ export function AsyncErrorBoundary({
     setState({ error: null });
   };
 
+  const fallbackWithResetBoundary = Fallback ? (props: FallbackProps) => (
+    <Fallback error={props.error} resetError={props.resetErrorBoundary} />
+  ) : undefined;
+
   return (
-    <ErrorBoundary fallback={fallback} onError={handleError}>
+    <ErrorBoundary fallback={fallbackWithResetBoundary} onError={handleError}>
       {state.error ? (
-        fallback ? (
-          <fallback error={state.error} resetErrorBoundary={resetError} />
+        Fallback ? (
+          <Fallback error={state.error} resetError={resetError} />
         ) : (
           <InlineError error={state.error} onRetry={resetError} />
         )

@@ -10,19 +10,24 @@ import {
   Plus,
   Filter,
 } from "lucide-react";
-import { useFetch } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { MemoryCard } from "@/components/memory";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 
 interface Stats {
   totalMemories: number;
-  totalCategories: number;
-  recentActivity: number;
-  avgImportance: string;
+  memoriesByCategory: Record<string, number>;
+  memoriesByImportance: Record<string, number>;
+  requestsToday: number;
+  injectionRate: number;
+  avgLatencyMs: number;
+  helpfulnessRate: number;
+  totalInjections: number;
+  activeMemories24h: number;
 }
 
 interface RecentMemory {
@@ -40,37 +45,40 @@ interface CategoryStat {
   count: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
-
 export function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [tenantId, setTenantId] = useState(user?.tenantId || "default");
 
-  const {
-    data: stats,
-    isLoading: statsLoading,
-    refetch: refetchStats,
-  } = useFetch<Stats>(`${API_URL}/v1/stats/overview`);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [memories, setMemories] = useState<RecentMemory[]>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [memoriesLoading, setMemoriesLoading] = useState(true);
 
-  const {
-    data: memoriesData,
-    isLoading: memoriesLoading,
-  } = useFetch<{ memories: RecentMemory[]; totalElements: number }>(
-    `${API_URL}/v1/memories?page=0&size=6`
-  );
+  const fetchData = async () => {
+    setStatsLoading(true);
+    setMemoriesLoading(true);
+    try {
+      const [statsData, memoriesData] = await Promise.all([
+        api.getStats(),
+        api.getMemories(0, 6),
+      ]);
+      setStats(statsData);
+      setMemories(memoriesData.memories);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setStatsLoading(false);
+      setMemoriesLoading(false);
+    }
+  };
 
-  const {
-    data: categoriesData,
-  } = useFetch<{ content: CategoryStat[] }>(
-    `${API_URL}/v1/stats/by-category`
-  );
-
-  const memories = memoriesData?.memories || [];
-  const categories = categoriesData?.content || [];
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleRefresh = () => {
-    refetchStats();
+    fetchData();
     toast({
       title: "Dashboard atualizado",
       description: "Os dados foram atualizados com sucesso.",
@@ -78,28 +86,33 @@ export function DashboardPage() {
     });
   };
 
+  // Build categories from stats API
+  const categories = Object.entries(stats?.memoriesByCategory || {})
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Brain className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Brain className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Brain Sentry</h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/80">
                   Sistema de Memória para Desenvolvedores
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-muted-foreground">
-                Tenant: <span className="font-medium">{tenantId}</span>
+              <div className="text-sm text-white/80">
+                Tenant: <span className="font-medium text-white">{tenantId}</span>
               </div>
-              <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={handleRefresh}>
                 <Activity className="h-4 w-4" />
               </Button>
             </div>
@@ -111,7 +124,7 @@ export function DashboardPage() {
         {/* Quick Actions */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex gap-2">
-            <Button size="sm">
+            <Button size="sm" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white">
               <Plus className="h-4 w-4 mr-2" />
               Nova Memória
             </Button>
@@ -133,25 +146,23 @@ export function DashboardPage() {
             value={stats?.totalMemories || 0}
             icon={<Database className="h-5 w-5" />}
             loading={statsLoading}
-            trend="+12%"
           />
           <StatsCard
             title="Categorias"
-            value={stats?.totalCategories || 0}
+            value={Object.keys(stats?.memoriesByCategory || {}).length}
             icon={<Tag className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Atividade Recente"
-            value={stats?.recentActivity || 0}
-            suffix="/24h"
-            icon={<Clock className="h-5 w-5" />}
+            title="Memórias Críticas"
+            value={stats?.memoriesByImportance?.CRITICAL || 0}
+            icon={<TrendingUp className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Importância Média"
-            value={stats?.avgImportance || "-"}
-            icon={<TrendingUp className="h-5 w-5" />}
+            title="Ativas 24h"
+            value={stats?.activeMemories24h || 0}
+            icon={<Clock className="h-5 w-5" />}
             loading={statsLoading}
           />
         </div>
@@ -265,7 +276,7 @@ function StatsCard({ title, value, icon, loading, suffix, trend }: StatsCardProp
             )}
           </div>
           {icon && (
-            <div className="p-3 bg-primary/10 rounded-lg text-primary">
+            <div className="p-3 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg text-white">
               {icon}
             </div>
           )}

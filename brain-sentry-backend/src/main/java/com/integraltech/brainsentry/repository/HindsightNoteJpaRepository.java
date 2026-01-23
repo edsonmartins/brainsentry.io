@@ -138,4 +138,11 @@ public interface HindsightNoteJpaRepository extends JpaRepository<HindsightNote,
            "ORDER BY h.accessCount DESC, h.lastAccessedAt DESC")
     List<HindsightNote> findMostAccessed(@Param("tenantId") String tenantId,
                                         Pageable pageable);
+
+    /**
+     * Find hindsight notes related to a specific note.
+     * Graph relationship: HindsightNote -[:RELATED_TO]-> Note
+     */
+    @Query("SELECT h FROM HindsightNote h JOIN h.relatedNoteIds n WHERE n = :noteId AND h.tenantId = :tenantId")
+    List<HindsightNote> findByRelatedNote(@Param("noteId") String noteId, @Param("tenantId") String tenantId);
 }

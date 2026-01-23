@@ -8,6 +8,7 @@ import com.integraltech.brainsentry.domain.enums.ValidationStatus;
 import com.integraltech.brainsentry.dto.request.CreateMemoryRequest;
 import com.integraltech.brainsentry.dto.request.SearchRequest;
 import com.integraltech.brainsentry.dto.request.UpdateMemoryRequest;
+import com.integraltech.brainsentry.dto.response.GraphRelationshipResponse;
 import com.integraltech.brainsentry.dto.response.MemoryListResponse;
 import com.integraltech.brainsentry.dto.response.MemoryResponse;
 import com.integraltech.brainsentry.mapper.MemoryMapper;
@@ -20,7 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -73,6 +77,7 @@ public class MemoryService {
 
         // Build memory
         Memory memory = Memory.builder()
+            .id(generateMemoryId())
             .content(request.getContent())
             .summary(request.getSummary())
             .category(category != null ? category : MemoryCategory.PATTERN)
@@ -229,20 +234,46 @@ public class MemoryService {
 
     /**
      * Search memories using semantic vector search (FalkorDB).
+     * Falls back to full-text search if vector search is unavailable.
      *
      * @param request the search request
      * @return list of matching memories
      */
     @Transactional(readOnly = true)
     public List<MemoryResponse> search(SearchRequest request) {
-        float[] embedding = embeddingService.embed(request.getQuery());
+        List<Memory> results;
 
-        // Use FalkorDB for vector search
-        List<Memory> results = memoryGraphRepo.vectorSearch(
-            embedding,
-            request.getLimit() != null ? request.getLimit() : 10,
-            TenantContext.getTenantId()
-        );
+        try {
+            // Try vector search first (FalkorDB)
+            float[] embedding = embeddingService.embed(request.getQuery());
+            results = memoryGraphRepo.vectorSearch(
+                embedding,
+                request.getLimit() != null ? request.getLimit() : 10,
+                TenantContext.getTenantId()
+            );
+
+            // If vector search returns no results, fall back to full-text search
+            if (results == null || results.isEmpty()) {
+                log.debug("Vector search returned no results, falling back to full-text search");
+                results = memoryJpaRepo.fullTextSearch(request.getQuery());
+
+                // Apply limit
+                int limit = request.getLimit() != null ? request.getLimit() : 10;
+                if (results.size() > limit) {
+                    results = results.subList(0, limit);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Vector search failed, falling back to full-text search: {}", e.getMessage());
+            // Fallback to full-text search
+            results = memoryJpaRepo.fullTextSearch(request.getQuery());
+
+            // Apply limit
+            int limit = request.getLimit() != null ? request.getLimit() : 10;
+            if (results.size() > limit) {
+                results = results.subList(0, limit);
+            }
+        }
 
         return results.stream()
             .map(memoryMapper::toResponse)
@@ -315,5 +346,146 @@ public class MemoryService {
         return memories.stream()
             .map(memoryMapper::toResponse)
             .collect(Collectors.toList());
+    }
+
+    /**
+     * Generate a unique memory ID.
+     *
+     * @return unique ID in format "mem_" + 12 hex characters
+     */
+    private String generateMemoryId() {
+        return "mem_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    /**
+     * Reprocess all existing memories to FalkorDB graph.
+     * This is useful when:
+     * 1. FalkorDB integration was recently enabled
+     * 2. Graph data was lost and needs to be rebuilt
+     * 3. Relationships need to be recalculated
+     *
+     * @return number of memories reprocessed
+     */
+    @Transactional
+    public int reprocessToGraph() {
+        log.info("Starting reprocess of all memories to FalkorDB graph");
+
+        // Get all memories for current tenant
+        String tenantId = TenantContext.getTenantId();
+        List<Memory> memories = memoryJpaRepo.findAll();
+
+        int count = 0;
+        for (Memory memory : memories) {
+            try {
+                // Save to FalkorDB graph
+                memoryGraphRepo.save(memory);
+                count++;
+                log.debug("Reprocessed memory {} to graph", memory.getId());
+            } catch (Exception e) {
+                log.warn("Failed to reprocess memory {} to graph: {}", memory.getId(), e.getMessage());
+            }
+        }
+
+        // Create all relationships between memories
+        try {
+            memoryGraphRepo.createAllRelationships(tenantId);
+            log.info("Created graph relationships for {} memories", count);
+        } catch (Exception e) {
+            log.warn("Failed to create graph relationships: {}", e.getMessage());
+        }
+
+        log.info("Reprocessing complete: {} memories processed to FalkorDB graph", count);
+        return count;
+    }
+
+    /**
+     * Get all graph relationships from FalkorDB.
+     * Returns all RELATED_TO relationships between memories.
+     *
+     * @return list of graph relationships
+     */
+    @Transactional(readOnly = true)
+    public List<GraphRelationshipResponse> getGraphRelationships() {
+        String tenantId = TenantContext.getTenantId();
+        log.info("Fetching graph relationships for tenant: {}", tenantId);
+
+        // Get all memories first to build a map
+        List<Memory> allMemories = memoryJpaRepo.findAll();
+        Map<String, Memory> memoryMap = allMemories.stream()
+            .collect(Collectors.toMap(Memory::getId, m -> m));
+
+        // Query all relationships from FalkorDB
+        List<GraphRelationshipResponse> relationships = new ArrayList<>();
+        try {
+            // Query for all RELATED_TO relationships in the graph
+            String query = String.format(
+                "MATCH (m1:Memory)-[r:RELATED_TO]->(m2:Memory) " +
+                "WHERE m1.tenantId = '%s' AND m2.tenantId = '%s' " +
+                "RETURN m1.id as fromId, m2.id as toId, r.type as type, " +
+                "r.strength as strength, r.tag as tag",
+                tenantId, tenantId
+            );
+
+            log.debug("Executing graph query: {}", query);
+
+            // First, let's check how many Memory nodes exist in the graph
+            String countQuery = String.format(
+                "MATCH (m:Memory) WHERE m.tenantId = '%s' RETURN count(m) as count",
+                tenantId
+            );
+            var countResult = memoryGraphRepo.query(countQuery);
+            for (var countRecord : countResult) {
+                Object countValue = countRecord.getValue("count");
+                log.debug("Memory count in graph: {}", String.valueOf(countValue));
+            }
+
+            // Also check relationship count
+            String relCountQuery = String.format(
+                "MATCH (m1:Memory)-[r:RELATED_TO]->(m2:Memory) WHERE m1.tenantId = '%s' RETURN count(r) as count",
+                tenantId
+            );
+            var relCountResult = memoryGraphRepo.query(relCountQuery);
+            for (var relCountRecord : relCountResult) {
+                Object relCountValue = relCountRecord.getValue("count");
+                log.debug("Relationship count in graph: {}", String.valueOf(relCountValue));
+            }
+
+            var resultSet = memoryGraphRepo.query(query);
+            log.debug("Query result size: {}", resultSet.size());
+
+            for (var record : resultSet) {
+                log.debug("Processing record: {}", record);
+                String fromId = record.getValue("fromId");
+                String toId = record.getValue("toId");
+                String type = record.getValue("type");
+                Double strength = record.getValue("strength");
+                String tag = record.getValue("tag");
+
+                log.debug("Relationship: {} -> {} (type: {}, tag: {})", fromId, toId, type, tag);
+
+                Memory fromMem = memoryMap.get(fromId);
+                Memory toMem = memoryMap.get(toId);
+
+                if (fromMem != null && toMem != null) {
+                    relationships.add(new GraphRelationshipResponse(
+                        fromId + "-" + toId,
+                        fromId,
+                        toId,
+                        fromMem.getSummary(),
+                        toMem.getSummary(),
+                        type,
+                        strength,
+                        tag
+                    ));
+                } else {
+                    log.warn("Memory not found in map: fromId={}, toId={}", fromId, toId);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch graph relationships", e);
+        }
+
+        log.info("Found {} graph relationships", relationships.size());
+        return relationships;
     }
 }

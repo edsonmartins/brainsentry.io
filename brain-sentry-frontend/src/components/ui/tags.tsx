@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as React from "react";
-import { X, Tag } from "lucide-react";
+import { X, Tag as TagIcon } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +51,7 @@ export function Tag({ className, variant, size, onRemove, children, ...props }: 
 }
 
 interface TagsInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> {
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "size"> {
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
@@ -180,7 +180,7 @@ export function TagsInput({
             className={tagClassName}
             onRemove={() => removeTag(index)}
           >
-            <Tag className="h-3 w-3" />
+            <TagIcon className="h-3 w-3" />
             {tag}
           </Tag>
         ))}
@@ -271,7 +271,8 @@ export function ReadOnlyTags({
           +{remainingCount} mais
         </Tag>
       )}
-    </div  );
+    </div>
+  );
 }
 
 // Category tag with color mapping

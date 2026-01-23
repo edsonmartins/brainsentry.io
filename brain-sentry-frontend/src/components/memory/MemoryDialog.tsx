@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MemoryForm, type MemoryFormData } from "./MemoryForm";
-import { api, type Memory, type CreateMemoryRequest, type UpdateMemoryRequest } from "@/lib/api";
+import { api, type Memory, type MemoryCategory, type ImportanceLevel, type CreateMemoryRequest, type UpdateMemoryRequest } from "@/lib/api";
 
 interface MemoryDialogProps {
   open: boolean;
@@ -21,8 +21,8 @@ export function MemoryDialog({ open, onOpenChange, memory, onSuccess }: MemoryDi
     ? {
         content: memory.content,
         summary: memory.summary,
-        category: memory.category,
-        importance: memory.importance,
+        category: memory.category as MemoryCategory,
+        importance: memory.importance as ImportanceLevel,
         tags: memory.tags || [],
       }
     : {

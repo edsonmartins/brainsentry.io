@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, FileText } from "lucide-react";
 import { MemoryCard, MemoryDialog } from "@/components/memory";
 import { api, type Memory, getErrorMessage } from "@/lib/api";
 
@@ -85,33 +85,46 @@ export default function MemoryAdminPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Memories</h1>
-        <p className="text-sm text-muted-foreground">
-          Gerencie as memórias do sistema
-        </p>
-      </div>
-
-      {/* Actions Bar */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 max-w-sm">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Buscar memórias..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+        <div className="px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">Memórias</h1>
+                <p className="text-sm text-white/80">
+                  Gerencie as memórias do sistema
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-        <Button size="sm" onClick={handleCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Memória
-        </Button>
-      </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8">
+        {/* Actions Bar */}
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex-1 max-w-sm">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar memórias..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-brain-primary/50 focus:border-brain-primary transition-colors"
+              />
+            </div>
+          </div>
+          <Button size="sm" className="bg-white text-brain-primary hover:bg-white/90" onClick={handleCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Memória
+          </Button>
+        </div>
 
       {/* Loading State */}
       {loading && (
@@ -140,7 +153,7 @@ export default function MemoryAdminPage() {
       {/* Memories Grid */}
       {!loading && !error && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[75vh] overflow-y-auto pr-2">
             {filteredMemories.map((memory) => (
               <MemoryCard
                 key={memory.id}
@@ -176,6 +189,7 @@ export default function MemoryAdminPage() {
         memory={selectedMemory}
         onSuccess={fetchMemories}
       />
+      </main>
     </div>
   );
 }

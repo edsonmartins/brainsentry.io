@@ -26,55 +26,55 @@ export function AdminLayout() {
   const navigation = [
     {
       title: "Dashboard",
-      href: "/dashboard",
+      href: "/app/dashboard",
       icon: LayoutDashboard,
       id: "dashboard",
     },
     {
       title: "Memórias",
-      href: "/memories",
+      href: "/app/memories",
       icon: FileText,
       id: "memories",
     },
     {
       title: "Busca",
-      href: "/search",
+      href: "/app/search",
       icon: Search,
       id: "search",
     },
     {
       title: "Relacionamentos",
-      href: "/relationships",
+      href: "/app/relationships",
       icon: Network,
       id: "relationships",
     },
     {
       title: "Auditoria",
-      href: "/audit",
+      href: "/app/audit",
       icon: Shield,
       id: "audit",
     },
     {
       title: "Usuários",
-      href: "/users",
+      href: "/app/users",
       icon: Users,
       id: "users",
     },
     {
       title: "Tenants",
-      href: "/tenants",
+      href: "/app/tenants",
       icon: Building2,
       id: "tenants",
     },
     {
       title: "Configurações",
-      href: "/configuration",
+      href: "/app/configuration",
       icon: Settings,
       id: "configuration",
     },
     {
       title: "Analytics",
-      href: "/analytics",
+      href: "/app/analytics",
       icon: Activity,
       id: "analytics",
     },
@@ -93,7 +93,7 @@ export function AdminLayout() {
       {/* Top bar for mobile */}
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-background">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 bg-primary rounded-md" />
+          <img src="/images/brainsentry_logo.png" alt="Brain Sentry" className="h-8 w-auto" />
           <h1 className="text-xl font-bold">Brain Sentry</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -109,9 +109,14 @@ export function AdminLayout() {
 
       {/* Sidebar for desktop */}
       <aside className="hidden md:flex w-64 flex-col border-r bg-muted/40">
-        <div className="p-6 border-b">
-          <h2 className="text-lg font-bold">Brain Sentry</h2>
-          <p className="text-xs text-muted-foreground">Admin Console</p>
+        <div className="px-4 py-[14px] border-b bg-gradient-to-r from-brain-primary/10 to-brain-accent/10">
+          <div className="flex items-center gap-2">
+            <img src="/images/brainsentry_logo.png" alt="Brain Sentry" className="h-8 w-auto" />
+            <div>
+              <h2 className="text-base font-bold leading-tight">Brain Sentry</h2>
+              <p className="text-xs text-muted-foreground">Admin Console</p>
+            </div>
+          </div>
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {navigation.map((item) => {
@@ -121,9 +126,9 @@ export function AdminLayout() {
                 key={item.id}
                 onClick={() => handleNavigation(item.href)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium transition-colors",
+                  "w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium transition-all",
                   isActive
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    ? "bg-gradient-to-r from-brain-primary to-brain-accent text-white shadow-md"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-accent-foreground"
                 )}
               >
@@ -173,9 +178,9 @@ export function AdminLayout() {
                     setMobileMenuOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium",
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all",
                     activePath === item.id
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-gradient-to-r from-brain-primary to-brain-accent text-white"
                       : "text-muted-foreground hover:bg-muted/50"
                   )}
                 >
@@ -190,9 +195,7 @@ export function AdminLayout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-6">
-          <Outlet />
-        </div>
+        <Outlet />
       </main>
     </div>
   );

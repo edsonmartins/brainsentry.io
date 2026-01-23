@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Brain, LogIn, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
@@ -12,9 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 export function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
-  const navigate = (path: string) => {
-    window.location.href = path;
-  };
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +32,7 @@ export function LoginPage() {
         description: "Bem-vindo de volta!",
         variant: "success",
       });
-      navigate("/dashboard");
+      navigate("/app/dashboard");
     } catch (err) {
       const errorMessage = (err as Error).message || "Credenciais inválidas";
       setError(errorMessage);
@@ -73,7 +72,7 @@ export function LoginPage() {
         description: "Você está usando a conta de demonstração.",
         variant: "success",
       });
-      navigate("/dashboard");
+      navigate("/app/dashboard");
     } catch (err) {
       setError("Modo demo não disponível");
     } finally {

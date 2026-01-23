@@ -94,7 +94,7 @@ public class OpenApiConfig {
     }
 
     @Bean
-    public OpenApiCustomizer globalOpenApiCustomizer() {
+    public OpenApiCustomizer brainSentryOpenApiCustomizer() {
         return openApi -> {
             // Add common responses globally
             openApi.getPaths().values().forEach(pathItem -> pathItem.readOperations().forEach(operation -> {
