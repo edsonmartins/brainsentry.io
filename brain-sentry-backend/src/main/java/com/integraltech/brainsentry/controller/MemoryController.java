@@ -4,16 +4,20 @@ import com.integraltech.brainsentry.dto.request.CreateMemoryRequest;
 import com.integraltech.brainsentry.dto.request.SearchRequest;
 import com.integraltech.brainsentry.dto.request.UpdateMemoryRequest;
 import com.integraltech.brainsentry.dto.response.GraphRelationshipResponse;
+import com.integraltech.brainsentry.dto.response.KnowledgeGraphResponse;
 import com.integraltech.brainsentry.dto.response.MemoryListResponse;
 import com.integraltech.brainsentry.dto.response.MemoryResponse;
+import com.integraltech.brainsentry.service.EntityGraphService;
 import com.integraltech.brainsentry.service.MemoryService;
+import com.integraltech.brainsentry.config.TenantContext;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -25,10 +29,16 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/v1/memories")
-@RequiredArgsConstructor
 public class MemoryController {
 
     private final MemoryService memoryService;
+    private final EntityGraphService entityGraphService;  // May be null if feature disabled
+
+    public MemoryController(MemoryService memoryService,
+                           @Autowired(required = false) EntityGraphService entityGraphService) {
+        this.memoryService = memoryService;
+        this.entityGraphService = entityGraphService;
+    }
 
     /**
      * Create a new memory.
@@ -196,5 +206,117 @@ public class MemoryController {
         log.info("GET /v1/memories/relationships - Fetching all graph relationships");
         List<GraphRelationshipResponse> relationships = memoryService.getGraphRelationships();
         return ResponseEntity.ok(relationships);
+    }
+
+    /**
+     * Get the knowledge graph with extracted entities and their relationships.
+     * GET /api/v1/memories/knowledge-graph?limit=100
+     *
+     * Returns entities (nodes) and relationships (edges) extracted from memories.
+     * This is different from memory-to-memory relationships - these are entities
+     * extracted FROM the content of messages (like CLIENTE, PRODUTO, PEDIDO, etc.).
+     */
+    @GetMapping("/knowledge-graph")
+    public ResponseEntity<KnowledgeGraphResponse> getKnowledgeGraph(
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        log.info("GET /v1/memories/knowledge-graph - limit: {}", limit);
+
+        if (entityGraphService == null) {
+            log.warn("EntityGraphService not available (feature disabled)");
+            return ResponseEntity.ok(KnowledgeGraphResponse.builder()
+                    .nodes(Collections.emptyList())
+                    .edges(Collections.emptyList())
+                    .totalNodes(0)
+                    .totalEdges(0)
+                    .build());
+        }
+
+        String tenantId = TenantContext.getTenantId();
+        KnowledgeGraphResponse response = entityGraphService.getKnowledgeGraphResponse(tenantId, limit);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Extract entities from a specific memory.
+     * POST /api/v1/memories/{id}/extract-entities
+     *
+     * Manually triggers entity extraction for a specific memory.
+     * Useful for reprocessing existing memories that were created before
+     * the entity extraction feature was enabled.
+     */
+    @PostMapping("/{id}/extract-entities")
+    public ResponseEntity<String> extractEntitiesFromMemory(@PathVariable String id) {
+        log.info("POST /v1/memories/{}/extract-entities", id);
+
+        if (entityGraphService == null) {
+            log.warn("EntityGraphService not available (feature disabled)");
+            return ResponseEntity.badRequest().body("Entity extraction feature is disabled");
+        }
+
+        try {
+            MemoryResponse memoryResponse = memoryService.getMemory(id);
+            if (memoryResponse == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Create a Memory object from the response for extraction
+            com.integraltech.brainsentry.domain.Memory memory = new com.integraltech.brainsentry.domain.Memory();
+            memory.setId(memoryResponse.getId());
+            memory.setContent(memoryResponse.getContent());
+            memory.setSummary(memoryResponse.getSummary());
+            memory.setTenantId(TenantContext.getTenantId());
+
+            // Trigger extraction synchronously for this endpoint
+            entityGraphService.extractAndStoreEntitiesSync(memory, TenantContext.getTenantId());
+
+            return ResponseEntity.ok("Entity extraction triggered for memory: " + id);
+        } catch (Exception e) {
+            log.error("Error extracting entities from memory {}: {}", id, e.getMessage());
+            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extract entities from all existing memories.
+     * POST /api/v1/memories/extract-all-entities
+     *
+     * Reprocesses all memories for the current tenant to extract entities.
+     * This can be a long-running operation for tenants with many memories.
+     */
+    @PostMapping("/extract-all-entities")
+    public ResponseEntity<String> extractEntitiesFromAllMemories() {
+        log.info("POST /v1/memories/extract-all-entities");
+
+        if (entityGraphService == null) {
+            log.warn("EntityGraphService not available (feature disabled)");
+            return ResponseEntity.badRequest().body("Entity extraction feature is disabled");
+        }
+
+        try {
+            String tenantId = TenantContext.getTenantId();
+            MemoryListResponse memories = memoryService.listMemories(0, 100);
+
+            int count = 0;
+            for (MemoryResponse memoryResponse : memories.getMemories()) {
+                try {
+                    com.integraltech.brainsentry.domain.Memory memory = new com.integraltech.brainsentry.domain.Memory();
+                    memory.setId(memoryResponse.getId());
+                    memory.setContent(memoryResponse.getContent());
+                    memory.setSummary(memoryResponse.getSummary());
+                    memory.setTenantId(tenantId);
+
+                    entityGraphService.extractAndStoreEntitiesSync(memory, tenantId);
+                    count++;
+                } catch (Exception e) {
+                    log.warn("Failed to extract entities from memory {}: {}", memoryResponse.getId(), e.getMessage());
+                }
+            }
+
+            return ResponseEntity.ok("Entity extraction completed for " + count + " memories");
+        } catch (Exception e) {
+            log.error("Error extracting entities from all memories: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+        }
     }
 }

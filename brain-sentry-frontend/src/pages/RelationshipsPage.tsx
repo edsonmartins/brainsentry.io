@@ -1,23 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Network,
-  Plus,
   Search,
-  Filter,
   ArrowRight,
   Trash2,
   RefreshCw,
-  AlertCircle,
+  Users,
+  Package,
+  Building,
+  MapPin,
+  Calendar,
+  Tag,
+  CircleDot,
+  Link2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
-import { Input, SearchInput } from "@/components/ui/filter";
+import { SearchInput } from "@/components/ui/filter";
 import { Spinner, Skeleton } from "@/components/ui/spinner";
-import { CategoryTag, ReadOnlyTags } from "@/components/ui/tags";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useFetch } from "@/hooks";
+import { CategoryTag } from "@/components/ui/tags";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useDebounce } from "@/hooks";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api/client";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
@@ -41,6 +47,32 @@ interface Relationship {
   toMemory?: Memory;
 }
 
+// Knowledge Graph types (entities extracted from content)
+interface EntityNode {
+  id: string;
+  name: string;
+  type: string;
+  sourceMemoryId?: string;
+  properties?: Record<string, string>;
+}
+
+interface EntityEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  sourceName: string;
+  targetName: string;
+  type: string;
+  properties?: Record<string, string>;
+}
+
+interface KnowledgeGraphResponse {
+  nodes: EntityNode[];
+  edges: EntityEdge[];
+  totalNodes: number;
+  totalEdges: number;
+}
+
 const RELATIONSHIP_TYPES = [
   { value: "RELATED", label: "Relacionado" },
   { value: "DEPENDS_ON", label: "Depende de" },
@@ -50,51 +82,158 @@ const RELATIONSHIP_TYPES = [
   { value: "EXTENDS", label: "Estende" },
 ];
 
+// Entity type colors and icons
+const ENTITY_TYPE_CONFIG: Record<string, { color: string; bgColor: string; icon: typeof Users }> = {
+  PESSOA: { color: "text-blue-600", bgColor: "bg-blue-100", icon: Users },
+  CLIENTE: { color: "text-blue-600", bgColor: "bg-blue-100", icon: Users },
+  VENDEDOR: { color: "text-green-600", bgColor: "bg-green-100", icon: Users },
+  ORGANIZACAO: { color: "text-purple-600", bgColor: "bg-purple-100", icon: Building },
+  EMPRESA: { color: "text-purple-600", bgColor: "bg-purple-100", icon: Building },
+  PRODUTO: { color: "text-orange-600", bgColor: "bg-orange-100", icon: Package },
+  PEDIDO: { color: "text-red-600", bgColor: "bg-red-100", icon: Tag },
+  LOCAL: { color: "text-cyan-600", bgColor: "bg-cyan-100", icon: MapPin },
+  ENDERECO: { color: "text-cyan-600", bgColor: "bg-cyan-100", icon: MapPin },
+  DATA: { color: "text-yellow-600", bgColor: "bg-yellow-100", icon: Calendar },
+  EVENTO: { color: "text-pink-600", bgColor: "bg-pink-100", icon: Calendar },
+  CONCEITO: { color: "text-gray-600", bgColor: "bg-gray-100", icon: CircleDot },
+};
+
+function getEntityConfig(type: string) {
+  return ENTITY_TYPE_CONFIG[type?.toUpperCase()] || {
+    color: "text-gray-600",
+    bgColor: "bg-gray-100",
+    icon: CircleDot,
+  };
+}
+
 export function RelationshipsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const tenantId = user?.tenantId || "default";
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"knowledge" | "memory">("knowledge");
+
   // State
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
   const [relationshipType, setRelationshipType] = useState("RELATED");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
-  // Fetch relationships
-  const {
-    data: relationshipsData,
-    isLoading,
-    error,
-    refetch,
-  } = useFetch<{ relationships: Relationship[]; totalElements: number }>(
-    `${API_URL}/v1/relationships?page=${page - 1}&size=${pageSize}`
-  );
+  // Memory relationships state
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  // Search for memories to link
-  const shouldSearch = searchQuery && searchQuery.length >= 2;
-  const {
-    data: searchResults,
-    isLoading: isSearching,
-  } = useFetch<{ memories: Memory[] }>(
-    shouldSearch
-      ? `${API_URL}/v1/memories/search`
-      : `${API_URL}/v1/memories/search`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: searchQuery,
-        limit: 10,
-      }),
-      skip: !shouldSearch,
+  // Knowledge graph state
+  const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraphResponse | null>(null);
+  const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+
+  // Search state
+  const [searchResults, setSearchResults] = useState<Memory[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Highlighted memory state (for showing connections before creating)
+  const [highlightedMemory, setHighlightedMemory] = useState<Memory | null>(null);
+  const [highlightedConnections, setHighlightedConnections] = useState<Relationship[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+
+  // Fetch knowledge graph
+  const fetchKnowledgeGraph = useCallback(async () => {
+    setIsLoadingGraph(true);
+    try {
+      const response = await api.axiosInstance.get<KnowledgeGraphResponse>(
+        `/v1/memories/knowledge-graph?limit=100`
+      );
+      setKnowledgeGraph(response.data);
+    } catch (err) {
+      console.error("Error fetching knowledge graph:", err);
+      setKnowledgeGraph(null);
+    } finally {
+      setIsLoadingGraph(false);
     }
-  );
+  }, []);
 
-  const relationships = relationshipsData?.relationships || [];
-  const totalElements = relationshipsData?.totalElements || 0;
+  // Fetch memory relationships
+  const fetchRelationships = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.axiosInstance.get<{ relationships: Relationship[]; totalElements: number }>(
+        `/v1/relationships?page=${page - 1}&size=${pageSize}`
+      );
+      setRelationships(response.data.relationships || []);
+      setTotalElements(response.data.totalElements || 0);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, pageSize]);
+
+  // Search memories
+  const shouldSearch = debouncedSearchQuery && debouncedSearchQuery.length >= 2;
+
+  const searchMemories = useCallback(async () => {
+    if (!shouldSearch) {
+      setSearchResults([]);
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const response = await api.axiosInstance.post<Memory[]>(
+        `/v1/memories/search`,
+        { query: debouncedSearchQuery, limit: 10 }
+      );
+      setSearchResults(response.data || []);
+    } catch (err) {
+      console.error("Search error:", err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [shouldSearch, debouncedSearchQuery]);
+
+  // Fetch connections for a specific memory
+  const fetchConnectionsForMemory = useCallback(async (memoryId: string) => {
+    setIsLoadingConnections(true);
+    try {
+      // Try to get relationships from the existing list first, or fetch all and filter
+      const response = await api.axiosInstance.get<{ relationships: Relationship[]; totalElements: number }>(
+        `/v1/relationships?page=0&size=100`
+      );
+      const allRelationships = response.data.relationships || [];
+      const filtered = allRelationships.filter(
+        r => r.fromMemoryId === memoryId || r.toMemoryId === memoryId
+      );
+      setHighlightedConnections(filtered);
+    } catch (err) {
+      console.error("Error fetching connections:", err);
+      setHighlightedConnections([]);
+    } finally {
+      setIsLoadingConnections(false);
+    }
+  }, []);
+
+  // Effect to fetch data on mount
+  useEffect(() => {
+    fetchKnowledgeGraph();
+    fetchRelationships();
+  }, [fetchKnowledgeGraph, fetchRelationships]);
+
+  // Effect to search memories when query changes
+  useEffect(() => {
+    searchMemories();
+  }, [searchMemories]);
+
+  const refetch = () => {
+    fetchKnowledgeGraph();
+    fetchRelationships();
+  };
 
   // Create relationship
   const handleCreateRelationship = async (toMemoryId: string) => {
@@ -126,7 +265,7 @@ export function RelationshipsPage() {
       });
 
       setShowCreateDialog(false);
-      refetch?.();
+      refetch();
       setSelectedMemory(null);
     } catch (err) {
       toast({
@@ -160,7 +299,7 @@ export function RelationshipsPage() {
         variant: "success",
       });
 
-      refetch?.();
+      refetch();
     } catch (err) {
       toast({
         title: "Erro",
@@ -181,13 +320,13 @@ export function RelationshipsPage() {
                 <Network className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Relacionamentos</h1>
+                <h1 className="text-base font-bold leading-tight">Grafo de Conhecimento</h1>
                 <p className="text-xs text-white/80">
-                  Visualize e gerencie conexões entre memórias
+                  Entidades e relacionamentos extraídos automaticamente
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={() => refetch?.()}>
+            <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={refetch}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
@@ -195,99 +334,392 @@ export function RelationshipsPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Action Bar */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Buscar memórias para conectar..."
-            />
-          </div>
-          <Button className="bg-white text-brain-primary hover:bg-white/90" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Relacionamento
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6">
+          <Button
+            variant={activeTab === "knowledge" ? "default" : "outline"}
+            onClick={() => setActiveTab("knowledge")}
+            className={activeTab === "knowledge" ? "bg-gradient-to-r from-brain-primary to-brain-accent" : ""}
+          >
+            <Network className="h-4 w-4 mr-2" />
+            Entidades Extraídas
+          </Button>
+          <Button
+            variant={activeTab === "memory" ? "default" : "outline"}
+            onClick={() => setActiveTab("memory")}
+            className={activeTab === "memory" ? "bg-gradient-to-r from-brain-primary to-brain-accent" : ""}
+          >
+            <ArrowRight className="h-4 w-4 mr-2" />
+            Memórias Conectadas
           </Button>
         </div>
 
-        {/* Search Results */}
-        {isSearching && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Resultados da Busca</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {searchResults?.memories && searchResults.memories.length > 0 ? (
-                <div className="space-y-2">
-                  {searchResults.memories.map((memory) => (
-                    <div
-                      key={memory.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent cursor-pointer"
+        {/* Knowledge Graph Tab */}
+        {activeTab === "knowledge" && (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="text-2xl font-bold text-brain-primary">
+                    {knowledgeGraph?.totalNodes || 0}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Entidades</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="text-2xl font-bold text-brain-accent">
+                    {knowledgeGraph?.totalEdges || 0}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Relacionamentos</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="text-2xl font-bold text-green-600">
+                    {new Set(knowledgeGraph?.nodes.map(n => n.type) || []).size}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Tipos de Entidade</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {new Set(knowledgeGraph?.edges.map(e => e.type) || []).size}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Tipos de Relação</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Entities List */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Entidades Extraídas
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Pessoas, organizações, produtos e conceitos identificados automaticamente nas mensagens
+                </p>
+              </CardHeader>
+              <CardContent>
+                {isLoadingGraph ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <Skeleton variant="circular" width={40} height={40} />
+                        <Skeleton variant="text" width="40%" />
+                        <Skeleton variant="text" width="20%" />
+                      </div>
+                    ))}
+                  </div>
+                ) : !knowledgeGraph || knowledgeGraph.nodes.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">
+                      Nenhuma entidade extraída ainda
+                    </h3>
+                    <p className="mb-4 max-w-md mx-auto">
+                      Quando você criar memórias, o sistema irá automaticamente extrair
+                      entidades como pessoas, empresas, produtos, pedidos, etc.
+                      <br />
+                      <span className="text-sm">
+                        Exemplo: "Cliente João fez pedido #123 de Laptop ProMax"
+                        → Extrai: CLIENTE:João, PEDIDO:#123, PRODUTO:Laptop ProMax
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {knowledgeGraph.nodes.map((entity) => {
+                      const config = getEntityConfig(entity.type);
+                      const Icon = config.icon;
+                      return (
+                        <div
+                          key={entity.id}
+                          className="flex items-center gap-4 p-3 border rounded-lg hover:bg-accent transition-colors"
+                        >
+                          <div className={`p-2 rounded-full ${config.bgColor}`}>
+                            <Icon className={`h-4 w-4 ${config.color}`} />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium">{entity.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Tipo: {entity.type}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.color}`}>
+                            {entity.type}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Entity Relationships */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowRight className="h-5 w-5" />
+                  Relacionamentos entre Entidades
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Conexões identificadas automaticamente (ex: REALIZOU, ATENDEU, CONTEM)
+                </p>
+              </CardHeader>
+              <CardContent>
+                {isLoadingGraph ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <Skeleton variant="text" width="30%" />
+                        <Skeleton variant="text" width="20%" />
+                        <Skeleton variant="text" width="30%" />
+                      </div>
+                    ))}
+                  </div>
+                ) : !knowledgeGraph || knowledgeGraph.edges.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">
+                      Nenhum relacionamento entre entidades encontrado.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {knowledgeGraph.edges.map((edge) => (
+                      <div
+                        key={edge.id}
+                        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent transition-colors"
+                      >
+                        <span className="font-medium text-sm">{edge.sourceName}</span>
+                        <span className="px-2 py-1 rounded-full bg-brain-primary/10 text-brain-primary text-xs font-medium">
+                          {edge.type}
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium text-sm">{edge.targetName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Memory Relationships Tab */}
+        {activeTab === "memory" && (
+          <>
+            {/* Search Section */}
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <SearchInput
+                        value={searchQuery}
+                        onChange={setSearchQuery}
+                        placeholder="Busque uma memória para criar conexões manuais..."
+                      />
+                    </div>
+                    <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white">
+                      <Search className="h-4 w-4 mr-2" />
+                      Buscar
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Search Results */}
+            {shouldSearch && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Search className="h-4 w-4" />
+                    Selecione a memória de origem
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Clique em uma memória para conectá-la a outra
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {isSearching ? (
+                    <div className="flex justify-center py-4">
+                      <Spinner />
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {searchResults.map((memory) => (
+                        <div
+                          key={memory.id}
+                          className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors
+                            ${highlightedMemory?.id === memory.id
+                              ? 'bg-brain-primary/10 border-brain-primary'
+                              : 'hover:bg-accent'}`}
+                          onClick={() => {
+                            setHighlightedMemory(memory);
+                            fetchConnectionsForMemory(memory.id);
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{memory.summary}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <CategoryTag category={memory.category} />
+                              <span className="text-xs text-muted-foreground">
+                                {memory.tags?.slice(0, 2).join(", ") || ""}
+                              </span>
+                            </div>
+                          </div>
+                          {highlightedMemory?.id === memory.id && (
+                            <div className="flex items-center gap-1 text-brain-primary">
+                              <span className="text-xs font-medium">Selecionado</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-4">
+                      Nenhuma memória encontrada para "{debouncedSearchQuery}"
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Selected Memory with Connections */}
+            {highlightedMemory && (
+              <Card className="mb-6 border-brain-primary/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Network className="h-5 w-5 text-brain-primary" />
+                      Memória Selecionada
+                    </span>
+                    <Button
+                      className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white"
                       onClick={() => {
-                        setSelectedMemory(memory);
+                        setSelectedMemory(highlightedMemory);
                         setShowCreateDialog(true);
                       }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{memory.summary}</p>
-                        <p className="text-xs text-muted-foreground truncate">{memory.category}</p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <Link2 className="h-4 w-4 mr-2" />
+                      Conectar
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {/* Selected memory info */}
+                  <div className="p-4 border rounded-lg bg-accent/50 mb-4">
+                    <p className="font-medium">{highlightedMemory.summary}</p>
+                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                      {highlightedMemory.content}
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <CategoryTag category={highlightedMemory.category} />
+                      <span className="text-xs text-muted-foreground">
+                        {highlightedMemory.tags?.join(", ") || "-"}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-4">
-                  Nenhuma memória encontrada
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Relationships List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Relacionamentos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
-                    <Skeleton variant="circular" width={40} height={40} />
-                    <Skeleton variant="text" width="40%" />
-                    <Skeleton variant="text" width="30%" />
                   </div>
-                ))}
-              </div>
-            ) : relationships.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <h3 className="text-lg font-semibold mb-2">
-                  Nenhum relacionamento encontrado
-                </h3>
-                <p className="mb-4">
-                  Conecte memórias relacionadas para criar um grafo de conhecimento.
-                </p>
-                <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Relacionamento
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {relationships.map((rel) => (
-                  <RelationshipItem
-                    key={rel.id}
-                    relationship={rel}
-                    onDelete={handleDeleteRelationship}
-                  />
-                ))}
-              </div>
+
+                  {/* Existing connections */}
+                  <h4 className="text-sm font-medium mb-2">Conexões existentes:</h4>
+                  {isLoadingConnections ? (
+                    <div className="flex justify-center py-4">
+                      <Spinner />
+                    </div>
+                  ) : highlightedConnections.length > 0 ? (
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {highlightedConnections.map((conn) => {
+                        const isSource = conn.fromMemoryId === highlightedMemory.id;
+                        const otherMemory = isSource ? conn.toMemory : conn.fromMemory;
+                        const typeLabels: Record<string, string> = {
+                          RELATED: "Relacionado",
+                          DEPENDS_ON: "Depende de",
+                          DEPENDENT_OF: "É dependência de",
+                          CONTRADICTS: "Contradiz",
+                          SIMILAR_TO: "Similar a",
+                          EXTENDS: "Estende",
+                        };
+                        return (
+                          <div
+                            key={conn.id}
+                            className="flex items-center gap-2 p-2 border rounded hover:bg-accent transition-colors"
+                          >
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm flex-1 truncate">
+                              {otherMemory?.summary || (isSource ? conn.toMemoryId : conn.fromMemoryId)}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-brain-primary/10 text-brain-primary text-xs">
+                              {typeLabels[conn.type] || conn.type}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-2">
+                      Nenhuma conexão encontrada para esta memória.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
+
+            {/* Memory Relationships List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Memórias Conectadas</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Conexões manuais entre memórias (depende de, similar a, contradiz, etc.)
+                </p>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <Skeleton variant="circular" width={40} height={40} />
+                        <Skeleton variant="text" width="40%" />
+                        <Skeleton variant="text" width="30%" />
+                      </div>
+                    ))}
+                  </div>
+                ) : relationships.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">
+                      Nenhuma conexão manual
+                    </h3>
+                    <p className="mb-4 max-w-md mx-auto">
+                      Use a busca acima para conectar memórias manualmente.
+                      <br />
+                      <span className="text-sm">
+                        Exemplo: "Padrão JWT" → depende de → "Config Spring Security"
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                    {relationships.map((rel) => (
+                      <RelationshipItem
+                        key={rel.id}
+                        relationship={rel}
+                        onDelete={handleDeleteRelationship}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </main>
 
       {/* Create Relationship Dialog */}
@@ -322,13 +754,13 @@ export function RelationshipsPage() {
                   </select>
                 </div>
 
-                {searchQuery && searchResults?.memories && (
+                {searchQuery && searchResults.length > 0 && (
                   <div>
                     <label className="text-sm font-medium mb-2">
                       Selecionar memória destino
                     </label>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {searchResults.memories.map((memory) => (
+                      {searchResults.map((memory) => (
                         <button
                           key={memory.id}
                           onClick={() => handleCreateRelationship(memory.id)}

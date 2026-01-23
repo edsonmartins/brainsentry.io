@@ -14,8 +14,8 @@ import com.integraltech.brainsentry.dto.response.MemoryResponse;
 import com.integraltech.brainsentry.mapper.MemoryMapper;
 import com.integraltech.brainsentry.repository.MemoryJpaRepository;
 import com.integraltech.brainsentry.repository.MemoryRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,7 +38,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MemoryService {
 
     private final MemoryJpaRepository memoryJpaRepo;  // PostgreSQL (automatic tenant filtering)
@@ -46,6 +45,24 @@ public class MemoryService {
     private final EmbeddingService embeddingService;
     private final OpenRouterService openRouterService;
     private final MemoryMapper memoryMapper;
+    private final RelationshipService relationshipService;  // May be null if feature disabled
+    private final EntityGraphService entityGraphService;    // May be null if feature disabled
+
+    public MemoryService(MemoryJpaRepository memoryJpaRepo,
+                         MemoryRepository memoryGraphRepo,
+                         EmbeddingService embeddingService,
+                         OpenRouterService openRouterService,
+                         MemoryMapper memoryMapper,
+                         @Autowired(required = false) RelationshipService relationshipService,
+                         @Autowired(required = false) EntityGraphService entityGraphService) {
+        this.memoryJpaRepo = memoryJpaRepo;
+        this.memoryGraphRepo = memoryGraphRepo;
+        this.embeddingService = embeddingService;
+        this.openRouterService = openRouterService;
+        this.memoryMapper = memoryMapper;
+        this.relationshipService = relationshipService;
+        this.entityGraphService = entityGraphService;
+    }
 
     /**
      * Create a new memory.
@@ -107,6 +124,30 @@ public class MemoryService {
         memoryGraphRepo.save(saved);
 
         log.info("Created memory: {} for tenant: {}", saved.getId(), saved.getTenantId());
+
+        // Automatically extract entities and relationships from content using LLM
+        // This is the correct approach: extract entities FROM the message, not compare to other memories
+        if (entityGraphService != null) {
+            try {
+                String tenantId = saved.getTenantId() != null ? saved.getTenantId() : TenantContext.getTenantId();
+                entityGraphService.extractAndStoreEntities(saved, tenantId);
+                log.debug("Triggered entity extraction for memory: {}", saved.getId());
+            } catch (Exception e) {
+                log.warn("Failed to extract entities for memory {}: {}", saved.getId(), e.getMessage());
+            }
+        }
+
+        // Legacy: Automatically detect and create relationships using LLM (compares memories)
+        // This is kept for backward compatibility but the EntityGraphService approach above is preferred
+        if (relationshipService != null) {
+            try {
+                String tenantId = saved.getTenantId() != null ? saved.getTenantId() : TenantContext.getTenantId();
+                relationshipService.detectAndCreateRelationships(saved, tenantId);
+                log.debug("Triggered automatic relationship detection for memory: {}", saved.getId());
+            } catch (Exception e) {
+                log.warn("Failed to detect relationships for memory {}: {}", saved.getId(), e.getMessage());
+            }
+        }
 
         return memoryMapper.toResponse(saved);
     }

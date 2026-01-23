@@ -283,16 +283,24 @@ interface CategoryTagProps {
 
 export function CategoryTag({ category, className }: CategoryTagProps) {
   const categoryColors: Record<string, string> = {
-    DECISION: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    PATTERN: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    // New universal categories
+    INSIGHT: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    DECISION: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    WARNING: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    KNOWLEDGE: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    ACTION: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    CONTEXT: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+    REFERENCE: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    // Legacy categories (backward compatibility)
+    PATTERN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
     ANTIPATTERN: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    DOMAIN: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    BUG: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    OPTIMIZATION: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
-    INTEGRATION: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
+    DOMAIN: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    BUG: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    OPTIMIZATION: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    INTEGRATION: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
   };
 
-  const colors = categoryColors[category] || categoryColors.PATTERN;
+  const colors = categoryColors[category] || categoryColors.INSIGHT;
 
   return (
     <Tag

@@ -16,7 +16,17 @@ export interface ApiError {
 }
 
 // Tipos específicos do domínio - alinhados com o backend
-export type MemoryCategory = "DECISION" | "PATTERN" | "ANTIPATTERN" | "DOMAIN" | "BUG" | "OPTIMIZATION" | "INTEGRATION";
+// New universal categories
+export type MemoryCategory =
+  | "INSIGHT"      // Patterns, best practices, preferences
+  | "DECISION"     // Decisions (technical or business)
+  | "WARNING"      // Anti-patterns, bugs, objections
+  | "KNOWLEDGE"    // Domain/customer/product knowledge
+  | "ACTION"       // Actions, optimizations, follow-ups
+  | "CONTEXT"      // Context, integrations, history
+  | "REFERENCE"    // Documentation, materials
+  // Legacy categories (deprecated, for backward compatibility)
+  | "PATTERN" | "ANTIPATTERN" | "DOMAIN" | "BUG" | "OPTIMIZATION" | "INTEGRATION";
 export type ImportanceLevel = "CRITICAL" | "IMPORTANT" | "MINOR";
 
 export interface Memory {

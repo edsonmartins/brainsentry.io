@@ -26,7 +26,7 @@ export function MemoryDialog({ open, onOpenChange, memory, onSuccess }: MemoryDi
         tags: memory.tags || [],
       }
     : {
-        category: "PATTERN",
+        category: "INSIGHT",
         importance: "IMPORTANT",
         tags: [],
       };

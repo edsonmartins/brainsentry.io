@@ -64,6 +64,8 @@ spring:
 features:
   relationship:
     enabled: true
+  entity-graph:
+    enabled: true  # Extract entities and relationships from message content
 
 # Brain Sentry Configuration
 brain-sentry:

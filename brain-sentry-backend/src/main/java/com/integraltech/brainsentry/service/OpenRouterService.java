@@ -119,6 +119,26 @@ public class OpenRouterService {
     }
 
     /**
+     * Analyze the relationship between two pieces of content.
+     * Uses LLM to determine if and how they are related.
+     *
+     * @param content1 first content to compare
+     * @param content2 second content to compare
+     * @return RelationshipAnalysis with type, confidence, and reasoning
+     */
+    public RelationshipAnalysis analyzeRelationship(String content1, String content2) {
+        String prompt = buildRelationshipPrompt(content1, content2);
+
+        try {
+            String response = callGrok(prompt, 300);
+            return parseRelationshipAnalysis(response);
+        } catch (Exception e) {
+            log.error("Error analyzing relationship", e);
+            return RelationshipAnalysis.noRelationship();
+        }
+    }
+
+    /**
      * Extract key patterns from content for relationship detection.
      *
      * @param content the content to analyze
@@ -140,6 +160,137 @@ public class OpenRouterService {
         } catch (Exception e) {
             log.error("Error extracting patterns", e);
             return List.of();
+        }
+    }
+
+    /**
+     * Extract entities and relationships from a single piece of content.
+     * This method analyzes text and identifies:
+     * - Named entities (people, organizations, products, concepts, etc.)
+     * - Relationships between those entities
+     *
+     * Example input: "Cliente Marcos Silva fez pedido #12345 de Laptop ProMax com vendedor Ana"
+     * Output entities: CLIENTE:Marcos Silva, PEDIDO:#12345, PRODUTO:Laptop ProMax, VENDEDOR:Ana
+     * Output relationships: (Marcos Silva)-[REALIZOU]->(#12345), (Ana)-[ATENDEU]->(Marcos Silva)
+     *
+     * @param content the content to analyze
+     * @return EntityExtractionResult with entities and relationships
+     */
+    public EntityExtractionResult extractEntitiesAndRelationships(String content) {
+        if (content == null || content.isBlank()) {
+            return EntityExtractionResult.empty();
+        }
+
+        String prompt = buildEntityExtractionPrompt(content);
+
+        try {
+            String response = callGrok(prompt, 1000);
+            return parseEntityExtractionResult(response);
+        } catch (Exception e) {
+            log.error("Error extracting entities and relationships", e);
+            return EntityExtractionResult.empty();
+        }
+    }
+
+    /**
+     * Build prompt for entity and relationship extraction.
+     */
+    private String buildEntityExtractionPrompt(String content) {
+        // Truncate if too long
+        String c = content.length() > 2000 ? content.substring(0, 2000) + "..." : content;
+
+        return String.format("""
+            Analyze this text and extract all named entities and their relationships.
+
+            Text: %s
+
+            INSTRUCTIONS:
+            1. Identify all named entities (people, organizations, products, locations, concepts, events, etc.)
+            2. Assign each entity a type (PESSOA, ORGANIZACAO, PRODUTO, LOCAL, CONCEITO, EVENTO, PEDIDO, DATA, VALOR, etc.)
+            3. Identify relationships between entities found in the text
+            4. Use descriptive relationship types in Portuguese (REALIZOU, ATENDEU, CONTEM, PERTENCE_A, TRABALHA_EM, LOCALIZADO_EM, etc.)
+
+            Respond ONLY with valid JSON in this exact format:
+            {
+              "entities": [
+                {"id": "e1", "name": "Entity Name", "type": "ENTITY_TYPE", "properties": {"key": "value"}},
+                {"id": "e2", "name": "Another Entity", "type": "ENTITY_TYPE", "properties": {}}
+              ],
+              "relationships": [
+                {"sourceId": "e1", "targetId": "e2", "type": "RELATIONSHIP_TYPE", "properties": {"key": "value"}}
+              ]
+            }
+
+            Rules:
+            - Each entity must have a unique id (e1, e2, e3...)
+            - Entity types should be UPPERCASE
+            - Relationship types should be UPPERCASE and descriptive
+            - If no entities or relationships found, return empty arrays
+            - Properties are optional but useful for additional context
+            """, c);
+    }
+
+    /**
+     * Parse entity extraction result from LLM response.
+     */
+    private EntityExtractionResult parseEntityExtractionResult(String response) {
+        try {
+            String json = extractJson(response);
+            JsonNode root = objectMapper.readTree(json);
+
+            List<ExtractedEntity> entities = new ArrayList<>();
+            List<ExtractedRelationship> relationships = new ArrayList<>();
+
+            // Parse entities
+            JsonNode entitiesNode = root.path("entities");
+            if (entitiesNode.isArray()) {
+                for (JsonNode entityNode : entitiesNode) {
+                    ExtractedEntity entity = new ExtractedEntity();
+                    entity.setId(entityNode.path("id").asText());
+                    entity.setName(entityNode.path("name").asText());
+                    entity.setType(entityNode.path("type").asText());
+
+                    // Parse properties
+                    JsonNode propsNode = entityNode.path("properties");
+                    if (propsNode.isObject()) {
+                        Map<String, String> props = new java.util.HashMap<>();
+                        propsNode.fields().forEachRemaining(field ->
+                            props.put(field.getKey(), field.getValue().asText())
+                        );
+                        entity.setProperties(props);
+                    }
+
+                    entities.add(entity);
+                }
+            }
+
+            // Parse relationships
+            JsonNode relationshipsNode = root.path("relationships");
+            if (relationshipsNode.isArray()) {
+                for (JsonNode relNode : relationshipsNode) {
+                    ExtractedRelationship rel = new ExtractedRelationship();
+                    rel.setSourceId(relNode.path("sourceId").asText());
+                    rel.setTargetId(relNode.path("targetId").asText());
+                    rel.setType(relNode.path("type").asText());
+
+                    // Parse properties
+                    JsonNode propsNode = relNode.path("properties");
+                    if (propsNode.isObject()) {
+                        Map<String, String> props = new java.util.HashMap<>();
+                        propsNode.fields().forEachRemaining(field ->
+                            props.put(field.getKey(), field.getValue().asText())
+                        );
+                        rel.setProperties(props);
+                    }
+
+                    relationships.add(rel);
+                }
+            }
+
+            return new EntityExtractionResult(entities, relationships);
+        } catch (Exception e) {
+            log.warn("Failed to parse entity extraction result: {}", response, e);
+            return EntityExtractionResult.empty();
         }
     }
 
@@ -226,6 +377,38 @@ public class OpenRouterService {
             """, content);
     }
 
+    private String buildRelationshipPrompt(String content1, String content2) {
+        // Truncate content to avoid token limits
+        String c1 = content1.length() > 500 ? content1.substring(0, 500) + "..." : content1;
+        String c2 = content2.length() > 500 ? content2.substring(0, 500) + "..." : content2;
+
+        return String.format("""
+            Analyze the relationship between these two pieces of knowledge/content.
+
+            Content 1: %s
+
+            Content 2: %s
+
+            Determine if they are meaningfully related and what type of relationship exists.
+
+            Relationship types:
+            - REQUIRES: Content 1 depends on or requires Content 2
+            - CONFLICTS_WITH: Content 1 contradicts or conflicts with Content 2
+            - SUPERSEDES: Content 1 replaces or updates Content 2
+            - RELATED_TO: General semantic relationship (same topic/domain)
+            - PART_OF: Content 1 is a component or subset of Content 2
+            - USED_WITH: Content 1 and 2 are frequently used together
+
+            Respond in JSON format:
+            {
+              "hasRelationship": true/false,
+              "type": "REQUIRES|CONFLICTS_WITH|SUPERSEDES|RELATED_TO|PART_OF|USED_WITH",
+              "confidence": 0.0-1.0,
+              "reasoning": "brief explanation of why they are related"
+            }
+            """, c1, c2);
+    }
+
     private RelevanceAnalysis parseRelevanceAnalysis(String response) {
         try {
             // Extract JSON from response (handle markdown code blocks)
@@ -258,6 +441,23 @@ public class OpenRouterService {
         } catch (Exception e) {
             log.warn("Failed to parse importance analysis: {}", response, e);
             return ImportanceAnalysis.defaultResult();
+        }
+    }
+
+    private RelationshipAnalysis parseRelationshipAnalysis(String response) {
+        try {
+            String json = extractJson(response);
+            JsonNode root = objectMapper.readTree(json);
+
+            return new RelationshipAnalysis(
+                root.path("hasRelationship").asBoolean(false),
+                root.path("type").asText("RELATED_TO"),
+                root.path("confidence").asDouble(0.0),
+                root.path("reasoning").asText("")
+            );
+        } catch (Exception e) {
+            log.warn("Failed to parse relationship analysis: {}", response, e);
+            return RelationshipAnalysis.noRelationship();
         }
     }
 
@@ -376,6 +576,38 @@ public class OpenRouterService {
         }
     }
 
+    public static class RelationshipAnalysis {
+        private boolean hasRelationship;
+        private String type;  // REQUIRES, CONFLICTS_WITH, SUPERSEDES, RELATED_TO, PART_OF, USED_WITH
+        private Double confidence;
+        private String reasoning;
+
+        public RelationshipAnalysis() {}
+
+        public RelationshipAnalysis(boolean hasRelationship, String type, Double confidence, String reasoning) {
+            this.hasRelationship = hasRelationship;
+            this.type = type;
+            this.confidence = confidence;
+            this.reasoning = reasoning;
+        }
+
+        public static RelationshipAnalysis noRelationship() {
+            return new RelationshipAnalysis(false, null, 0.0, "No relationship detected");
+        }
+
+        public boolean isHasRelationship() { return hasRelationship; }
+        public void setHasRelationship(boolean hasRelationship) { this.hasRelationship = hasRelationship; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public Double getConfidence() { return confidence; }
+        public void setConfidence(Double confidence) { this.confidence = confidence; }
+
+        public String getReasoning() { return reasoning; }
+        public void setReasoning(String reasoning) { this.reasoning = reasoning; }
+    }
+
     private static class OpenRouterRequest {
         private final String model;
         private final List<Message> messages;
@@ -406,5 +638,126 @@ public class OpenRouterService {
 
         public String getRole() { return role; }
         public String getContent() { return content; }
+    }
+
+    // ==================== Entity Extraction DTOs ====================
+
+    /**
+     * Result of entity and relationship extraction from text.
+     */
+    public static class EntityExtractionResult {
+        private List<ExtractedEntity> entities;
+        private List<ExtractedRelationship> relationships;
+
+        public EntityExtractionResult() {
+            this.entities = new ArrayList<>();
+            this.relationships = new ArrayList<>();
+        }
+
+        public EntityExtractionResult(List<ExtractedEntity> entities, List<ExtractedRelationship> relationships) {
+            this.entities = entities != null ? entities : new ArrayList<>();
+            this.relationships = relationships != null ? relationships : new ArrayList<>();
+        }
+
+        public static EntityExtractionResult empty() {
+            return new EntityExtractionResult(new ArrayList<>(), new ArrayList<>());
+        }
+
+        public boolean hasEntities() {
+            return entities != null && !entities.isEmpty();
+        }
+
+        public boolean hasRelationships() {
+            return relationships != null && !relationships.isEmpty();
+        }
+
+        public List<ExtractedEntity> getEntities() { return entities; }
+        public void setEntities(List<ExtractedEntity> entities) { this.entities = entities; }
+
+        public List<ExtractedRelationship> getRelationships() { return relationships; }
+        public void setRelationships(List<ExtractedRelationship> relationships) { this.relationships = relationships; }
+
+        @Override
+        public String toString() {
+            return "EntityExtractionResult{entities=" + entities.size() + ", relationships=" + relationships.size() + "}";
+        }
+    }
+
+    /**
+     * An extracted entity from text.
+     * Example: {id: "e1", name: "Marcos Silva", type: "CLIENTE", properties: {telefone: "11999999999"}}
+     */
+    public static class ExtractedEntity {
+        private String id;         // Unique identifier within extraction (e.g., "e1", "e2")
+        private String name;       // Entity name (e.g., "Marcos Silva")
+        private String type;       // Entity type (e.g., "CLIENTE", "PRODUTO", "PEDIDO")
+        private Map<String, String> properties; // Additional properties
+
+        public ExtractedEntity() {
+            this.properties = new java.util.HashMap<>();
+        }
+
+        public ExtractedEntity(String id, String name, String type) {
+            this.id = id;
+            this.name = name;
+            this.type = type;
+            this.properties = new java.util.HashMap<>();
+        }
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public Map<String, String> getProperties() { return properties; }
+        public void setProperties(Map<String, String> properties) { this.properties = properties; }
+
+        @Override
+        public String toString() {
+            return type + ":" + name;
+        }
+    }
+
+    /**
+     * An extracted relationship between two entities.
+     * Example: {sourceId: "e1", targetId: "e2", type: "REALIZOU", properties: {data: "2025-01-20"}}
+     */
+    public static class ExtractedRelationship {
+        private String sourceId;   // Source entity ID
+        private String targetId;   // Target entity ID
+        private String type;       // Relationship type (e.g., "REALIZOU", "ATENDEU", "CONTEM")
+        private Map<String, String> properties; // Additional properties
+
+        public ExtractedRelationship() {
+            this.properties = new java.util.HashMap<>();
+        }
+
+        public ExtractedRelationship(String sourceId, String targetId, String type) {
+            this.sourceId = sourceId;
+            this.targetId = targetId;
+            this.type = type;
+            this.properties = new java.util.HashMap<>();
+        }
+
+        public String getSourceId() { return sourceId; }
+        public void setSourceId(String sourceId) { this.sourceId = sourceId; }
+
+        public String getTargetId() { return targetId; }
+        public void setTargetId(String targetId) { this.targetId = targetId; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public Map<String, String> getProperties() { return properties; }
+        public void setProperties(Map<String, String> properties) { this.properties = properties; }
+
+        @Override
+        public String toString() {
+            return "(" + sourceId + ")-[" + type + "]->(" + targetId + ")";
+        }
     }
 }

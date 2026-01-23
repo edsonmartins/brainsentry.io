@@ -22,13 +22,13 @@ interface MemoryFormProps {
 }
 
 const categories: { value: MemoryCategory; label: string; color: string }[] = [
-  { value: "PATTERN", label: "Padrão", color: "bg-blue-500" },
+  { value: "INSIGHT", label: "Insight", color: "bg-blue-500" },
   { value: "DECISION", label: "Decisão", color: "bg-purple-500" },
-  { value: "ANTIPATTERN", label: "Anti-Padrão", color: "bg-red-500" },
-  { value: "DOMAIN", label: "Domínio", color: "bg-indigo-500" },
-  { value: "BUG", label: "Bug", color: "bg-yellow-500" },
-  { value: "OPTIMIZATION", label: "Otimização", color: "bg-green-500" },
-  { value: "INTEGRATION", label: "Integração", color: "bg-cyan-500" },
+  { value: "WARNING", label: "Atenção", color: "bg-red-500" },
+  { value: "KNOWLEDGE", label: "Conhecimento", color: "bg-indigo-500" },
+  { value: "ACTION", label: "Ação", color: "bg-green-500" },
+  { value: "CONTEXT", label: "Contexto", color: "bg-cyan-500" },
+  { value: "REFERENCE", label: "Referência", color: "bg-orange-500" },
 ];
 
 const importanceLevels: { value: ImportanceLevel; label: string; color: string }[] = [
@@ -48,7 +48,7 @@ export function MemoryForm({
   const [formData, setFormData] = useState<MemoryFormData>({
     content: initialData?.content || "",
     summary: initialData?.summary || "",
-    category: initialData?.category || "PATTERN",
+    category: initialData?.category || "INSIGHT",
     importance: initialData?.importance || "IMPORTANT",
     tags: initialData?.tags || [],
   });

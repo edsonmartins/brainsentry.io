@@ -167,6 +167,38 @@ public class AuditService {
     }
 
     /**
+     * Log entity extraction event.
+     *
+     * @param memoryId the memory ID entities were extracted from
+     * @param entityCount number of entities extracted
+     * @param relationshipCount number of relationships extracted
+     * @param tenantId tenant ID
+     */
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logEntityExtraction(String memoryId, int entityCount, int relationshipCount, String tenantId) {
+        Map<String, Object> outputData = new HashMap<>();
+        outputData.put("memoryId", memoryId);
+        outputData.put("entityCount", entityCount);
+        outputData.put("relationshipCount", relationshipCount);
+
+        AuditLog auditLog = AuditLog.builder()
+                .id(UUID.randomUUID().toString())
+                .eventType("entity_extraction")
+                .timestamp(Instant.now())
+                .userId("system")
+                .tenantId(tenantId)
+                .outcome("success")
+                .outputData(outputData)
+                .memoriesAccessed(List.of(memoryId))
+                .build();
+
+        auditLogRepo.save(auditLog);
+        log.debug("Entity extraction logged for memory {}: {} entities, {} relationships",
+                memoryId, entityCount, relationshipCount);
+    }
+
+    /**
      * Log relationship creation event.
      *
      * @param fromMemoryId source memory ID

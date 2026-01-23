@@ -18,8 +18,16 @@ const importanceStyles: Record<string, string> = {
 };
 
 const categoryStyles: Record<string, string> = {
-  PATTERN: "bg-blue-500 text-white hover:bg-blue-600",
+  // New universal categories
+  INSIGHT: "bg-blue-500 text-white hover:bg-blue-600",
   DECISION: "bg-purple-500 text-white hover:bg-purple-600",
+  WARNING: "bg-red-500 text-white hover:bg-red-600",
+  KNOWLEDGE: "bg-indigo-500 text-white hover:bg-indigo-600",
+  ACTION: "bg-green-500 text-white hover:bg-green-600",
+  CONTEXT: "bg-cyan-500 text-white hover:bg-cyan-600",
+  REFERENCE: "bg-orange-500 text-white hover:bg-orange-600",
+  // Legacy categories (backward compatibility)
+  PATTERN: "bg-blue-500 text-white hover:bg-blue-600",
   ANTIPATTERN: "bg-red-500 text-white hover:bg-red-600",
   DOMAIN: "bg-indigo-500 text-white hover:bg-indigo-600",
   BUG: "bg-yellow-500 text-white hover:bg-yellow-600",

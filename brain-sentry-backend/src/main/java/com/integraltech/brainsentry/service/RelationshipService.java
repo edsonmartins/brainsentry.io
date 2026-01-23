@@ -5,12 +5,16 @@ import com.integraltech.brainsentry.domain.MemoryRelationship;
 import com.integraltech.brainsentry.domain.enums.RelationshipType;
 import com.integraltech.brainsentry.repository.MemoryJpaRepository;
 import com.integraltech.brainsentry.repository.MemoryRelationshipJpaRepository;
+import com.integraltech.brainsentry.repository.MemoryRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,13 +33,22 @@ public class RelationshipService {
     private final MemoryRelationshipJpaRepository relationshipRepo;
     private final MemoryJpaRepository memoryJpaRepo;
     private final AuditService auditService;
+    private final MemoryRepository memoryRepository;
+    private final OpenRouterService openRouterService;
+
+    private static final double RELATIONSHIP_CONFIDENCE_THRESHOLD = 0.7;
+    private static final int MAX_SIMILAR_MEMORIES_TO_ANALYZE = 10;
 
     public RelationshipService(MemoryRelationshipJpaRepository relationshipRepo,
                                MemoryJpaRepository memoryJpaRepo,
-                               AuditService auditService) {
+                               AuditService auditService,
+                               @Autowired(required = false) MemoryRepository memoryRepository,
+                               @Autowired(required = false) OpenRouterService openRouterService) {
         this.relationshipRepo = relationshipRepo;
         this.memoryJpaRepo = memoryJpaRepo;
         this.auditService = auditService;
+        this.memoryRepository = memoryRepository;
+        this.openRouterService = openRouterService;
     }
 
     /**
@@ -242,6 +255,118 @@ public class RelationshipService {
         // For now, return empty list as this requires more complex logic
         log.debug("Relationship suggestion not yet implemented for memory: {}", memoryId);
         return List.of();
+    }
+
+    /**
+     * Automatically detect and create relationships for a new memory.
+     *
+     * This method:
+     * 1. Searches for similar memories using vector search
+     * 2. Uses LLM (OpenRouter/Grok) to analyze the relationship type
+     * 3. Creates relationships with high confidence scores
+     *
+     * @param newMemory the newly created memory
+     * @param tenantId tenant ID
+     * @return list of created relationships
+     */
+    @Async
+    @Transactional
+    public List<MemoryRelationship> detectAndCreateRelationships(Memory newMemory, String tenantId) {
+        List<MemoryRelationship> createdRelationships = new ArrayList<>();
+
+        // Check if required services are available
+        if (memoryRepository == null) {
+            log.warn("MemoryRepository not available, skipping automatic relationship detection");
+            return createdRelationships;
+        }
+
+        if (openRouterService == null || !openRouterService.isConfigured()) {
+            log.warn("OpenRouterService not configured, skipping LLM-based relationship detection");
+            return createdRelationships;
+        }
+
+        if (newMemory.getEmbedding() == null || newMemory.getEmbedding().length == 0) {
+            log.warn("Memory {} has no embedding, skipping relationship detection", newMemory.getId());
+            return createdRelationships;
+        }
+
+        try {
+            // 1. Search for similar memories via vector search
+            log.debug("Searching for similar memories to {} for relationship detection", newMemory.getId());
+            List<Memory> similarMemories = memoryRepository.vectorSearch(
+                    newMemory.getEmbedding(),
+                    MAX_SIMILAR_MEMORIES_TO_ANALYZE,
+                    tenantId
+            );
+
+            if (similarMemories.isEmpty()) {
+                log.debug("No similar memories found for {}", newMemory.getId());
+                return createdRelationships;
+            }
+
+            log.info("Found {} similar memories for relationship analysis", similarMemories.size());
+
+            // 2. For each similar memory, use LLM to determine relationship type
+            for (Memory similarMemory : similarMemories) {
+                // Skip if it's the same memory
+                if (similarMemory.getId().equals(newMemory.getId())) {
+                    continue;
+                }
+
+                try {
+                    // Analyze relationship using LLM
+                    OpenRouterService.RelationshipAnalysis analysis = openRouterService.analyzeRelationship(
+                            newMemory.getContent(),
+                            similarMemory.getContent()
+                    );
+
+                    // 3. Create relationship if confidence is high enough
+                    if (analysis.isHasRelationship() && analysis.getConfidence() >= RELATIONSHIP_CONFIDENCE_THRESHOLD) {
+                        RelationshipType relType = parseRelationshipType(analysis.getType());
+
+                        MemoryRelationship relationship = createRelationship(
+                                newMemory.getId(),
+                                similarMemory.getId(),
+                                relType,
+                                tenantId,
+                                "system" // Created automatically by the system
+                        );
+
+                        createdRelationships.add(relationship);
+
+                        log.info("Auto-created relationship: {} --[{}]--> {} (confidence: {})",
+                                newMemory.getId(), relType, similarMemory.getId(), analysis.getConfidence());
+                    }
+                } catch (Exception e) {
+                    log.warn("Error analyzing relationship between {} and {}: {}",
+                            newMemory.getId(), similarMemory.getId(), e.getMessage());
+                }
+            }
+
+            log.info("Created {} automatic relationships for memory {}", createdRelationships.size(), newMemory.getId());
+
+        } catch (Exception e) {
+            log.error("Error during automatic relationship detection for memory {}", newMemory.getId(), e);
+        }
+
+        return createdRelationships;
+    }
+
+    /**
+     * Parse relationship type from string to enum.
+     * Falls back to RELATED_TO if unknown type.
+     */
+    private RelationshipType parseRelationshipType(String type) {
+        if (type == null) {
+            return RelationshipType.RELATED_TO;
+        }
+
+        try {
+            return RelationshipType.valueOf(type.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.debug("Unknown relationship type '{}', using RELATED_TO", type);
+            return RelationshipType.RELATED_TO;
+        }
     }
 
     /**
