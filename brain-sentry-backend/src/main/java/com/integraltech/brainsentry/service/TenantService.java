@@ -228,6 +228,7 @@ public class TenantService {
         );
     }
 
+
     /**
      * Get tenant configuration.
      *

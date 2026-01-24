@@ -10,7 +10,7 @@ package com.integraltech.brainsentry.config;
 public class TenantContext {
 
     private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
-    private static final String DEFAULT_TENANT = "default";
+    private static final String DEFAULT_TENANT = "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
     /**
      * Set the current tenant identifier.

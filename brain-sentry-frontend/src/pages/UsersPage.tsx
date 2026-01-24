@@ -66,7 +66,7 @@ const ROLE_COLORS: Record<string, string> = {
 export function UsersPage() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
-  const tenantId = currentUser?.tenantId || "default";
+  const tenantId = currentUser?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   // State
   const [searchQuery, setSearchQuery] = useState("");

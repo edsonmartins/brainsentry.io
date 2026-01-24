@@ -28,6 +28,7 @@ const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 const TOKEN_KEY = "brain_sentry_token";
 const USER_KEY = "brain_sentry_user";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const DEFAULT_TENANT_ID = "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -74,9 +75,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    const tenantId = localStorage.getItem("tenant_id") || DEFAULT_TENANT_ID;
     const response = await fetch(`${API_URL}/v1/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": tenantId,
+      },
       body: JSON.stringify({ email, password }),
     });
 
@@ -86,10 +91,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const data = await response.json();
-    const { token, user } = data;
+    const { token, user, tenantId: responseTenantId } = data;
 
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.setItem("tenant_id", responseTenantId || user?.tenantId || tenantId);
 
     setState({
       user,

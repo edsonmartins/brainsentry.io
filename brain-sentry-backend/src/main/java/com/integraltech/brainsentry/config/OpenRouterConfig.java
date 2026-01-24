@@ -10,7 +10,7 @@ import org.springframework.web.client.RestTemplate;
  * OpenRouter / Grok API configuration.
  *
  * Configures the connection to OpenRouter for accessing
- * the x-ai/grok-4.1-fast model.
+ * the x-ai/grok-4-fast model.
  */
 @Slf4j
 @Configuration
@@ -23,9 +23,9 @@ public class OpenRouterConfig {
     private String provider = "openrouter";
 
     /**
-     * Model identifier (x-ai/grok-4.1-fast)
+     * Model identifier (x-ai/grok-4-fast)
      */
-    private String model = "x-ai/grok-4.1-fast";
+    private String model = "x-ai/grok-4-fast";
 
     /**
      * OpenRouter API key

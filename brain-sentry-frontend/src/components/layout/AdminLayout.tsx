@@ -89,7 +89,7 @@ export function AdminLayout() {
   )?.id || "dashboard";
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="h-screen flex flex-col md:flex-row overflow-hidden">
       {/* Top bar for mobile */}
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-background">
         <div className="flex items-center gap-2">
@@ -108,7 +108,7 @@ export function AdminLayout() {
       </div>
 
       {/* Sidebar for desktop */}
-      <aside className="hidden md:flex w-64 flex-col border-r bg-muted/40">
+      <aside className="hidden md:flex w-64 flex-col border-r bg-muted/40 h-screen">
         <div className="px-4 py-[14px] border-b bg-gradient-to-r from-brain-primary/10 to-brain-accent/10">
           <div className="flex items-center gap-2">
             <img src="/images/brainsentry_logo.png" alt="Brain Sentry" className="h-8 w-auto" />
@@ -118,7 +118,7 @@ export function AdminLayout() {
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const isActive = activePath === item.id;
             return (
@@ -159,7 +159,7 @@ export function AdminLayout() {
       {/* Mobile menu */}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-background">
-          <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-lg font-bold">Menu</h2>
               <button
@@ -169,7 +169,7 @@ export function AdminLayout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <nav className="flex-1 p-4 space-y-1">
+            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
               {navigation.map((item) => (
                 <button
                   key={item.id}
@@ -194,7 +194,7 @@ export function AdminLayout() {
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-y-auto min-h-0">
         <Outlet />
       </main>
     </div>

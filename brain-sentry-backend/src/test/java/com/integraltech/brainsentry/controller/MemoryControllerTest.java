@@ -8,6 +8,7 @@ import com.integraltech.brainsentry.dto.request.SearchRequest;
 import com.integraltech.brainsentry.dto.request.UpdateMemoryRequest;
 import com.integraltech.brainsentry.dto.response.MemoryListResponse;
 import com.integraltech.brainsentry.dto.response.MemoryResponse;
+import com.integraltech.brainsentry.service.EntityGraphService;
 import com.integraltech.brainsentry.service.MemoryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +40,9 @@ class MemoryControllerTest {
 
     private final MemoryService memoryService = Mockito.mock(MemoryService.class);
 
-    private final MemoryController memoryController = new MemoryController(memoryService);
+    private final EntityGraphService entityGraphService = Mockito.mock(EntityGraphService.class);
+
+    private final MemoryController memoryController = new MemoryController(memoryService, entityGraphService);
 
     private final String tenantId = "test-tenant";
     private final String memoryId = "mem_test123";

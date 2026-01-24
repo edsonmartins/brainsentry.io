@@ -48,7 +48,7 @@ interface CategoryStat {
 export function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tenantId, setTenantId] = useState(user?.tenantId || "default");
+  const [tenantId, setTenantId] = useState(user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561");
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [memories, setMemories] = useState<RecentMemory[]>([]);

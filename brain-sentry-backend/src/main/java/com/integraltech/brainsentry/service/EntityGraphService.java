@@ -189,6 +189,7 @@ public class EntityGraphService {
         // Escape strings for Cypher
         String name = escapeCypherString(entity.getName());
         String type = escapeCypherString(entity.getType());
+        String typeLabel = escapeCypherIdentifier(entity.getType());
         String escapedTenantId = escapeCypherString(tenantId);
         String escapedSourceMemoryId = escapeCypherString(sourceMemoryId);
 
@@ -196,7 +197,7 @@ public class EntityGraphService {
         StringBuilder propsBuilder = new StringBuilder();
         if (entity.getProperties() != null && !entity.getProperties().isEmpty()) {
             for (Map.Entry<String, String> prop : entity.getProperties().entrySet()) {
-                propsBuilder.append(", ").append(prop.getKey()).append(": '")
+                propsBuilder.append(", ").append(escapeCypherIdentifier(prop.getKey())).append(": '")
                         .append(escapeCypherString(prop.getValue())).append("'");
             }
         }
@@ -211,7 +212,7 @@ public class EntityGraphService {
             "sourceMemoryId: '%s', " +
             "createdAt: %d%s" +
             "}) RETURN e.id",
-            type, // Additional label based on entity type
+            typeLabel, // Additional label based on entity type
             nodeId,
             name,
             type,
@@ -252,7 +253,7 @@ public class EntityGraphService {
      */
     private void storeRelationshipEdge(String sourceNodeId, String targetNodeId,
                                        ExtractedRelationship relationship, String tenantId) {
-        String relType = escapeCypherString(relationship.getType());
+        String relType = escapeCypherIdentifier(relationship.getType());
 
         // Build properties string
         StringBuilder propsBuilder = new StringBuilder();
@@ -261,7 +262,7 @@ public class EntityGraphService {
 
         if (relationship.getProperties() != null && !relationship.getProperties().isEmpty()) {
             for (Map.Entry<String, String> prop : relationship.getProperties().entrySet()) {
-                propsBuilder.append(", ").append(prop.getKey()).append(": '")
+                propsBuilder.append(", ").append(escapeCypherIdentifier(prop.getKey())).append(": '")
                         .append(escapeCypherString(prop.getValue())).append("'");
             }
         }
@@ -507,5 +508,25 @@ public class EntityGraphService {
             .replace("\r", "\\r")
             .replace("\t", "\\t")
             .replace("\u0000", "\\u0000");
+    }
+
+    /**
+     * Escape identifiers (labels, relationship types, property keys) for Cypher queries.
+     */
+    private String escapeCypherIdentifier(String input) {
+        if (input == null) {
+            return "`unknown`";
+        }
+        String escaped = input
+            .replace("`", "``")
+            .replace("\u0000", "")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("\t", " ")
+            .trim();
+        if (escaped.isEmpty()) {
+            return "`unknown`";
+        }
+        return "`" + escaped + "`";
     }
 }

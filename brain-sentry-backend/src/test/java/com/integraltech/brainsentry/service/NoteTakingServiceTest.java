@@ -37,6 +37,8 @@ import static org.mockito.Mockito.*;
 @DisplayName("NoteTakingService Unit Tests")
 class NoteTakingServiceTest {
 
+    private static final String TENANT_ID = "11111111-1111-1111-1111-111111111111";
+
     @Mock
     private HindsightNoteJpaRepository hindsightNoteRepo;
 
@@ -64,7 +66,7 @@ class NoteTakingServiceTest {
         void testSessionAnalysis_ExtractsInformation() {
             // Given
             String sessionId = "test-session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             SessionAnalysisRequest request = SessionAnalysisRequest.builder()
                 .sessionId(sessionId)
@@ -99,11 +101,11 @@ class NoteTakingServiceTest {
             // Given
             SessionAnalysisRequest request = SessionAnalysisRequest.builder()
                 .sessionId("empty-session")
-                .tenantId("tenant-123")
+                .tenantId(TENANT_ID)
                 .build();
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
-                eq("tenant-123"), any(Instant.class), any(Instant.class)
+                eq(TENANT_ID), any(Instant.class), any(Instant.class)
             )).thenReturn(Collections.emptyList());
 
             when(openRouterService.chat(anyString(), anyString()))
@@ -200,7 +202,7 @@ class NoteTakingServiceTest {
         @DisplayName("Should get hindsight notes for tenant")
         void testGetHindsightNotes() {
             // Given
-            String tenantId = "tenant-123";
+            String tenantId = TENANT_ID;
 
             HindsightNote note1 = HindsightNote.builder()
                 .id("note-1")
@@ -230,7 +232,7 @@ class NoteTakingServiceTest {
         @DisplayName("Should get frequent errors")
         void testGetFrequentErrors() {
             // Given
-            String tenantId = "tenant-123";
+            String tenantId = TENANT_ID;
 
             HindsightNote frequentNote = HindsightNote.builder()
                 .id("note-1")
@@ -261,7 +263,7 @@ class NoteTakingServiceTest {
         void testGenerateMarkdownSummary() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
                 eq(tenantId), any(Instant.class), any(Instant.class)
@@ -291,7 +293,7 @@ class NoteTakingServiceTest {
         void testDistillSession_CreatesMemories() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(openRouterService.chat(anyString(), anyString()))
                 .thenReturn("{decisions: [], insights: [{category: PATTERN, content: Test pattern, importance: HIGH, relatedTo: Test}], failures: []}");
@@ -323,7 +325,7 @@ class NoteTakingServiceTest {
         void testExtractInsights() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
                 eq(tenantId), any(Instant.class), any(Instant.class)
@@ -352,7 +354,7 @@ class NoteTakingServiceTest {
         void testExtractHindsights() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
                 eq(tenantId), any(Instant.class), any(Instant.class)
@@ -377,7 +379,7 @@ class NoteTakingServiceTest {
         void testIdentifyPatterns() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
                 eq(tenantId), any(Instant.class), any(Instant.class)
@@ -405,7 +407,7 @@ class NoteTakingServiceTest {
         void testExtractArchitecturalDecisions() {
             // Given
             String sessionId = "session-123";
-            String tenantId = "tenant-abc";
+            String tenantId = TENANT_ID;
 
             when(auditLogRepo.findByTenantIdAndTimestampBetween(
                 eq(tenantId), any(Instant.class), any(Instant.class)

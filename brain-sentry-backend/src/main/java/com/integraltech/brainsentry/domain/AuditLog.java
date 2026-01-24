@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.TenantId;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
@@ -181,7 +180,7 @@ public class AuditLog {
     /**
      * Tenant ID for multi-tenancy support.
      */
-    @TenantId
+    @org.hibernate.annotations.TenantId
     @Column(length = 100, nullable = false)
     private String tenantId;
 

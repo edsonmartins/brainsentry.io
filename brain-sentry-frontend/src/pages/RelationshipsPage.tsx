@@ -110,7 +110,7 @@ function getEntityConfig(type: string) {
 export function RelationshipsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const tenantId = user?.tenantId || "default";
+  const tenantId = user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   // Tab state
   const [activeTab, setActiveTab] = useState<"knowledge" | "memory">("knowledge");
@@ -284,7 +284,9 @@ export function RelationshipsPage() {
     setIsReprocessing(true);
     try {
       const response = await api.axiosInstance.post<string>(
-        `/v1/memories/extract-all-entities`
+        `/v1/memories/extract-all-entities`,
+        undefined,
+        { timeout: 0 }
       );
       toast({
         title: "Reprocessamento concluído",

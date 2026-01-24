@@ -31,7 +31,7 @@ spring:
   # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: none  # We manage schema manually
+      ddl-auto: update  # Allow Hibernate to create/update schema
     show-sql: false
     properties:
       hibernate:
@@ -85,7 +85,7 @@ brain-sentry:
   llm:
     provider: ${BRAINSENTRY_AI_AGENTIC_MODEL_PROVIDER:OPENROUTER}
     model: ${BRAINSENTRY_AI_AGENTIC_MODEL_MODEL:x-ai/grok-4-fast}
-    api-key: ${BRAINSENTRY_AI_AGENTIC_MODEL_API_KEY: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}
+    api-key: ${BRAINSENTRY_AI_AGENTIC_MODEL_API_KEY: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}
     base-url: ${BRAINSENTRY_AI_AGENTIC_MODEL_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
     temperature: ${BRAINSENTRY_AI_AGENTIC_MODEL_TEMPERATURE:0.2}
     max-tokens: ${LLM_MAX_TOKENS:500}
@@ -123,7 +123,7 @@ brain-sentry:
   # Multi-tenancy
   multi-tenancy:
     enabled: ${MULTI_TENANCY_ENABLED:true}
-    default-tenant: ${DEFAULT_TENANT:default}
+    default-tenant: ${DEFAULT_TENANT:a9f814d2-4dae-41f3-851b-8aa3d4706561}
 
 # Logging Configuration
 logging:
@@ -226,4 +226,3 @@ springdoc:
     - org.springframework.web.servlet
   show-javadoc: false
   show-actuator: true
-

@@ -438,7 +438,7 @@ export function ConfigurationPage() {
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Tenant</dt>
-                    <dd className="font-medium">{user?.tenantId || "default"}</dd>
+                    <dd className="font-medium">{user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561"}</dd>
                   </div>
                 </dl>
               </CardContent>

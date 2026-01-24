@@ -65,7 +65,7 @@ const OUTCOME_COLORS: Record<string, string> = {
 export function AuditPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const tenantId = user?.tenantId || "default";
+  const tenantId = user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");

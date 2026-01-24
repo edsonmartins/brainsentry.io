@@ -89,7 +89,7 @@ export interface MemoryStats {
 // Interceptador para adicionar headers de autenticação
 const authRequestInterceptor = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   // Adicionar tenant ID se disponível
-  const tenantId = localStorage.getItem("tenant_id") || "default";
+  const tenantId = localStorage.getItem("tenant_id") || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   // Adicionar token JWT se disponível
   const token = localStorage.getItem("brain_sentry_token");

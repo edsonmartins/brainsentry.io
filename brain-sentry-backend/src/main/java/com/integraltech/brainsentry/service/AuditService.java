@@ -45,6 +45,9 @@ public class AuditService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logInterception(InterceptRequest request, List<Memory> memories, long latencyMs) {
         try {
+            if (request.getTenantId() != null) {
+                com.integraltech.brainsentry.config.TenantContext.setTenantId(request.getTenantId());
+            }
             AuditLog auditLog = AuditLog.builder()
                     .id(UUID.randomUUID().toString())
                     .eventType("context_injection")
@@ -66,6 +69,8 @@ public class AuditService {
             log.debug("Audit log created: {}", auditLog.getId());
         } catch (Exception e) {
             log.error("Error creating audit log", e);
+        } finally {
+            com.integraltech.brainsentry.config.TenantContext.clear();
         }
     }
 
@@ -79,6 +84,9 @@ public class AuditService {
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logMemoryCreated(String memoryId, String userId, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         AuditLog auditLog = AuditLog.builder()
                 .id(UUID.randomUUID().toString())
                 .eventType("memory_created")
@@ -91,6 +99,7 @@ public class AuditService {
 
         auditLogRepo.save(auditLog);
         log.debug("Memory creation logged: {}", memoryId);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**
@@ -103,6 +112,9 @@ public class AuditService {
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logMemoryUpdated(String memoryId, String userId, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         AuditLog auditLog = AuditLog.builder()
                 .id(UUID.randomUUID().toString())
                 .eventType("memory_updated")
@@ -115,6 +127,7 @@ public class AuditService {
 
         auditLogRepo.save(auditLog);
         log.debug("Memory update logged: {}", memoryId);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**
@@ -127,6 +140,9 @@ public class AuditService {
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logMemoryDeleted(String memoryId, String userId, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         AuditLog auditLog = AuditLog.builder()
                 .id(UUID.randomUUID().toString())
                 .eventType("memory_deleted")
@@ -139,6 +155,7 @@ public class AuditService {
 
         auditLogRepo.save(auditLog);
         log.debug("Memory deletion logged: {}", memoryId);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**
@@ -152,6 +169,9 @@ public class AuditService {
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logError(String eventType, String errorMessage, String userId, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         AuditLog auditLog = AuditLog.builder()
                 .id(UUID.randomUUID().toString())
                 .eventType(eventType)
@@ -164,6 +184,7 @@ public class AuditService {
 
         auditLogRepo.save(auditLog);
         log.warn("Error logged: {} - {}", eventType, errorMessage);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**
@@ -177,6 +198,9 @@ public class AuditService {
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logEntityExtraction(String memoryId, int entityCount, int relationshipCount, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         Map<String, Object> outputData = new HashMap<>();
         outputData.put("memoryId", memoryId);
         outputData.put("entityCount", entityCount);
@@ -196,6 +220,7 @@ public class AuditService {
         auditLogRepo.save(auditLog);
         log.debug("Entity extraction logged for memory {}: {} entities, {} relationships",
                 memoryId, entityCount, relationshipCount);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**
@@ -211,6 +236,9 @@ public class AuditService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logRelationshipCreated(String fromMemoryId, String toMemoryId, String relationshipType,
                                       String userId, String tenantId) {
+        if (tenantId != null) {
+            com.integraltech.brainsentry.config.TenantContext.setTenantId(tenantId);
+        }
         Map<String, Object> outputData = new HashMap<>();
         outputData.put("fromMemoryId", fromMemoryId);
         outputData.put("toMemoryId", toMemoryId);
@@ -228,6 +256,7 @@ public class AuditService {
 
         auditLogRepo.save(auditLog);
         log.debug("Relationship creation logged: {} -> {} ({})", fromMemoryId, toMemoryId, relationshipType);
+        com.integraltech.brainsentry.config.TenantContext.clear();
     }
 
     /**

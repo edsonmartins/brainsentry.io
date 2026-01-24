@@ -33,7 +33,7 @@ public class TenantFilter extends OncePerRequestFilter {
 
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String TENANT_PARAM = "tenant";
-    private static final String DEFAULT_TENANT = "default";
+    private static final String DEFAULT_TENANT = "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
     @Override
     protected void doFilterInternal(
