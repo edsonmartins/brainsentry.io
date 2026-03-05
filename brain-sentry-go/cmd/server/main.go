@@ -1,0 +1,428 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/integraltech/brainsentry/internal/cache"
+	"github.com/integraltech/brainsentry/internal/config"
+	"github.com/integraltech/brainsentry/internal/handler"
+	"github.com/integraltech/brainsentry/internal/mcp"
+	"github.com/integraltech/brainsentry/internal/middleware"
+	graphrepo "github.com/integraltech/brainsentry/internal/repository/graph"
+	"github.com/integraltech/brainsentry/internal/repository/postgres"
+	"github.com/integraltech/brainsentry/internal/service"
+)
+
+func main() {
+	// Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	// Config
+	cfgPath := "config.yaml"
+	if p := os.Getenv("CONFIG_PATH"); p != "" {
+		cfgPath = p
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	// Database
+	ctx := context.Background()
+	pool, err := postgres.NewPool(ctx, cfg.Database.DSN(), cfg.Database.MaxConnections, cfg.Database.MinConnections)
+	if err != nil {
+		logger.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+	logger.Info("connected to PostgreSQL")
+
+	// FalkorDB (optional - non-fatal if unavailable)
+	var graphClient *graphrepo.Client
+	var memoryGraphRepo *graphrepo.MemoryGraphRepository
+	var entityGraphRepo *graphrepo.EntityGraphRepository
+
+	var graphRAGRepo *graphrepo.GraphRAGRepository
+
+	graphClient, err = graphrepo.NewClient(cfg.FalkorDB.Addr(), cfg.FalkorDB.Password, cfg.FalkorDB.GraphName)
+	if err != nil {
+		logger.Warn("FalkorDB not available, graph features disabled", "error", err)
+	} else {
+		defer graphClient.Close()
+		memoryGraphRepo = graphrepo.NewMemoryGraphRepository(graphClient)
+		entityGraphRepo = graphrepo.NewEntityGraphRepository(graphClient)
+		graphRAGRepo = graphrepo.NewGraphRAGRepository(graphClient)
+
+		// Ensure vector index exists
+		if err := graphRAGRepo.EnsureVectorIndex(ctx, cfg.Embedding.Dimensions); err != nil {
+			logger.Warn("failed to create vector index", "error", err)
+		}
+
+		logger.Info("connected to FalkorDB", "graph", cfg.FalkorDB.GraphName)
+	}
+
+	// Redis (optional - non-fatal if unavailable)
+	redisCache := cache.NewRedisCache(cfg.Redis.Addr(), cfg.Redis.Password, cfg.Redis.DB)
+	if redisCache != nil {
+		defer redisCache.Close()
+	}
+	_ = redisCache // used by rate limiter and future caching
+
+	// Repositories
+	userRepo := postgres.NewUserRepository(pool)
+	tenantRepo := postgres.NewTenantRepository(pool)
+	memoryRepo := postgres.NewMemoryRepository(pool)
+	auditRepo := postgres.NewAuditRepository(pool)
+	versionRepo := postgres.NewVersionRepository(pool)
+	relRepo := postgres.NewRelationshipRepository(pool)
+	noteRepo := postgres.NewNoteRepository(pool)
+
+	// Services
+	jwtService := service.NewJWTService(cfg.Security.JWTSecret, cfg.Security.JWTExpiration)
+	authService := service.NewAuthService(userRepo, jwtService)
+	auditService := service.NewAuditService(auditRepo)
+	embeddingService := service.NewEmbeddingService(cfg.Embedding.Dimensions, cfg.AI.APIKey, cfg.AI.BaseURL, cfg.Embedding.Model)
+
+	var openRouterService *service.OpenRouterService
+	if cfg.AI.APIKey != "" {
+		openRouterService = service.NewOpenRouterService(
+			cfg.AI.APIKey, cfg.AI.BaseURL, cfg.AI.Model,
+			cfg.AI.Temperature, cfg.AI.MaxTokens, cfg.AI.Timeout, cfg.AI.MaxRetries,
+		)
+		logger.Info("OpenRouter service initialized", "model", cfg.AI.Model)
+	} else {
+		logger.Warn("OpenRouter API key not set, LLM features disabled")
+	}
+
+	memoryService := service.NewMemoryService(
+		memoryRepo, versionRepo, memoryGraphRepo, auditService,
+		openRouterService, embeddingService, cfg.Memory.AutoImportance,
+	)
+
+	interceptionService := service.NewInterceptionService(
+		memoryRepo, memoryGraphRepo, graphRAGRepo, openRouterService, embeddingService,
+		auditService, noteRepo,
+		cfg.Interception.QuickCheckEnabled, cfg.Interception.DeepAnalysisEnabled,
+		cfg.Interception.RelevanceThreshold,
+	)
+
+	var entityGraphService *service.EntityGraphService
+	if entityGraphRepo != nil {
+		entityGraphService = service.NewEntityGraphService(entityGraphRepo, openRouterService, auditService)
+	}
+
+	relationshipService := service.NewRelationshipService(relRepo, memoryRepo, openRouterService, auditService)
+
+	// Phase 4: NoteTaking, Compression, MCP
+	summaryRepo := postgres.NewContextSummaryRepository(pool)
+	observationRepo := postgres.NewObservationRepository(pool)
+	noteTakingService := service.NewNoteTakingService(noteRepo, auditRepo, openRouterService, auditService, observationRepo)
+	compressionService := service.NewCompressionService(summaryRepo, openRouterService)
+
+	// Learning Service (background auto-promotion/demotion)
+	learningService := service.NewLearningService(
+		memoryRepo, tenantRepo, auditService, service.DefaultLearningConfig(),
+	)
+	learningService.Start([]string{cfg.Tenant.DefaultID})
+
+	// Consolidation Service
+	consolidationService := service.NewConsolidationService(
+		memoryRepo, openRouterService, embeddingService, auditService,
+	)
+	_ = consolidationService // available for MCP tools and API
+
+	// Correction Service
+	correctionService := service.NewCorrectionService(memoryRepo, versionRepo, auditService)
+
+	// Session Service
+	sessionRepo := postgres.NewSessionRepository(pool)
+	sessionService := service.NewSessionService(service.DefaultSessionConfig(), sessionRepo)
+	sessionService.Start()
+
+	// Batch Service
+	batchService := service.NewBatchService(memoryRepo, embeddingService, auditService)
+
+	// Conflict Detection Service
+	conflictService := service.NewConflictService(memoryRepo, openRouterService, embeddingService)
+
+	// Webhook Service
+	webhookRepo := postgres.NewWebhookRepository(pool)
+	webhookService := service.NewWebhookService(webhookRepo)
+
+	// SSO Service
+	ssoService := service.NewSSOService(jwtService)
+
+	// MCP Server
+	mcpServer := mcp.NewServer(memoryService, noteTakingService, compressionService, interceptionService)
+
+	// Handlers
+	authHandler := handler.NewAuthHandler(authService)
+	userHandler := handler.NewUserHandler(userRepo, authService, cfg.Security.BcryptCost)
+	tenantHandler := handler.NewTenantHandler(tenantRepo)
+	memoryHandler := handler.NewMemoryHandler(memoryService, relationshipService)
+	auditHandler := handler.NewAuditHandler(auditService)
+	statsHandler := handler.NewStatsHandler(memoryRepo, auditRepo)
+	interceptionHandler := handler.NewInterceptionHandler(interceptionService)
+	relationshipHandler := handler.NewRelationshipHandler(relationshipService, memoryService)
+
+	correctionHandler := handler.NewCorrectionHandler(correctionService)
+	sessionHandler := handler.NewSessionHandler(sessionService)
+	batchHandler := handler.NewBatchHandler(batchService)
+	conflictHandler := handler.NewConflictHandler(conflictService)
+	webhookHandler := handler.NewWebhookHandler(webhookService)
+	ssoHandler := handler.NewSSOHandler(ssoService)
+	noteTakingHandler := handler.NewNoteTakingHandler(noteTakingService)
+	compressionHandler := handler.NewCompressionHandler(compressionService)
+	mcpHandler := handler.NewMCPHandler(mcpServer)
+
+	var entityGraphHandler *handler.EntityGraphHandler
+	if entityGraphService != nil {
+		entityGraphHandler = handler.NewEntityGraphHandler(entityGraphService, memoryService)
+	}
+
+	// Router
+	r := chi.NewRouter()
+
+	// Rate limiter
+	rateLimiter := middleware.NewRateLimiter(middleware.RateLimiterConfig{
+		RequestsPerMinute: 120,
+		BurstSize:         60,
+	})
+
+	// Global middleware
+	r.Use(middleware.Recovery(logger))
+	r.Use(middleware.Metrics())
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.CORS(cfg.Security.CORS.AllowedOrigins, cfg.Security.CORS.AllowedMethods))
+	r.Use(middleware.RateLimit(rateLimiter))
+
+	// Prometheus metrics endpoint (no auth)
+	r.Handle("/metrics", promhttp.Handler())
+
+	// Public paths (no auth required)
+	publicPaths := []string{
+		cfg.Server.ContextPath + "/v1/auth/",
+		cfg.Server.ContextPath + "/health",
+		"/health",
+		"/metrics",
+		"/swagger.json",
+	}
+	r.Use(middleware.JWTAuth(jwtService, publicPaths))
+	r.Use(middleware.TenantExtractor(cfg.Tenant.DefaultID))
+
+	// Routes
+	r.Route(cfg.Server.ContextPath, func(r chi.Router) {
+		// Health
+		r.Get("/health", handler.Health)
+
+		// Auth
+		r.Route("/v1/auth", func(r chi.Router) {
+			r.Post("/login", authHandler.Login)
+			r.Post("/logout", authHandler.Logout)
+			r.Post("/refresh", authHandler.Refresh)
+			r.Get("/sso/authorize", ssoHandler.GetAuthURL)
+			r.Post("/sso/callback", ssoHandler.Callback)
+			r.Get("/sso/config", ssoHandler.GetConfig)
+		})
+
+		// Users (admin-only for create)
+		r.Route("/v1/users", func(r chi.Router) {
+			r.Get("/", userHandler.List)
+			r.Get("/{id}", userHandler.GetByID)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Post("/", userHandler.Create)
+		})
+
+		// Tenants (admin-only for write operations)
+		r.Route("/v1/tenants", func(r chi.Router) {
+			r.Get("/", tenantHandler.List)
+			r.Get("/{id}", tenantHandler.GetByID)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Post("/", tenantHandler.Create)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Put("/{id}", tenantHandler.Update)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Delete("/{id}", tenantHandler.Delete)
+		})
+
+		// Memories
+		r.Route("/v1/memories", func(r chi.Router) {
+			r.Post("/", memoryHandler.Create)
+			r.Get("/", memoryHandler.List)
+			r.Post("/search", memoryHandler.Search)
+			r.Get("/by-category/{category}", memoryHandler.GetByCategory)
+			r.Get("/by-importance/{importance}", memoryHandler.GetByImportance)
+			r.Get("/{id}", memoryHandler.GetByID)
+			r.Put("/{id}", memoryHandler.Update)
+			r.Delete("/{id}", memoryHandler.Delete)
+			r.Get("/{id}/versions", memoryHandler.Versions)
+			r.Post("/{id}/feedback", memoryHandler.Feedback)
+			r.Post("/{id}/flag", correctionHandler.Flag)
+			r.Post("/{id}/review", correctionHandler.Review)
+			r.Post("/{id}/rollback", correctionHandler.Rollback)
+		})
+
+		// Interception
+		r.Post("/v1/intercept", interceptionHandler.Intercept)
+
+		// Relationships
+		r.Route("/v1/relationships", func(r chi.Router) {
+			r.Get("/", relationshipHandler.List)
+			r.Post("/", relationshipHandler.Create)
+			r.Post("/bidirectional", relationshipHandler.CreateBidirectional)
+			r.Get("/from/{memoryId}", relationshipHandler.GetFrom)
+			r.Get("/to/{memoryId}", relationshipHandler.GetTo)
+			r.Get("/between", relationshipHandler.GetBetween)
+			r.Get("/{memoryId}/related", relationshipHandler.GetRelated)
+			r.Put("/{relationshipId}/strength", relationshipHandler.UpdateStrength)
+			r.Delete("/between", relationshipHandler.DeleteBetween)
+			r.Delete("/{memoryId}", relationshipHandler.DeleteAll)
+			r.Post("/{memoryId}/suggest", relationshipHandler.Suggest)
+		})
+
+		// Entity Graph (only if FalkorDB is available)
+		if entityGraphHandler != nil {
+			r.Route("/v1/entity-graph", func(r chi.Router) {
+				r.Get("/memory/{memoryId}/entities", entityGraphHandler.GetEntitiesByMemory)
+				r.Get("/memory/{memoryId}/relationships", entityGraphHandler.GetRelationshipsByMemory)
+				r.Get("/search", entityGraphHandler.SearchEntities)
+				r.Get("/knowledge-graph", entityGraphHandler.GetKnowledgeGraph)
+				r.Post("/extract/{memoryId}", entityGraphHandler.ExtractEntities)
+				r.Post("/extract-batch", entityGraphHandler.BatchExtract)
+			})
+		}
+
+		// Audit Logs (spec path: /v1/audit/logs)
+		r.Route("/v1/audit", func(r chi.Router) {
+			r.Get("/logs", auditHandler.List)
+			r.Get("/logs/by-event/{eventType}", auditHandler.ByEventType)
+			r.Get("/logs/by-user/{userId}", auditHandler.ByUser)
+			r.Get("/logs/by-session/{sessionId}", auditHandler.BySession)
+			r.Get("/logs/recent", auditHandler.Recent)
+			r.Get("/logs/by-date-range", auditHandler.ByDateRange)
+			r.Get("/logs/stats", auditHandler.Stats)
+			r.Get("/memory/{memoryId}/history", auditHandler.ByMemory)
+		})
+
+		// Stats
+		r.Route("/v1/stats", func(r chi.Router) {
+			r.Get("/overview", statsHandler.Overview)
+			r.Get("/top-patterns", statsHandler.TopPatterns)
+			r.Get("/health", statsHandler.HealthStats)
+		})
+
+		// Notes
+		r.Route("/v1/notes", func(r chi.Router) {
+			r.Get("/", noteTakingHandler.ListNotes)
+			r.Post("/analyze", noteTakingHandler.AnalyzeSession)
+			r.Get("/hindsight", noteTakingHandler.ListHindsight)
+			r.Post("/hindsight", noteTakingHandler.CreateHindsight)
+			r.Get("/session/{sessionId}", noteTakingHandler.GetSessionNotes)
+			r.Get("/session/{sessionId}/hindsight", noteTakingHandler.GetSessionHindsight)
+		})
+
+		// Compression
+		r.Route("/v1/compression", func(r chi.Router) {
+			r.Post("/compress", compressionHandler.Compress)
+			r.Get("/session/{sessionId}", compressionHandler.GetSessionSummaries)
+			r.Get("/session/{sessionId}/latest", compressionHandler.GetLatestSummary)
+		})
+
+		// Sessions
+		r.Route("/v1/sessions", func(r chi.Router) {
+			r.Post("/", sessionHandler.Create)
+			r.Get("/active", sessionHandler.ListActive)
+			r.Get("/{id}", sessionHandler.Get)
+			r.Post("/{id}/touch", sessionHandler.Touch)
+			r.Post("/{id}/end", sessionHandler.End)
+		})
+
+		// Batch Import/Export
+		r.Route("/v1/batch", func(r chi.Router) {
+			r.Post("/import", batchHandler.Import)
+			r.Get("/export", batchHandler.Export)
+		})
+
+		// Conflict Detection
+		r.Route("/v1/conflicts", func(r chi.Router) {
+			r.Post("/detect/{memoryId}", conflictHandler.DetectForMemory)
+			r.Post("/scan", conflictHandler.ScanAll)
+		})
+
+		// Webhooks
+		r.Route("/v1/webhooks", func(r chi.Router) {
+			r.Post("/", webhookHandler.Register)
+			r.Get("/", webhookHandler.List)
+			r.Delete("/{id}", webhookHandler.Unregister)
+			r.Get("/{id}/deliveries", webhookHandler.Deliveries)
+		})
+
+		// MCP (Model Context Protocol)
+		r.Route("/v1/mcp", func(r chi.Router) {
+			r.Post("/message", mcpHandler.HandleMessage)
+			r.Post("/sse", mcpHandler.HandleSSE)
+			r.Post("/batch", mcpHandler.HandleBatch)
+		})
+	})
+
+	// Also mount health at root for container probes
+	r.Get("/health", handler.Health)
+
+	// Swagger/OpenAPI spec
+	r.Get("/swagger.json", handler.SwaggerSpec)
+
+	// Server
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Graceful shutdown
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		logger.Info("server starting", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	startupTime := time.Now()
+	logger.Info("Brain Sentry Go started",
+		"port", cfg.Server.Port,
+		"startup_ms", time.Since(startupTime).Milliseconds(),
+	)
+
+	<-done
+	logger.Info("shutting down...")
+
+	// Stop background services
+	learningService.Stop()
+	sessionService.Stop()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("shutdown error", "error", err)
+	}
+
+	logger.Info("server stopped")
+}
