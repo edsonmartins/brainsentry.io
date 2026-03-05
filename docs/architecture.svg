@@ -107,7 +107,7 @@
       <circle cx="25" cy="25" r="4" fill="white"/>
     </g>
     <text x="110" y="95" text-anchor="middle" fill="white" font-size="22" font-weight="bold">Frontend</text>
-    <text x="110" y="118" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="14">React 18 + TypeScript</text>
+    <text x="110" y="118" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="14">React 19 + TypeScript</text>
     <text x="110" y="138" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="14">Tailwind CSS + Radix UI</text>
   </g>
 
@@ -122,11 +122,13 @@
   <!-- Backend Zone -->
   <g transform="translate(620, 200)" filter="url(#shadow)">
     <rect x="0" y="0" width="260" height="200" rx="16" fill="url(#backendGrad)"/>
-    <!-- Spring leaf icon -->
-    <path d="M130 35 Q142 58 130 80 Q118 58 130 35" fill="white" opacity="0.9"/>
-    <path d="M130 46 Q154 58 148 80" fill="none" stroke="white" stroke-width="2"/>
+    <!-- Go gopher icon (simplified) -->
+    <circle cx="130" cy="45" r="18" fill="white" opacity="0.9"/>
+    <circle cx="123" cy="40" r="4" fill="#ea580c"/>
+    <circle cx="137" cy="40" r="4" fill="#ea580c"/>
+    <path d="M120 52 Q130 60 140 52" fill="none" stroke="#ea580c" stroke-width="2"/>
     <text x="130" y="115" text-anchor="middle" fill="white" font-size="24" font-weight="bold">Backend</text>
-    <text x="130" y="145" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="14">Spring Boot 3.2 + Java 21</text>
+    <text x="130" y="145" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="14">Go 1.25 + Chi Router</text>
     <text x="130" y="168" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="12">JWT Auth + Multi-tenant</text>
     <text x="130" y="187" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="12">Prometheus Metrics</text>
   </g>
@@ -195,7 +197,7 @@
 
   <!-- Backend to PostgreSQL -->
   <path d="M880 270 L950 195" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)"/>
-  <text x="900" y="220" text-anchor="middle" fill="#94a3b8" font-size="12">JPA/SQL</text>
+  <text x="900" y="220" text-anchor="middle" fill="#94a3b8" font-size="12">SQL/pgvector</text>
 
   <!-- Backend to FalkorDB -->
   <path d="M880 315 L950 370" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)"/>
@@ -227,10 +229,10 @@
   <g transform="translate(450, 620)">
     <rect x="0" y="0" width="350" height="145" rx="12" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <text x="175" y="28" text-anchor="middle" fill="#f8fafc" font-size="16" font-weight="bold">Features</text>
-    <text x="22" y="55" fill="#94a3b8" font-size="13"> Multi-tenant Architecture</text>
-    <text x="22" y="78" fill="#94a3b8" font-size="13"> JWT Authentication</text>
-    <text x="22" y="101" fill="#94a3b8" font-size="13"> Vector Search (384 dims)</text>
-    <text x="22" y="124" fill="#94a3b8" font-size="13"> Memory Relationships (Graph)</text>
+    <text x="22" y="55" fill="#94a3b8" font-size="13"> Multi-tenant + JWT Auth</text>
+    <text x="22" y="78" fill="#94a3b8" font-size="13"> Hybrid Search + Rerankers</text>
+    <text x="22" y="101" fill="#94a3b8" font-size="13"> Knowledge Graph + Spreading Activation</text>
+    <text x="22" y="124" fill="#94a3b8" font-size="13"> MCP Server + PII Masking</text>
   </g>
 
   <!-- Tech Stack Panel -->
@@ -238,9 +240,9 @@
     <rect x="0" y="0" width="310" height="145" rx="12" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <text x="155" y="28" text-anchor="middle" fill="#f8fafc" font-size="16" font-weight="bold">Tech Stack</text>
     <text x="22" y="55" fill="#0ea5e9" font-size="12" font-weight="bold">Frontend:</text>
-    <text x="100" y="55" fill="#94a3b8" font-size="12">React 18, TypeScript</text>
+    <text x="100" y="55" fill="#94a3b8" font-size="12">React 19, TypeScript</text>
     <text x="22" y="78" fill="#f97316" font-size="12" font-weight="bold">Backend:</text>
-    <text x="100" y="78" fill="#94a3b8" font-size="12">Spring Boot 3.2, Java 21</text>
+    <text x="100" y="78" fill="#94a3b8" font-size="12">Go 1.25, Chi Router</text>
     <text x="22" y="101" fill="#3b82f6" font-size="12" font-weight="bold">Database:</text>
     <text x="100" y="101" fill="#94a3b8" font-size="12">PostgreSQL 16, FalkorDB</text>
     <text x="22" y="124" fill="#dc2626" font-size="12" font-weight="bold">Cache:</text>
@@ -266,5 +268,5 @@
   </g>
 
   <!-- Footer -->
-  <text x="600" y="890" text-anchor="middle" fill="#475569" font-size="14">Brain Sentry v1.0 - IntegrAllTech 2025</text>
+  <text x="600" y="890" text-anchor="middle" fill="#475569" font-size="14">Brain Sentry v2.0 - IntegrAllTech 2025</text>
 </svg>
