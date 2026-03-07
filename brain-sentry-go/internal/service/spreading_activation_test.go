@@ -94,3 +94,111 @@ func TestActivationResult_Structure(t *testing.T) {
 		t.Error("expected 1 activation")
 	}
 }
+
+// --- Extended spreading activation tests ---
+
+func TestSpread_SeedActivationsLessThanSeedIDs(t *testing.T) {
+	svc := NewSpreadingActivationService(nil, nil)
+	// 3 seeds but only 2 activations provided
+	result, err := svc.Spread(nil, []string{"m1", "m2", "m3"}, []float64{0.8, 0.6}, "t1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.SeedIDs) != 3 {
+		t.Errorf("expected 3 seeds, got %d", len(result.SeedIDs))
+	}
+	// Third seed should use default activation=1.0 (not panic)
+}
+
+func TestSpread_SingleSeed_NilClient(t *testing.T) {
+	svc := NewSpreadingActivationService(nil, nil)
+	result, err := svc.Spread(nil, []string{"m1"}, []float64{1.0}, "t1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.SeedIDs) != 1 {
+		t.Errorf("expected 1 seed, got %d", len(result.SeedIDs))
+	}
+	if result.TotalActivated != 0 {
+		t.Error("expected 0 activated without graph client")
+	}
+}
+
+func TestDecayFormula_PerHop(t *testing.T) {
+	// Verify the math: each hop decays by factor 0.5
+	// hop 0 (seed): 1.0
+	// hop 1: 1.0 * 0.5 = 0.5
+	// hop 2: 0.5 * 0.5 = 0.25
+	// hop 3: 0.25 * 0.5 = 0.125 (> 0.05 threshold, would propagate if there were neighbors)
+	svc := NewSpreadingActivationService(nil, nil)
+	activation := 1.0
+	for hop := 1; hop <= svc.maxHops; hop++ {
+		activation *= svc.decayFactor
+		expected := 1.0
+		for i := 0; i < hop; i++ {
+			expected *= 0.5
+		}
+		if activation != expected {
+			t.Errorf("hop %d: got %f, want %f", hop, activation, expected)
+		}
+	}
+	// After 3 hops: 0.125 > 0.05 (would still propagate)
+	if activation < svc.minThreshold {
+		t.Error("activation at max hops should still be above threshold")
+	}
+}
+
+func TestMinThresholdFormula(t *testing.T) {
+	svc := NewSpreadingActivationService(nil, nil)
+	// Starting activation that decays below threshold in 1 hop
+	startActivation := 0.09
+	propagated := startActivation * svc.decayFactor // 0.09 * 0.5 = 0.045
+	if propagated >= svc.minThreshold {
+		t.Error("expected 0.045 < 0.05 threshold")
+	}
+
+	// Starting activation that stays above threshold
+	startActivation = 0.2
+	propagated = startActivation * svc.decayFactor // 0.2 * 0.5 = 0.1
+	if propagated < svc.minThreshold {
+		t.Error("expected 0.1 >= 0.05 threshold")
+	}
+}
+
+func TestSortActivations_SingleElement(t *testing.T) {
+	activations := []MemoryActivation{
+		{MemoryID: "only", Activation: 0.5},
+	}
+	sortActivations(activations)
+	if activations[0].MemoryID != "only" {
+		t.Error("expected unchanged")
+	}
+}
+
+func TestSortActivations_AllSameActivation(t *testing.T) {
+	activations := []MemoryActivation{
+		{MemoryID: "a", Activation: 0.5},
+		{MemoryID: "b", Activation: 0.5},
+		{MemoryID: "c", Activation: 0.5},
+	}
+	sortActivations(activations) // should not panic
+	if len(activations) != 3 {
+		t.Error("expected 3 elements preserved")
+	}
+}
+
+func TestSortActivations_Empty(t *testing.T) {
+	sortActivations(nil) // should not panic
+}
+
+func TestSpread_EmptySeedActivations_UsesDefault(t *testing.T) {
+	svc := NewSpreadingActivationService(nil, nil)
+	// nil activations should use default 1.0
+	result, err := svc.Spread(nil, []string{"m1", "m2"}, nil, "t1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.SeedIDs) != 2 {
+		t.Errorf("expected 2 seeds, got %d", len(result.SeedIDs))
+	}
+}

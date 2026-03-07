@@ -144,15 +144,90 @@ func main() {
 	consolidationService := service.NewConsolidationService(
 		memoryRepo, openRouterService, embeddingService, auditService,
 	)
-	_ = consolidationService // available for MCP tools and API
 
 	// Correction Service
 	correctionService := service.NewCorrectionService(memoryRepo, versionRepo, auditService)
+
+	// Profile Service
+	var profileService *service.ProfileService
+	if openRouterService != nil {
+		profileService = service.NewProfileService(openRouterService, memoryRepo)
+	}
+
+	// NL Cypher Service (requires FalkorDB + LLM)
+	var nlCypherService *service.NLCypherService
+	if openRouterService != nil && graphClient != nil {
+		nlCypherService = service.NewNLCypherService(openRouterService, graphClient)
+	}
+
+	// Reflection Service
+	var reflectionService *service.ReflectionService
+	if openRouterService != nil {
+		reflectionService = service.NewReflectionService(openRouterService, memoryRepo, memoryService)
+	}
+
+	// Reconciliation Service
+	var reconciliationService *service.ReconciliationService
+	if openRouterService != nil {
+		reconciliationService = service.NewReconciliationService(openRouterService, memoryRepo, memoryService)
+	}
+
+	// Retrieval Planner Service
+	var retrievalPlannerService *service.RetrievalPlannerService
+	if openRouterService != nil {
+		retrievalPlannerService = service.NewRetrievalPlannerService(openRouterService, memoryRepo, memoryGraphRepo, embeddingService)
+	}
+
+	// Louvain Community Detection (requires FalkorDB)
+	var louvainService *service.LouvainService
+	if graphClient != nil {
+		louvainService = service.NewLouvainService(graphClient)
+	}
+
+	// Spreading Activation (requires FalkorDB)
+	var spreadingActivationService *service.SpreadingActivationService
+	if memoryGraphRepo != nil && graphClient != nil {
+		spreadingActivationService = service.NewSpreadingActivationService(memoryGraphRepo, graphClient)
+	}
+
+	// Task Scheduler (requires Redis)
+	var taskScheduler *service.TaskScheduler
+	if redisCache != nil {
+		taskScheduler = service.NewTaskScheduler(redisCache.Client(), service.DefaultTaskSchedulerConfig())
+		go func() {
+			if err := taskScheduler.Start(ctx); err != nil {
+				logger.Error("task scheduler start error", "error", err)
+			}
+		}()
+	}
+
+	// Connector Service
+	connectorRegistry := service.NewConnectorRegistry()
+	var connectorService *service.ConnectorService
+	if taskScheduler != nil {
+		connectorService = service.NewConnectorService(connectorRegistry, taskScheduler)
+	}
+
+	// Benchmark Service
+	benchmarkService := service.NewBenchmarkService()
+
+	// Circuit Breaker Registry & LLM Observer
+	cbRegistry := service.NewCircuitBreakerRegistry()
+	llmObserver := service.NewMetricsObserver()
+
+	// PII Service
+	piiService := service.NewPIIService()
 
 	// Session Service
 	sessionRepo := postgres.NewSessionRepository(pool)
 	sessionService := service.NewSessionService(service.DefaultSessionConfig(), sessionRepo)
 	sessionService.Start()
+
+	// Cross-Session Service
+	var crossSessionService *service.CrossSessionService
+	if openRouterService != nil {
+		crossSessionService = service.NewCrossSessionService(memoryRepo, openRouterService, sessionService)
+	}
 
 	// Batch Service
 	batchService := service.NewBatchService(memoryRepo, embeddingService, auditService)
@@ -195,6 +270,61 @@ func main() {
 		entityGraphHandler = handler.NewEntityGraphHandler(entityGraphService, memoryService)
 	}
 
+	// New handlers for previously unexposed services
+	var profileHandler *handler.ProfileHandler
+	if profileService != nil {
+		profileHandler = handler.NewProfileHandler(profileService)
+	}
+
+	var nlQueryHandler *handler.NLQueryHandler
+	if nlCypherService != nil {
+		nlQueryHandler = handler.NewNLQueryHandler(nlCypherService)
+	}
+
+	var reflectionHandler *handler.ReflectionHandler
+	if reflectionService != nil {
+		reflectionHandler = handler.NewReflectionHandler(reflectionService)
+	}
+
+	var reconciliationHandler *handler.ReconciliationHandler
+	if reconciliationService != nil {
+		reconciliationHandler = handler.NewReconciliationHandler(reconciliationService)
+	}
+
+	var retrievalHandler *handler.RetrievalHandler
+	if retrievalPlannerService != nil {
+		retrievalHandler = handler.NewRetrievalHandler(retrievalPlannerService)
+	}
+
+	var communitiesHandler *handler.CommunitiesHandler
+	if louvainService != nil {
+		communitiesHandler = handler.NewCommunitiesHandler(louvainService)
+	}
+
+	var activationHandler *handler.ActivationHandler
+	if spreadingActivationService != nil {
+		activationHandler = handler.NewActivationHandler(spreadingActivationService)
+	}
+
+	var crossSessionHandler *handler.CrossSessionHandler
+	if crossSessionService != nil {
+		crossSessionHandler = handler.NewCrossSessionHandler(crossSessionService)
+	}
+
+	var connectorsHandler *handler.ConnectorsHandler
+	if connectorService != nil {
+		connectorsHandler = handler.NewConnectorsHandler(connectorService, connectorRegistry)
+	}
+
+	var tasksHandler *handler.TasksHandler
+	if taskScheduler != nil {
+		tasksHandler = handler.NewTasksHandler(taskScheduler)
+	}
+
+	consolidationHandler := handler.NewConsolidationHandler(consolidationService)
+	benchmarkHandler := handler.NewBenchmarkHandler(benchmarkService, memoryService)
+	adminHandler := handler.NewAdminHandler(cbRegistry, llmObserver, piiService)
+
 	// Router
 	r := chi.NewRouter()
 
@@ -211,9 +341,6 @@ func main() {
 	r.Use(middleware.CORS(cfg.Security.CORS.AllowedOrigins, cfg.Security.CORS.AllowedMethods))
 	r.Use(middleware.RateLimit(rateLimiter))
 
-	// Prometheus metrics endpoint (no auth)
-	r.Handle("/metrics", promhttp.Handler())
-
 	// Public paths (no auth required)
 	publicPaths := []string{
 		cfg.Server.ContextPath + "/v1/auth/",
@@ -225,6 +352,9 @@ func main() {
 	r.Use(middleware.JWTAuth(jwtService, publicPaths))
 	r.Use(middleware.TenantExtractor(cfg.Tenant.DefaultID))
 
+	// Prometheus metrics endpoint (no auth — listed in publicPaths above)
+	r.Handle("/metrics", promhttp.Handler())
+
 	// Routes
 	r.Route(cfg.Server.ContextPath, func(r chi.Router) {
 		// Health
@@ -235,6 +365,7 @@ func main() {
 			r.Post("/login", authHandler.Login)
 			r.Post("/logout", authHandler.Logout)
 			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/demo", authHandler.DemoLogin)
 			r.Get("/sso/authorize", ssoHandler.GetAuthURL)
 			r.Post("/sso/callback", ssoHandler.Callback)
 			r.Get("/sso/config", ssoHandler.GetConfig)
@@ -374,6 +505,83 @@ func main() {
 			r.Post("/sse", mcpHandler.HandleSSE)
 			r.Post("/batch", mcpHandler.HandleBatch)
 		})
+
+		// Profile
+		if profileHandler != nil {
+			r.Route("/v1/profile", func(r chi.Router) {
+				r.Get("/", profileHandler.GetProfile)
+				r.Get("/{userId}", profileHandler.GetProfileByUser)
+			})
+		}
+
+		// NL Graph Query
+		if nlQueryHandler != nil {
+			r.Post("/v1/graph/nl-query", nlQueryHandler.Query)
+		}
+
+		// Graph Communities (Louvain)
+		if communitiesHandler != nil {
+			r.Get("/v1/graph/communities", communitiesHandler.DetectCommunities)
+		}
+
+		// Reflection
+		if reflectionHandler != nil {
+			r.Post("/v1/reflect", reflectionHandler.RunReflection)
+		}
+
+		// Reconciliation
+		if reconciliationHandler != nil {
+			r.Post("/v1/reconcile", reconciliationHandler.Reconcile)
+		}
+
+		// Retrieval Planner (advanced search)
+		if retrievalHandler != nil {
+			r.Post("/v1/memories/plan-search", retrievalHandler.PlanSearch)
+		}
+
+		// Spreading Activation
+		if activationHandler != nil {
+			r.Post("/v1/memories/activate", activationHandler.Activate)
+		}
+
+		// Cross-Session
+		if crossSessionHandler != nil {
+			r.Get("/v1/sessions/{id}/events", crossSessionHandler.GetSessionEvents)
+			r.Get("/v1/sessions/{id}/cross-context", crossSessionHandler.GetCrossContext)
+		}
+
+		// Connectors
+		if connectorsHandler != nil {
+			r.Route("/v1/connectors", func(r chi.Router) {
+				r.Get("/", connectorsHandler.List)
+				r.Post("/sync-all", connectorsHandler.SyncAll)
+				r.Post("/{name}/sync", connectorsHandler.Sync)
+			})
+		}
+
+		// Tasks
+		if tasksHandler != nil {
+			r.Route("/v1/tasks", func(r chi.Router) {
+				r.Get("/metrics", tasksHandler.Metrics)
+				r.Get("/pending", tasksHandler.Pending)
+			})
+		}
+
+		// Consolidation
+		r.Post("/v1/consolidate", consolidationHandler.Consolidate)
+
+		// Benchmark (admin only)
+		r.With(middleware.RequireRole(middleware.RoleAdmin)).Post("/v1/benchmark/run", benchmarkHandler.RunBenchmark)
+
+		// Admin endpoints
+		r.Route("/v1/admin", func(r chi.Router) {
+			r.Use(middleware.RequireRole(middleware.RoleAdmin))
+			r.Get("/circuit-breakers", adminHandler.GetCircuitBreakers)
+			r.Get("/llm-metrics", adminHandler.GetLLMMetrics)
+		})
+
+		// PII Scanner
+		r.Post("/v1/pii/scan", adminHandler.ScanPII)
 	})
 
 	// Also mount health at root for container probes
@@ -416,6 +624,9 @@ func main() {
 	// Stop background services
 	learningService.Stop()
 	sessionService.Stop()
+	if taskScheduler != nil {
+		taskScheduler.Stop()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()

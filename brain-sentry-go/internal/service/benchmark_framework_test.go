@@ -315,3 +315,141 @@ func TestBenchmarkMetricTypes(t *testing.T) {
 		t.Errorf("expected 9 metric types, got %d", len(types))
 	}
 }
+
+// --- Extended benchmark tests ---
+
+func TestMRR_RelevantAtLastPosition(t *testing.T) {
+	svc := NewBenchmarkService()
+	q := BenchmarkQuery{
+		ID:          "q1",
+		Query:       "test",
+		ExpectedIDs: []string{"m4"},
+	}
+	result := svc.evaluateQuery(q, []string{"m1", "m2", "m3", "m4"}, 0)
+	expectedMRR := 1.0 / 4.0
+	if result.MRR < expectedMRR-0.001 || result.MRR > expectedMRR+0.001 {
+		t.Errorf("expected MRR ~0.25, got %f", result.MRR)
+	}
+}
+
+func TestMRR_NoRelevantItem(t *testing.T) {
+	svc := NewBenchmarkService()
+	q := BenchmarkQuery{
+		ID:          "q1",
+		Query:       "test",
+		ExpectedIDs: []string{"m99"},
+	}
+	result := svc.evaluateQuery(q, []string{"m1", "m2", "m3"}, 0)
+	if result.MRR != 0 {
+		t.Errorf("expected MRR 0 for no relevant items, got %f", result.MRR)
+	}
+}
+
+func TestMRR_MultipleRelevantItems_FirstRankCounts(t *testing.T) {
+	svc := NewBenchmarkService()
+	q := BenchmarkQuery{
+		ID:          "q1",
+		Query:       "test",
+		ExpectedIDs: []string{"m1", "m3"},
+	}
+	result := svc.evaluateQuery(q, []string{"m2", "m3", "m1"}, 0)
+	// First relevant (m3) is at position 2 -> MRR = 1/2
+	expectedMRR := 1.0 / 2.0
+	if result.MRR < expectedMRR-0.001 || result.MRR > expectedMRR+0.001 {
+		t.Errorf("expected MRR ~0.5, got %f", result.MRR)
+	}
+}
+
+func TestNDCG_EmptyRetrieved(t *testing.T) {
+	q := BenchmarkQuery{
+		ID:          "q1",
+		ExpectedIDs: []string{"m1"},
+	}
+	ndcg := computeNDCG(q, nil)
+	if ndcg != 0 {
+		t.Errorf("expected NDCG 0 for empty retrieved, got %f", ndcg)
+	}
+}
+
+func TestNDCG_EmptyExpected(t *testing.T) {
+	q := BenchmarkQuery{
+		ID:          "q1",
+		ExpectedIDs: nil,
+	}
+	ndcg := computeNDCG(q, []string{"m1", "m2"})
+	if ndcg != 0 {
+		t.Errorf("expected NDCG 0 for empty expected, got %f", ndcg)
+	}
+}
+
+func TestNDCG_AllIrrelevant(t *testing.T) {
+	q := BenchmarkQuery{
+		ID:          "q1",
+		ExpectedIDs: []string{"m1", "m2"},
+	}
+	ndcg := computeNDCG(q, []string{"m3", "m4"})
+	if ndcg != 0 {
+		t.Errorf("expected NDCG 0 for all irrelevant, got %f", ndcg)
+	}
+}
+
+func TestF1_ZeroRecallAndPrecision(t *testing.T) {
+	svc := NewBenchmarkService()
+	q := BenchmarkQuery{
+		ID:          "q1",
+		Query:       "test",
+		ExpectedIDs: []string{"m1"},
+	}
+	result := svc.evaluateQuery(q, []string{"m2"}, 0)
+	if result.F1 != 0 {
+		t.Errorf("expected F1 0 when no hits, got %f", result.F1)
+	}
+}
+
+func TestPercentile_SingleElement(t *testing.T) {
+	latencies := []time.Duration{5 * time.Millisecond}
+	stats := computeLatencyStats(latencies)
+	if stats.P50 != 5*time.Millisecond {
+		t.Errorf("expected P50=5ms, got %s", stats.P50)
+	}
+	if stats.P95 != 5*time.Millisecond {
+		t.Errorf("expected P95=5ms, got %s", stats.P95)
+	}
+	if stats.P99 != 5*time.Millisecond {
+		t.Errorf("expected P99=5ms, got %s", stats.P99)
+	}
+}
+
+func TestPercentile_TwoElements(t *testing.T) {
+	latencies := []time.Duration{1 * time.Millisecond, 10 * time.Millisecond}
+	stats := computeLatencyStats(latencies)
+	if stats.Min != 1*time.Millisecond {
+		t.Errorf("expected min=1ms, got %s", stats.Min)
+	}
+	if stats.Max != 10*time.Millisecond {
+		t.Errorf("expected max=10ms, got %s", stats.Max)
+	}
+}
+
+func TestRunBenchmark_AllMetricsPresent(t *testing.T) {
+	svc := NewBenchmarkService()
+	dataset := &BenchmarkDataset{
+		Name:    "test",
+		Queries: []BenchmarkQuery{{ID: "q1", Query: "test", ExpectedIDs: []string{"m1"}}},
+	}
+	searchFn := func(query string, limit int) ([]string, time.Duration, error) {
+		return []string{"m1"}, 1 * time.Millisecond, nil
+	}
+	report, err := svc.RunBenchmark(dataset, searchFn, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	requiredMetrics := []BenchmarkMetricType{
+		MetricRecall, MetricPrecision, MetricF1, MetricMRR, MetricNDCG, MetricThroughput,
+	}
+	for _, mt := range requiredMetrics {
+		if _, ok := report.Metrics[mt]; !ok {
+			t.Errorf("missing metric: %s", mt)
+		}
+	}
+}

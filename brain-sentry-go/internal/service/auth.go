@@ -105,6 +105,63 @@ func (s *AuthService) RefreshToken(refreshToken string) (*dto.LoginResponse, err
 	}, nil
 }
 
+// DemoLogin creates or retrieves the demo user and returns a login response.
+func (s *AuthService) DemoLogin(ctx context.Context) (*dto.LoginResponse, error) {
+	const demoEmail = "demo@example.com"
+	const demoPassword = "demo123"
+	const demoTenantID = "a9f814d2-4dae-41f3-851b-8aa3d4706561"
+
+	// Try to find existing demo user
+	user, err := s.userRepo.FindByEmail(ctx, demoEmail)
+	if err != nil {
+		// User doesn't exist, create it
+		hash, hashErr := HashPassword(demoPassword, 12)
+		if hashErr != nil {
+			return nil, hashErr
+		}
+
+		user = &domain.User{
+			Email:         demoEmail,
+			Name:          "Demo User",
+			PasswordHash:  hash,
+			TenantID:      demoTenantID,
+			Roles:         []string{"ADMIN", "USER"},
+			Active:        true,
+			EmailVerified: true,
+			CreatedAt:     time.Now(),
+		}
+		if createErr := s.userRepo.Create(ctx, user); createErr != nil {
+			return nil, createErr
+		}
+	}
+
+	if !user.Active {
+		return nil, ErrAccountDisabled
+	}
+
+	token, err := s.jwtService.GenerateToken(user.ID, user.Email, user.TenantID, user.Roles)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Email, user.TenantID, user.Roles)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.LoginResponse{
+		Token:        token,
+		RefreshToken: refreshToken,
+		User: dto.UserResponse{
+			ID:    user.ID,
+			Email: user.Email,
+			Name:  user.Name,
+			Roles: user.Roles,
+		},
+		TenantID: user.TenantID,
+	}, nil
+}
+
 // HashPassword hashes a password using bcrypt.
 func HashPassword(password string, cost int) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)

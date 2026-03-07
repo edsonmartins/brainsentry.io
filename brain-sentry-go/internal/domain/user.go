@@ -14,5 +14,5 @@ type User struct {
 	CreatedAt     time.Time `json:"createdAt" db:"created_at"`
 	LastLoginAt   *time.Time `json:"lastLoginAt,omitempty" db:"last_login_at"`
 	EmailVerified bool      `json:"emailVerified" db:"email_verified"`
-	Metadata      string    `json:"metadata,omitempty" db:"metadata"`
+	Metadata      *string   `json:"metadata,omitempty" db:"metadata"`
 }

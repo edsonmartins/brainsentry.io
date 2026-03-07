@@ -57,6 +57,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// DemoLogin handles POST /v1/auth/demo — creates or retrieves the demo user and returns a token.
+func (h *AuthHandler) DemoLogin(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.authService.DemoLogin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "demo login failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // Logout handles POST /v1/auth/logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Stateless JWT - client discards token

@@ -46,6 +46,70 @@ curl http://localhost:8080/health
 # {"status":"UP"}
 ```
 
+## TUI (Terminal User Interface)
+
+Interactive terminal app for managing memories, sessions, and search — built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and the [Charm](https://charm.sh) ecosystem.
+
+### Running
+
+```bash
+# Run directly
+make tui
+
+# Or build and run
+make tui-build
+./bin/brainsentry-tui
+```
+
+### Configuration
+
+| Env Variable | Description | Default |
+|---|---|---|
+| `BRAINSENTRY_URL` | Backend API URL | `http://localhost:8080` |
+| `BRAINSENTRY_TENANT` | Tenant ID | `default` |
+| `BRAINSENTRY_TOKEN_FILE` | Path to persist auth token | `~/.brainsentry-token` |
+
+### Features
+
+- **Dashboard** — Stats cards, category/importance bar charts, system metrics, recent memories
+- **Memory List** — Paginated table with sorting, colored category/importance badges, delete with confirmation
+- **Memory Detail** — Markdown-rendered content (via glamour), metadata badges, tags, related memories, code examples with syntax highlighting
+- **Memory Form** — Create/edit with category dropdown, tags, content textarea (powered by huh forms with Catppuccin theme)
+- **Semantic Search** — Full-text query with relevance scores, results in sortable table
+- **Sessions** — Session list with colored status (Active/Expired/Completed), memory/interception/note counts
+- **Relationships** — Visual strength bars, relationship types, navigate to related memories
+- **Help overlay** — Full keybinding reference (`?` to toggle)
+
+### Keybindings
+
+| Key | Action |
+|---|---|
+| `1-4` | Switch view (Dashboard, Memories, Search, Sessions) |
+| `j/k` | Navigate up/down |
+| `g/G` | Jump to top/bottom |
+| `Enter` | Select/open |
+| `Esc` | Back/cancel |
+| `/` | Open search |
+| `n` | New memory |
+| `e` | Edit memory |
+| `d` | Delete memory |
+| `r` | View relationships |
+| `Ctrl+D/U` | Page down/up |
+| `Ctrl+S` | Save (in forms) |
+| `?` | Toggle help |
+| `q` | Quit |
+
+### Stack
+
+| Library | Purpose |
+|---|---|
+| [bubbletea](https://github.com/charmbracelet/bubbletea) | TUI framework (Elm architecture) |
+| [lipgloss](https://github.com/charmbracelet/lipgloss) | Terminal styling (CSS-like) |
+| [huh](https://github.com/charmbracelet/huh) | Forms with Catppuccin theme |
+| [glamour](https://github.com/charmbracelet/glamour) | Markdown rendering with Dracula theme |
+| [bubble-table](https://github.com/evertras/bubble-table) | Tables with sorting, pagination, styled cells |
+| [bubbles](https://github.com/charmbracelet/bubbles) | TextInput, Textarea, Viewport, Spinner |
+
 ## Docker
 
 ### Full stack
@@ -182,6 +246,7 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/v1/auth/login` | Login |
+| POST | `/api/v1/auth/demo` | Demo login |
 | POST | `/api/v1/auth/logout` | Logout |
 | POST | `/api/v1/auth/refresh` | Refresh token |
 
@@ -288,40 +353,51 @@ The MCP server exposes these tools for AI agents:
 
 ```
 brain-sentry-go/
-├── cmd/server/              # Entrypoint, dependency wiring
+├── cmd/
+│   ├── server/                 # HTTP server entrypoint
+│   ├── tui/                    # Terminal UI app
+│   │   ├── main.go             # TUI entrypoint
+│   │   ├── app.go              # Root model, view routing, navigation stack
+│   │   ├── keys/               # Vim-style keybindings
+│   │   ├── theme/              # Catppuccin Mocha palette, reusable styles
+│   │   ├── components/         # StatusBar, Spinner, Toast, Confirm, Charts
+│   │   └── views/              # Login, Dashboard, MemoryList, MemoryDetail,
+│   │                           # MemoryForm, Search, Sessions, Relationships, Help
+│   └── cli/                    # CLI tool
 ├── internal/
-│   ├── cache/               # Redis cache layer
-│   ├── config/              # YAML + env config
-│   ├── domain/              # Domain models, enums, value objects
-│   ├── dto/                 # Request/Response DTOs
-│   ├── handler/             # HTTP handlers (Chi router)
-│   ├── mcp/                 # MCP protocol server (JSON-RPC 2.0)
-│   ├── middleware/          # Auth, CORS, Tenant, Rate Limit, Metrics
+│   ├── cache/                  # Redis cache layer
+│   ├── client/                 # HTTP SDK client (auth, memories, sessions, etc.)
+│   ├── config/                 # YAML + env config
+│   ├── domain/                 # Domain models, enums, value objects
+│   ├── dto/                    # Request/Response DTOs
+│   ├── handler/                # HTTP handlers (Chi router)
+│   ├── mcp/                    # MCP protocol server (JSON-RPC 2.0)
+│   ├── middleware/             # Auth, CORS, Tenant, Rate Limit, Metrics
 │   ├── repository/
-│   │   ├── postgres/        # PostgreSQL repositories + migrations
-│   │   └── graph/           # FalkorDB graph repositories
-│   └── service/             # Business logic (38 service files)
-│       ├── memory.go        # Core CRUD + hybrid search
-│       ├── interception.go  # Context injection pipeline
-│       ├── scoring.go       # Composite hybrid scoring
-│       ├── classifier.go    # Auto memory type classification
-│       ├── decay.go         # Temporal decay computation
-│       ├── reconciliation.go # LLM fact reconciliation
+│   │   ├── postgres/           # PostgreSQL repositories + migrations
+│   │   └── graph/              # FalkorDB graph repositories
+│   └── service/                # Business logic (38 service files)
+│       ├── memory.go           # Core CRUD + hybrid search
+│       ├── interception.go     # Context injection pipeline
+│       ├── scoring.go          # Composite hybrid scoring
+│       ├── classifier.go       # Auto memory type classification
+│       ├── decay.go            # Temporal decay computation
+│       ├── reconciliation.go   # LLM fact reconciliation
 │       ├── retrieval_planner.go # Intent-aware retrieval
-│       ├── profile.go       # User profile generation
-│       ├── reflection.go    # Automatic reflection loop
+│       ├── profile.go          # User profile generation
+│       ├── reflection.go       # Automatic reflection loop
 │       ├── spreading_activation.go # Graph activation propagation
-│       ├── nl_cypher.go     # Natural language → Cypher
-│       ├── louvain.go       # Community detection
-│       ├── cross_session.go # Cross-session pipeline
-│       ├── task_scheduler.go # Redis Streams scheduler
-│       ├── connector.go     # External connectors
-│       ├── benchmark.go     # Benchmarking framework
-│       ├── circuitbreaker.go # Circuit breaker pattern
-│       ├── reranker.go      # Pluggable rerankers
-│       └── ...              # + 20 more service files
-├── pkg/tenant/              # Tenant context utilities
-├── docs/                    # Swagger annotations
+│       ├── nl_cypher.go        # Natural language → Cypher
+│       ├── louvain.go          # Community detection
+│       ├── cross_session.go    # Cross-session pipeline
+│       ├── task_scheduler.go   # Redis Streams scheduler
+│       ├── connector.go        # External connectors
+│       ├── benchmark.go        # Benchmarking framework
+│       ├── circuitbreaker.go   # Circuit breaker pattern
+│       ├── reranker.go         # Pluggable rerankers
+│       └── ...                 # + 20 more service files
+├── pkg/tenant/                 # Tenant context utilities
+├── docs/                       # Swagger annotations
 ├── config.yaml
 ├── docker-compose.yml
 ├── Dockerfile

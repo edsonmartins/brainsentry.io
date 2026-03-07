@@ -1,4 +1,4 @@
-.PHONY: build run test lint clean dev docker-build docker-run docker-down
+.PHONY: build run test lint clean dev tui tui-build docker-build docker-run docker-down
 
 BINARY_NAME=brainsentry
 BUILD_DIR=./bin
@@ -11,6 +11,18 @@ run: build
 
 dev:
 	go run ./cmd/server
+
+tui:
+	go run ./cmd/tui
+
+tui-build:
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-tui ./cmd/tui
+
+cli:
+	go run ./cmd/cli
+
+cli-build:
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME)-cli ./cmd/cli
 
 test:
 	go test ./... -v -race

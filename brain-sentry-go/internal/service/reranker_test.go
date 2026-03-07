@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,5 +151,111 @@ func TestRankedMemory_Structure(t *testing.T) {
 	}
 	if rm.Reason != "highly relevant" {
 		t.Error("expected reason")
+	}
+}
+
+// --- Extended reranker tests ---
+
+func TestBM25Reranker_Parameters(t *testing.T) {
+	r := NewBM25Reranker()
+	if r.k1 != 1.2 {
+		t.Errorf("expected k1=1.2, got %f", r.k1)
+	}
+	if r.b != 0.75 {
+		t.Errorf("expected b=0.75, got %f", r.b)
+	}
+}
+
+func TestBM25Reranker_SingleDocument(t *testing.T) {
+	r := NewBM25Reranker()
+	memories := []domain.Memory{
+		{ID: "1", Content: "Go programming language", Summary: "Go lang", CreatedAt: time.Now()},
+	}
+	results, err := r.Rerank(context.Background(), "Go programming", memories)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Score <= 0 {
+		t.Errorf("expected positive score for matching document, got %f", results[0].Score)
+	}
+}
+
+func TestBM25Reranker_DocumentNotContainingTerm(t *testing.T) {
+	r := NewBM25Reranker()
+	memories := []domain.Memory{
+		{ID: "1", Content: "Python machine learning", Summary: "Python ML", CreatedAt: time.Now()},
+	}
+	results, err := r.Rerank(context.Background(), "Rust systems programming", memories)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Score != 0 {
+		t.Errorf("expected score 0 for non-matching document, got %f", results[0].Score)
+	}
+}
+
+func TestBM25Reranker_LengthNormalization(t *testing.T) {
+	r := NewBM25Reranker()
+	// Short doc and long doc both contain "Go" once
+	short := domain.Memory{ID: "short", Content: "Go backend", Summary: "", CreatedAt: time.Now()}
+	long := domain.Memory{ID: "long", Content: "Go " + strings.Repeat("other words ", 50), Summary: "", CreatedAt: time.Now()}
+	results, err := r.Rerank(context.Background(), "Go backend", []domain.Memory{long, short})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Short doc should score higher due to length normalization (b=0.75)
+	if results[0].Memory.ID != "short" {
+		t.Errorf("shorter document should rank higher, got %s first", results[0].Memory.ID)
+	}
+}
+
+func TestBM25Reranker_OrderIsDescending(t *testing.T) {
+	r := NewBM25Reranker()
+	memories := makeTestMemories()
+	results, err := r.Rerank(context.Background(), "Go backend development programming", memories)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i := 1; i < len(results); i++ {
+		if results[i].Score > results[i-1].Score {
+			t.Errorf("results not in descending order: [%d]=%f > [%d]=%f", i, results[i].Score, i-1, results[i-1].Score)
+		}
+	}
+}
+
+func TestBM25Reranker_SummaryContribution(t *testing.T) {
+	r := NewBM25Reranker()
+	// Term is only in summary, not in content
+	memories := []domain.Memory{
+		{ID: "1", Content: "something else entirely", Summary: "Go backend", CreatedAt: time.Now()},
+		{ID: "2", Content: "Python ML", Summary: "Python ML", CreatedAt: time.Now()},
+	}
+	results, err := r.Rerank(context.Background(), "Go backend", memories)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Memory.ID != "1" {
+		t.Error("memory with matching summary should rank first")
+	}
+}
+
+func TestHybridScoreReranker_UsesDefaultWeights(t *testing.T) {
+	r := NewHybridScoreReranker()
+	if r.weights.Similarity != DefaultScoringWeights.Similarity {
+		t.Error("expected default weights")
+	}
+}
+
+func TestLLMReranker_FallbackWithEmptyMemories(t *testing.T) {
+	r := NewLLMReranker(nil)
+	results, err := r.Rerank(context.Background(), "test", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
 	}
 }

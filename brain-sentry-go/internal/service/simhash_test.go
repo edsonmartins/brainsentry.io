@@ -98,3 +98,61 @@ func TestExtractChainOfThought_NoThought(t *testing.T) {
 		t.Error("expected unchanged content")
 	}
 }
+
+// --- Extended SimHash tests ---
+
+func TestSimHashHammingDistance_AllBits(t *testing.T) {
+	dist := SimHashHammingDistance(0xFFFFFFFFFFFFFFFF, 0x0)
+	if dist != 64 {
+		t.Errorf("expected distance 64, got %d", dist)
+	}
+}
+
+func TestSimHashFromHex_InvalidInput(t *testing.T) {
+	// Should not panic on invalid hex (non-hex chars contribute 0 nibbles but shifts still occur)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("SimHashFromHex panicked on invalid input: %v", r)
+		}
+	}()
+	_ = SimHashFromHex("xyz invalid hex")
+}
+
+func TestSimHashFromHex_ShortInput(t *testing.T) {
+	result := SimHashFromHex("abc")
+	if result != 0xabc {
+		t.Errorf("expected 0xabc, got %x", result)
+	}
+}
+
+func TestComputeSimHash_SingleToken(t *testing.T) {
+	h := ComputeSimHash("hello")
+	if h == 0 {
+		t.Error("single token should produce non-zero hash")
+	}
+}
+
+func TestComputeSimHash_OrderIndependence(t *testing.T) {
+	h1 := ComputeSimHash("dog cat bird")
+	h2 := ComputeSimHash("bird cat dog")
+	// SimHash sums bit counts per token, so order shouldn't matter
+	if h1 != h2 {
+		t.Errorf("SimHash should be order-independent: %x != %x", h1, h2)
+	}
+}
+
+func TestSimHashDedupThreshold(t *testing.T) {
+	// distance <= 3 = near-duplicate in CreateMemory logic
+	// distance 4-8 = supersession candidate
+	// distance > 8 = different content
+	h1 := ComputeSimHash("The quick brown fox jumps over the lazy dog")
+	h2 := ComputeSimHash("The quick brown fox jumps over the lazy dog") // identical
+	dist := SimHashHammingDistance(h1, h2)
+	if dist != 0 {
+		t.Errorf("identical text distance should be 0, got %d", dist)
+	}
+	// Verify that distance 0 <= 3 (near-duplicate threshold)
+	if dist > 3 {
+		t.Error("identical text should be within near-duplicate threshold")
+	}
+}
