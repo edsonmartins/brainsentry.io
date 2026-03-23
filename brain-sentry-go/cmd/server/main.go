@@ -584,6 +584,21 @@ func main() {
 		r.Post("/v1/pii/scan", adminHandler.ScanPII)
 	})
 
+	// Integration endpoints (service-to-service auth)
+	r.Route("/api/v1/integration", func(r chi.Router) {
+		r.Use(middleware.ServiceAuth)
+		r.Post("/execution/start", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok","message":"integration endpoint ready"}`))
+		})
+		r.Post("/execution/end", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok","message":"integration endpoint ready"}`))
+		})
+	})
+
 	// Also mount health at root for container probes
 	r.Get("/health", handler.Health)
 
