@@ -225,14 +225,33 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 - Structured logging via slog
 - Audit trails with detailed event logging
 
-### Security
+### Cognitive Memory Pipeline (new)
+- **Memory Compression** — LLM-driven extraction of `facts[]`, `concepts[]`, `narrative`, `importance` before storage
+- **Self-Correcting LLM** — JSON output validation with retry and error feedback loop
+- **Semantic/Procedural Consolidation** — Automatic extraction of cross-session facts and workflow procedures
+- **Query Expansion** — LLM generates 3-5 query reformulations for better search recall
+- **RRF Scoring** — Reciprocal Rank Fusion (`1/(k+rank)`, k=60) combining vector, text, and graph streams
+- **Session Diversity** — Max 3 results per session to avoid result skew
+- **Auto-Forget** — TTL expiry + contradiction detection (Jaccard >0.9) + low-value cleanup
+- **Cascading Staleness** — BFS propagation of staleness through knowledge graph when memories are superseded
+- **Sliding Window Enrichment** — Entity resolution (pronouns → names), preference extraction, context bridges
+- **Fallback Chain Provider** — Sequential LLM provider fallback with per-provider circuit breakers
+
+### Multi-Agent Coordination (new)
+- **Actions** — Workflow items with status lifecycle (pending → in_progress → blocked → completed)
+- **Leases** — Distributed locks on actions with TTL (1-60 min) and auto-expiry
+- **Dependency Propagation** — Automatic unblocking when parent action completes
+- **P2P Mesh Sync** — Peer registration with SSRF validation, scope-based data sharing, LWW merge
+
+### Privacy & Security
+- **Privacy Stripping** — Complete removal of secrets, env vars, `<private>` tags, GitHub PATs, AWS keys, Slack tokens before storage
+- **PII Detection & Masking** — Email, phone, SSN, credit card, API key, JWT, IP address, private key detection
 - JWT authentication with refresh tokens
 - SSO/OIDC integration
 - Multi-tenant isolation via context
-- PII detection and masking
 - Webhook HMAC signatures
 
-### Memory Benchmarking
+### Search Quality Benchmarking
 - Metrics: Recall, Precision, F1, MRR, NDCG (graded relevance)
 - Latency distribution: P50, P95, P99
 - Throughput measurement (queries/sec)
@@ -305,6 +324,29 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 | POST | `/api/v1/mcp/message` | JSON-RPC 2.0 message |
 | POST | `/api/v1/mcp/sse` | SSE transport |
 | POST | `/api/v1/mcp/batch` | Batch messages |
+
+### Cognitive Pipeline (new)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/auto-forget` | Run auto-forget (TTL + contradictions + low-value) |
+| POST | `/api/v1/semantic/consolidate` | Extract semantic facts and procedural workflows |
+
+### Actions & Leases (new)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/actions` | Create action |
+| GET | `/api/v1/actions` | List actions (filter by status) |
+| GET | `/api/v1/actions/{id}` | Get action by ID |
+| PUT | `/api/v1/actions/{id}/status` | Update action status |
+| POST | `/api/v1/actions/{id}/lease` | Acquire lease (distributed lock) |
+| DELETE | `/api/v1/actions/{id}/lease` | Release lease |
+
+### P2P Mesh (new)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/mesh/peers` | Register peer for sync |
+| GET | `/api/v1/mesh/peers` | List registered peers |
+| POST | `/api/v1/mesh/sync` | Sync scope with all peers |
 
 ### System
 | Method | Path | Description |
@@ -395,6 +437,19 @@ brain-sentry-go/
 │       ├── benchmark.go        # Benchmarking framework
 │       ├── circuitbreaker.go   # Circuit breaker pattern
 │       ├── reranker.go         # Pluggable rerankers
+│       ├── llm_provider.go    # LLM abstraction + FallbackChainProvider
+│       ├── memory_compression.go # LLM-driven fact/concept extraction
+│       ├── query_expansion.go # Query reformulation for search
+│       ├── auto_forget.go     # TTL + contradiction + low-value cleanup
+│       ├── cascading_staleness.go # Graph staleness propagation
+│       ├── semantic_memory.go # Semantic/procedural consolidation
+│       ├── self_correcting_llm.go # JSON validation + retry
+│       ├── rrf_scoring.go     # Reciprocal Rank Fusion
+│       ├── search_quality.go  # IR metrics (Recall, NDCG, MRR)
+│       ├── privacy_stripping.go # Secret/PII removal
+│       ├── sliding_window.go  # Entity resolution + enrichment
+│       ├── actions.go         # Multi-agent actions + leases
+│       ├── mesh_sync.go       # P2P sync with SSRF validation
 │       └── ...                 # + 20 more service files
 ├── pkg/tenant/                 # Tenant context utilities
 ├── docs/                       # Swagger annotations
