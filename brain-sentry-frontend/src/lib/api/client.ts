@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from "axios";
 
 // Configuração base da API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
 // Tipos de resposta da API
 export interface ApiResponse<T> {
@@ -216,6 +216,202 @@ class ApiClient {
   // Health check
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     const response = await this.client.get("/v1/stats/health");
+    return response.data;
+  }
+
+  // Profile
+  async getProfile(): Promise<any> {
+    const response = await this.client.get("/v1/profile");
+    return response.data;
+  }
+
+  // NL Graph Query
+  async nlQuery(question: string): Promise<any> {
+    const response = await this.client.post("/v1/graph/nl-query", { question });
+    return response.data;
+  }
+
+  // Reflection
+  async runReflection(): Promise<any> {
+    const response = await this.client.post("/v1/reflect");
+    return response.data;
+  }
+
+  // Reconciliation
+  async reconcileFacts(content: string, sessionId?: string): Promise<any> {
+    const response = await this.client.post("/v1/reconcile", { content, sessionId });
+    return response.data;
+  }
+
+  // Retrieval Planner
+  async planSearch(query: string, limit: number = 10): Promise<any> {
+    const response = await this.client.post("/v1/memories/plan-search", { query, limit });
+    return response.data;
+  }
+
+  // Spreading Activation
+  async activateMemories(seedIds: string[], seedActivations?: number[]): Promise<any> {
+    const response = await this.client.post("/v1/memories/activate", { seedIds, seedActivations });
+    return response.data;
+  }
+
+  // Graph Communities
+  async getCommunities(): Promise<any> {
+    const response = await this.client.get("/v1/graph/communities");
+    return response.data;
+  }
+
+  // Interception
+  async intercept(prompt: string, sessionId?: string): Promise<any> {
+    const response = await this.client.post("/v1/intercept", { prompt, sessionId });
+    return response.data;
+  }
+
+  // Compression
+  async compress(messages: any[], options?: any): Promise<any> {
+    const response = await this.client.post("/v1/compression/compress", { messages, ...options });
+    return response.data;
+  }
+
+  // Connectors
+  async getConnectors(): Promise<any> {
+    const response = await this.client.get("/v1/connectors");
+    return response.data;
+  }
+
+  async syncConnector(name: string): Promise<any> {
+    const response = await this.client.post(`/v1/connectors/${name}/sync`);
+    return response.data;
+  }
+
+  // Tasks
+  async getTaskMetrics(): Promise<any> {
+    const response = await this.client.get("/v1/tasks/metrics");
+    return response.data;
+  }
+
+  // Consolidation
+  async consolidate(similarityThreshold: number = 0.85): Promise<any> {
+    const response = await this.client.post("/v1/consolidate", { similarityThreshold });
+    return response.data;
+  }
+
+  // Benchmark
+  async runBenchmark(queryCount: number = 10, k: number = 10): Promise<any> {
+    const response = await this.client.post("/v1/benchmark/run", { queryCount, k });
+    return response.data;
+  }
+
+  // Admin
+  async getCircuitBreakers(): Promise<any> {
+    const response = await this.client.get("/v1/admin/circuit-breakers");
+    return response.data;
+  }
+
+  async getLLMMetrics(): Promise<any> {
+    const response = await this.client.get("/v1/admin/llm-metrics");
+    return response.data;
+  }
+
+  async scanPII(text: string): Promise<any> {
+    const response = await this.client.post("/v1/pii/scan", { text });
+    return response.data;
+  }
+
+  // Memory Versions
+  async getMemoryVersions(id: string): Promise<any> {
+    const response = await this.client.get(`/v1/memories/${id}/versions`);
+    return response.data;
+  }
+
+  // Memory Correction
+  async flagMemory(id: string, reason: string): Promise<any> {
+    const response = await this.client.post(`/v1/memories/${id}/flag`, { reason });
+    return response.data;
+  }
+
+  async reviewCorrection(id: string, action: string): Promise<any> {
+    const response = await this.client.post(`/v1/memories/${id}/review`, { action });
+    return response.data;
+  }
+
+  async rollbackMemory(id: string, version: number): Promise<any> {
+    const response = await this.client.post(`/v1/memories/${id}/rollback`, { version });
+    return response.data;
+  }
+
+  // Batch
+  async importBatch(memories: any[]): Promise<any> {
+    const response = await this.client.post("/v1/batch/import", { memories });
+    return response.data;
+  }
+
+  async exportBatch(): Promise<any> {
+    const response = await this.client.get("/v1/batch/export");
+    return response.data;
+  }
+
+  // Webhooks
+  async listWebhooks(): Promise<any> {
+    const response = await this.client.get("/v1/webhooks");
+    return response.data;
+  }
+
+  async createWebhook(url: string, events: string[]): Promise<any> {
+    const response = await this.client.post("/v1/webhooks", { url, events });
+    return response.data;
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    await this.client.delete(`/v1/webhooks/${id}`);
+  }
+
+  // Conflicts
+  async detectConflicts(memoryId: string): Promise<any> {
+    const response = await this.client.post(`/v1/conflicts/detect/${memoryId}`);
+    return response.data;
+  }
+
+  async scanConflicts(): Promise<any> {
+    const response = await this.client.post("/v1/conflicts/scan");
+    return response.data;
+  }
+
+  // Notes
+  async getNotes(): Promise<any> {
+    const response = await this.client.get("/v1/notes");
+    return response.data;
+  }
+
+  async getHindsightNotes(): Promise<any> {
+    const response = await this.client.get("/v1/notes/hindsight");
+    return response.data;
+  }
+
+  async analyzeSession(sessionId: string): Promise<any> {
+    const response = await this.client.post("/v1/notes/analyze", { sessionId });
+    return response.data;
+  }
+
+  // Sessions
+  async getSessionEvents(sessionId: string): Promise<any> {
+    const response = await this.client.get(`/v1/sessions/${sessionId}/events`);
+    return response.data;
+  }
+
+  // Knowledge Graph
+  async getKnowledgeGraph(limit: number = 100): Promise<any> {
+    const response = await this.client.get("/v1/entity-graph/knowledge-graph", {
+      params: { limit },
+    });
+    return response.data;
+  }
+
+  // Audit Logs
+  async getAuditLogs(limit: number = 100): Promise<any> {
+    const response = await this.client.get("/v1/audit-logs", {
+      params: { limit },
+    });
     return response.data;
   }
 

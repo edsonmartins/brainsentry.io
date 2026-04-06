@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Brain,
   Database,
@@ -9,6 +10,10 @@ import {
   Tag,
   Plus,
   Filter,
+  Network,
+  Gauge,
+  Zap,
+  HelpCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -17,6 +22,11 @@ import { MemoryCard } from "@/components/memory";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
+import { KnowledgeGraph } from "@/components/visualizations/KnowledgeGraph";
+import { ActivityHeatmap } from "@/components/visualizations/ActivityHeatmap";
+import { LiveIndicator } from "@/components/visualizations/LiveIndicator";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import type { WebSocketMessage } from "@/hooks/useWebSocket";
 
 interface Stats {
   totalMemories: number;
@@ -40,22 +50,19 @@ interface RecentMemory {
   tags: string[];
 }
 
-interface CategoryStat {
-  category: string;
-  count: number;
-}
-
 export function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tenantId, setTenantId] = useState(user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561");
+  const navigate = useNavigate();
+  const tenantId = user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [memories, setMemories] = useState<RecentMemory[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [memoriesLoading, setMemoriesLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"overview" | "graph" | "activity">("overview");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setStatsLoading(true);
     setMemoriesLoading(true);
     try {
@@ -71,11 +78,30 @@ export function DashboardPage() {
       setStatsLoading(false);
       setMemoriesLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // WebSocket for real-time updates
+  const wsUrl = `${(import.meta.env.VITE_WS_URL || "ws://localhost:8080").replace(/\/$/, "")}/ws`;
+  const handleWsMessage = useCallback((msg: WebSocketMessage) => {
+    if (msg.type === "memory_created" || msg.type === "memory_updated" || msg.type === "memory_deleted") {
+      fetchData();
+      toast({
+        title: "Update received",
+        description: `Memory ${msg.type.replace("memory_", "")}`,
+        variant: "info",
+      });
+    }
+  }, [fetchData, toast]);
+
+  const { status: wsStatus } = useWebSocket({
+    url: wsUrl,
+    onMessage: handleWsMessage,
+    reconnect: true,
+  });
 
   const handleRefresh = () => {
     fetchData();
@@ -86,15 +112,17 @@ export function DashboardPage() {
     });
   };
 
-  // Build categories from stats API
   const categories = Object.entries(stats?.memoriesByCategory || {})
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count);
 
+  const importanceData = Object.entries(stats?.memoriesByImportance || {})
+    .map(([level, count]) => ({ level, count }));
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+      <header className="sticky top-0 z-10 border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white">
         <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -104,13 +132,14 @@ export function DashboardPage() {
               <div>
                 <h1 className="text-base font-bold leading-tight">Brain Sentry</h1>
                 <p className="text-xs text-white/80">
-                  Sistema de Memória para Desenvolvedores
+                  Cognitive Memory System
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-xs text-white/80">
-                Tenant: <span className="font-medium text-white">{tenantId}</span>
+              <LiveIndicator status={wsStatus} className="bg-white/10 px-2 py-1 rounded-full" />
+              <div className="text-xs text-white/80 hidden md:block">
+                Tenant: <span className="font-medium text-white">{tenantId.slice(0, 8)}...</span>
               </div>
               <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={handleRefresh}>
                 <Activity className="h-4 w-4" />
@@ -120,126 +149,200 @@ export function DashboardPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {/* Quick Actions */}
-        <div className="mb-8 flex items-center justify-between">
+      <main className="container mx-auto px-4 py-6">
+        {/* Quick Actions + Tabs */}
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
           <div className="flex gap-2">
-            <Button size="sm" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white">
+            <Button size="sm" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => navigate("/app/memories")}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Memória
+              Nova Memoria
             </Button>
-            <Button size="sm" variant="outline">
+            <Button size="sm" variant="outline" onClick={() => navigate("/app/search")}>
               <Search className="h-4 w-4 mr-2" />
               Buscar
             </Button>
           </div>
-          <Button size="sm" variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filtros
-          </Button>
+
+          {/* View Tabs */}
+          <div className="flex bg-muted rounded-lg p-0.5">
+            {(["overview", "graph", "activity"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === tab
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab === "overview" && <Gauge className="h-3.5 w-3.5 inline mr-1" />}
+                {tab === "graph" && <Network className="h-3.5 w-3.5 inline mr-1" />}
+                {tab === "activity" && <Activity className="h-3.5 w-3.5 inline mr-1" />}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Stats Cards (always visible) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatsCard
-            title="Total de Memórias"
+            title="Total Memories"
             value={stats?.totalMemories || 0}
             icon={<Database className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Categorias"
+            title="Categories"
             value={Object.keys(stats?.memoriesByCategory || {}).length}
             icon={<Tag className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Memórias Críticas"
+            title="Critical"
             value={stats?.memoriesByImportance?.CRITICAL || 0}
             icon={<TrendingUp className="h-5 w-5" />}
             loading={statsLoading}
+            accent={stats?.memoriesByImportance?.CRITICAL ? "destructive" : undefined}
           />
           <StatsCard
-            title="Ativas 24h"
+            title="Active 24h"
             value={stats?.activeMemories24h || 0}
             icon={<Clock className="h-5 w-5" />}
             loading={statsLoading}
           />
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Memories */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Memórias Recentes</CardTitle>
-                <Button variant="ghost" size="sm">Ver todas</Button>
-              </CardHeader>
-              <CardContent>
-                {memoriesLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Spinner size="lg" />
+        {/* System Metrics Row */}
+        {stats && (stats.requestsToday > 0 || stats.totalInjections > 0) && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <MetricCard label="Requests Today" value={stats.requestsToday} icon={<Zap className="h-4 w-4" />} />
+            <MetricCard label="Injections" value={stats.totalInjections} suffix={` (${(stats.injectionRate * 100).toFixed(1)}%)`} icon={<HelpCircle className="h-4 w-4" />} />
+            <MetricCard label="Avg Latency" value={`${stats.avgLatencyMs.toFixed(0)}ms`} icon={<Clock className="h-4 w-4" />} />
+            <MetricCard label="Helpfulness" value={`${(stats.helpfulnessRate * 100).toFixed(0)}%`} icon={<TrendingUp className="h-4 w-4" />} />
+          </div>
+        )}
+
+        {/* Tab Content */}
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Recent Memories */}
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Recent Memories</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/app/memories")}>View all</Button>
+                </CardHeader>
+                <CardContent>
+                  {memoriesLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Spinner size="lg" />
+                    </div>
+                  ) : memories.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No memories found</p>
+                      <p className="text-xs mt-1">Create memories to see them here</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {memories.map((memory) => (
+                        <MemoryCard key={memory.id} memory={memory} />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-4">
+              {/* Categories */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">By Category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {categories.map((cat) => (
+                      <div key={cat.category}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getCategoryColor(cat.category) }} />
+                            <span className="text-xs capitalize">{cat.category.toLowerCase()}</span>
+                          </div>
+                          <span className="text-xs font-medium">{cat.count}</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, (cat.count / (stats?.totalMemories || 1)) * 100)}%`,
+                              backgroundColor: getCategoryColor(cat.category),
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {categories.length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-2">No data</p>
+                    )}
                   </div>
-                ) : memories.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Nenhuma memória encontrada</p>
-                    <Button className="mt-4" size="sm">
-                      Criar primeira memória
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {memories.map((memory) => (
-                      <MemoryCard key={memory.id} memory={memory} />
+                </CardContent>
+              </Card>
+
+              {/* Importance */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">By Importance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {importanceData.map(({ level, count }) => (
+                      <div key={level} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getImportanceColor(level) }} />
+                          <span className="text-xs capitalize">{level.toLowerCase()}</span>
+                        </div>
+                        <span className="text-xs font-bold" style={{ color: getImportanceColor(level) }}>{count}</span>
+                      </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
+        )}
 
-          {/* Categories Breakdown */}
-          <div>
+        {activeTab === "graph" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Network className="h-5 w-5" />
+                Knowledge Graph
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <KnowledgeGraph height="600px" limit={150} />
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "activity" && (
+          <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Por Categoria</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Activity Heatmap
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {categories.map((cat) => (
-                    <div key={cat.category} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-2 w-2 rounded-full"
-                          style={{
-                            backgroundColor: getCategoryColor(cat.category),
-                          }}
-                        />
-                        <span className="text-sm capitalize">{cat.category.toLowerCase()}</span>
-                      </div>
-                      <span className="text-sm font-medium">{cat.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Tips */}
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="text-sm">Dica Rápida</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Use hashtags nos seus prompts para contextuais automáticos.
-                  Exemplo: "#spring-boot #rest #api"
-                </p>
+                <ActivityHeatmap />
               </CardContent>
             </Card>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
@@ -251,32 +354,26 @@ interface StatsCardProps {
   icon?: React.ReactNode;
   loading?: boolean;
   suffix?: string;
-  trend?: string;
+  accent?: "destructive";
 }
 
-function StatsCard({ title, value, icon, loading, suffix, trend }: StatsCardProps) {
+function StatsCard({ title, value, icon, loading, accent }: StatsCardProps) {
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className={accent === "destructive" && Number(value) > 0 ? "border-destructive/50" : ""}>
+      <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">{title}</p>
             {loading ? (
               <Spinner size="sm" />
             ) : (
-              <p className="text-base font-bold leading-tight">
+              <p className={`text-2xl font-bold ${accent === "destructive" && Number(value) > 0 ? "text-destructive" : ""}`}>
                 {value}
-                {suffix}
-              </p>
-            )}
-            {trend && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                {trend}
               </p>
             )}
           </div>
           {icon && (
-            <div className="p-3 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg text-white">
+            <div className="p-2.5 bg-gradient-to-br from-brain-primary to-brain-accent rounded-lg text-white">
               {icon}
             </div>
           )}
@@ -286,15 +383,32 @@ function StatsCard({ title, value, icon, loading, suffix, trend }: StatsCardProp
   );
 }
 
+function MetricCard({ label, value, suffix, icon }: { label: string; value: number | string; suffix?: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+      <div className="p-1.5 rounded-md bg-muted text-muted-foreground">{icon}</div>
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
+        <p className="text-sm font-semibold">{value}{suffix}</p>
+      </div>
+    </div>
+  );
+}
+
 function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
-    DECISION: "#3b82f6",
-    PATTERN: "#10b981",
-    ANTIPATTERN: "#ef4444",
-    DOMAIN: "#f59e0b",
-    BUG: "#dc2626",
-    OPTIMIZATION: "#8b5cf6",
-    INTEGRATION: "#06b6d4",
+    INSIGHT: "#3b82f6", WARNING: "#ef4444", KNOWLEDGE: "#10b981",
+    ACTION: "#f59e0b", CONTEXT: "#8b5cf6", REFERENCE: "#06b6d4",
+    GENERAL: "#6b7280", DECISION: "#3b82f6", PATTERN: "#10b981",
+    ANTIPATTERN: "#ef4444", DOMAIN: "#f59e0b", BUG: "#dc2626",
+    OPTIMIZATION: "#8b5cf6", INTEGRATION: "#06b6d4",
   };
   return colors[category] || "#6b7280";
+}
+
+function getImportanceColor(level: string): string {
+  const colors: Record<string, string> = {
+    CRITICAL: "#ef4444", IMPORTANT: "#f59e0b", MINOR: "#10b981",
+  };
+  return colors[level] || "#6b7280";
 }

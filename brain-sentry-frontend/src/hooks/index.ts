@@ -23,7 +23,15 @@ export function useFetch<T>(
     setError(null);
 
     try {
-      const response = await fetch(url, options);
+      const token = localStorage.getItem("brain_sentry_token");
+      const tenantId = localStorage.getItem("tenant_id") || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": tenantId,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options?.headers as Record<string, string> || {}),
+      };
+      const response = await fetch(url, { ...options, headers });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -312,3 +320,6 @@ export function useKeyboard(
     };
   }, [keys, callback, deps]);
 }
+
+export { useWebSocket } from "./useWebSocket";
+export type { WebSocketStatus, WebSocketMessage } from "./useWebSocket";

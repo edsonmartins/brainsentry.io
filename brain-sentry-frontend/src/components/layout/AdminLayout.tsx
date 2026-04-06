@@ -11,6 +11,12 @@ import {
   Settings,
   Users,
   Building2,
+  User,
+  Wand2,
+  Plug,
+  StickyNote,
+  ListTodo,
+  Clock,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -49,6 +55,12 @@ export function AdminLayout() {
       id: "relationships",
     },
     {
+      title: "Timeline",
+      href: "/app/timeline",
+      icon: Clock,
+      id: "timeline",
+    },
+    {
       title: "Auditoria",
       href: "/app/audit",
       icon: Shield,
@@ -77,6 +89,36 @@ export function AdminLayout() {
       href: "/app/analytics",
       icon: Activity,
       id: "analytics",
+    },
+    {
+      title: "Perfil",
+      href: "/app/profile",
+      icon: User,
+      id: "profile",
+    },
+    {
+      title: "Playground",
+      href: "/app/playground",
+      icon: Wand2,
+      id: "playground",
+    },
+    {
+      title: "Conectores",
+      href: "/app/connectors",
+      icon: Plug,
+      id: "connectors",
+    },
+    {
+      title: "Notas",
+      href: "/app/notes",
+      icon: StickyNote,
+      id: "notes",
+    },
+    {
+      title: "Tarefas",
+      href: "/app/tasks",
+      icon: ListTodo,
+      id: "tasks",
     },
   ];
 

@@ -14,6 +14,12 @@ import { UsersPage } from "./pages/UsersPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import MemoryAdminPage from "./pages/MemoryAdminPage";
 import AnalyticsAdminPage from "./pages/AnalyticsAdminPage";
+import ProfilePage from "./pages/ProfilePage";
+import PlaygroundPage from "./pages/PlaygroundPage";
+import ConnectorsPage from "./pages/ConnectorsPage";
+import NotesPage from "./pages/NotesPage";
+import TasksPage from "./pages/TasksPage";
+import TimelinePage from "./pages/TimelinePage";
 import { LandingPage } from "./landing/pages/LandingPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -65,6 +71,12 @@ function App() {
                 <Route path="users" element={<UsersPage />} />
                 <Route path="tenants" element={<TenantsPage />} />
                 <Route path="analytics" element={<AnalyticsAdminPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="playground" element={<PlaygroundPage />} />
+                <Route path="connectors" element={<ConnectorsPage />} />
+                <Route path="notes" element={<NotesPage />} />
+                <Route path="tasks" element={<TasksPage />} />
+                <Route path="timeline" element={<TimelinePage />} />
               </Route>
 
               {/* Legacy redirect - /dashboard -> /app/dashboard */}
