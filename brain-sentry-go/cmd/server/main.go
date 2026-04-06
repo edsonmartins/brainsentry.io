@@ -218,6 +218,71 @@ func main() {
 	// PII Service
 	piiService := service.NewPIIService()
 
+	// ---- P1-P3 New Services ----
+
+	// Fallback Chain LLM Provider
+	var llmProvider service.LLMProvider
+	if openRouterService != nil {
+		primary := service.NewOpenRouterProvider(openRouterService)
+		llmProvider = service.NewFallbackChainProvider(primary)
+		logger.Info("LLM fallback chain initialized")
+	}
+
+	// Memory Compression Pipeline
+	memoryCompressionService := service.NewMemoryCompressionService(llmProvider)
+
+	// Query Expansion
+	queryExpansionService := service.NewQueryExpansionService(llmProvider)
+
+	// Self-Correcting LLM
+	var selfCorrectingLLM *service.SelfCorrectingLLM
+	if llmProvider != nil {
+		selfCorrectingLLM = service.NewSelfCorrectingLLM(llmProvider, 2)
+	}
+
+	// Auto-Forget
+	autoForgetService := service.NewAutoForgetService(memoryRepo, auditService, service.DefaultAutoForgetConfig())
+
+	// Cascading Staleness
+	cascadingStalenessService := service.NewCascadingStalenessService(memoryRepo, relRepo, auditService)
+
+	// Semantic Memory (consolidation tiers)
+	semanticMemoryService := service.NewSemanticMemoryService(memoryRepo, llmProvider, auditService)
+
+	// Privacy Stripping
+	privacyStrippingService := service.NewPrivacyStrippingService()
+
+	// Sliding Window Enrichment
+	slidingWindowService := service.NewSlidingWindowEnrichment(llmProvider)
+
+	// Actions & Leases
+	actionService := service.NewActionService()
+
+	// Mesh Sync
+	meshSyncService := service.NewMeshSyncService(cfg.Tenant.DefaultID, service.DefaultMeshSyncConfig())
+
+	// Log new services status
+	logger.Info("new services initialized",
+		"compression", memoryCompressionService != nil,
+		"queryExpansion", queryExpansionService != nil,
+		"selfCorrecting", selfCorrectingLLM != nil,
+		"autoForget", autoForgetService != nil,
+		"cascadingStaleness", cascadingStalenessService != nil,
+		"semanticMemory", semanticMemoryService != nil,
+		"privacyStripping", privacyStrippingService != nil,
+		"slidingWindow", slidingWindowService != nil,
+		"actions", actionService != nil,
+		"meshSync", meshSyncService != nil,
+	)
+
+	// Suppress unused warnings
+	_ = memoryCompressionService
+	_ = queryExpansionService
+	_ = selfCorrectingLLM
+	_ = cascadingStalenessService
+	_ = privacyStrippingService
+	_ = slidingWindowService
+
 	// Session Service
 	sessionRepo := postgres.NewSessionRepository(pool)
 	sessionService := service.NewSessionService(service.DefaultSessionConfig(), sessionRepo)
@@ -324,6 +389,12 @@ func main() {
 	consolidationHandler := handler.NewConsolidationHandler(consolidationService)
 	benchmarkHandler := handler.NewBenchmarkHandler(benchmarkService, memoryService)
 	adminHandler := handler.NewAdminHandler(cbRegistry, llmObserver, piiService)
+
+	// New P1-P3 handlers
+	autoForgetHandler := handler.NewAutoForgetHandler(autoForgetService)
+	semanticMemoryHandler := handler.NewSemanticMemoryHandler(semanticMemoryService)
+	actionsHandler := handler.NewActionsHandler(actionService)
+	meshHandler := handler.NewMeshHandler(meshSyncService)
 
 	// Router
 	r := chi.NewRouter()
@@ -582,6 +653,29 @@ func main() {
 
 		// PII Scanner
 		r.Post("/v1/pii/scan", adminHandler.ScanPII)
+
+		// Auto-Forget (admin only)
+		r.With(middleware.RequireRole(middleware.RoleAdmin)).Post("/v1/auto-forget", autoForgetHandler.Run)
+
+		// Semantic Memory Consolidation
+		r.Post("/v1/semantic/consolidate", semanticMemoryHandler.Consolidate)
+
+		// Actions & Leases (multi-agent coordination)
+		r.Route("/v1/actions", func(r chi.Router) {
+			r.Post("/", actionsHandler.Create)
+			r.Get("/", actionsHandler.List)
+			r.Get("/{id}", actionsHandler.Get)
+			r.Put("/{id}/status", actionsHandler.UpdateStatus)
+			r.Post("/{id}/lease", actionsHandler.AcquireLease)
+			r.Delete("/{id}/lease", actionsHandler.ReleaseLease)
+		})
+
+		// Mesh Sync (P2P)
+		r.Route("/v1/mesh", func(r chi.Router) {
+			r.Post("/peers", meshHandler.RegisterPeer)
+			r.Get("/peers", meshHandler.ListPeers)
+			r.Post("/sync", meshHandler.Sync)
+		})
 	})
 
 	// Integration endpoints (service-to-service auth)
