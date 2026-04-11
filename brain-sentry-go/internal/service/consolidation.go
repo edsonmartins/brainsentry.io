@@ -14,10 +14,16 @@ import (
 
 // ConsolidationService consolidates similar memories and compresses verbose ones.
 type ConsolidationService struct {
-	memoryRepo      *postgres.MemoryRepository
-	openRouter      *OpenRouterService
+	memoryRepo       consolidationMemoryRepository
+	llm              LLMProvider
 	embeddingService *EmbeddingService
-	auditService    *AuditService
+	auditService     *AuditService
+}
+
+type consolidationMemoryRepository interface {
+	FindAll(ctx context.Context) ([]domain.Memory, error)
+	Update(ctx context.Context, m *domain.Memory) error
+	Delete(ctx context.Context, id string) error
 }
 
 // NewConsolidationService creates a new ConsolidationService.
@@ -27,9 +33,27 @@ func NewConsolidationService(
 	embeddingService *EmbeddingService,
 	auditService *AuditService,
 ) *ConsolidationService {
+	var llm LLMProvider
+	if openRouter != nil {
+		llm = NewOpenRouterProvider(openRouter)
+	}
 	return &ConsolidationService{
 		memoryRepo:       memoryRepo,
-		openRouter:       openRouter,
+		llm:              llm,
+		embeddingService: embeddingService,
+		auditService:     auditService,
+	}
+}
+
+func NewConsolidationServiceWithLLM(
+	memoryRepo consolidationMemoryRepository,
+	llm LLMProvider,
+	embeddingService *EmbeddingService,
+	auditService *AuditService,
+) *ConsolidationService {
+	return &ConsolidationService{
+		memoryRepo:       memoryRepo,
+		llm:              llm,
 		embeddingService: embeddingService,
 		auditService:     auditService,
 	}
@@ -44,7 +68,7 @@ type ConsolidationResult struct {
 
 // ConsolidateTenant finds and merges similar memories for the current tenant.
 func (s *ConsolidationService) ConsolidateTenant(ctx context.Context, similarityThreshold float64) (*ConsolidationResult, error) {
-	if s.openRouter == nil {
+	if s.llm == nil {
 		return &ConsolidationResult{}, nil
 	}
 
@@ -53,47 +77,49 @@ func (s *ConsolidationService) ConsolidateTenant(ctx context.Context, similarity
 		return nil, fmt.Errorf("listing memories: %w", err)
 	}
 
-	if len(memories) < 2 {
+	if len(memories) == 0 {
 		return &ConsolidationResult{}, nil
 	}
 
 	result := &ConsolidationResult{}
 
-	// Group by category for more efficient comparison
-	groups := make(map[domain.MemoryCategory][]domain.Memory)
-	for _, m := range memories {
-		groups[m.Category] = append(groups[m.Category], m)
-	}
-
-	for _, groupMemories := range groups {
-		if len(groupMemories) < 2 {
-			continue
+	if len(memories) >= 2 {
+		// Group by category for more efficient comparison
+		groups := make(map[domain.MemoryCategory][]domain.Memory)
+		for _, m := range memories {
+			groups[m.Category] = append(groups[m.Category], m)
 		}
 
-		// Find similar pairs using embedding similarity
-		merged := make(map[string]bool)
-		for i := 0; i < len(groupMemories)-1; i++ {
-			if merged[groupMemories[i].ID] {
+		for _, groupMemories := range groups {
+			if len(groupMemories) < 2 {
 				continue
 			}
-			for j := i + 1; j < len(groupMemories); j++ {
-				if merged[groupMemories[j].ID] {
+
+			// Find similar pairs using embedding similarity
+			merged := make(map[string]bool)
+			for i := 0; i < len(groupMemories)-1; i++ {
+				if merged[groupMemories[i].ID] {
 					continue
 				}
-
-				sim := cosineSimilarity(groupMemories[i].Embedding, groupMemories[j].Embedding)
-				if sim >= similarityThreshold {
-					err := s.mergeMemories(ctx, &groupMemories[i], &groupMemories[j])
-					if err != nil {
-						slog.Warn("failed to merge memories",
-							"id1", groupMemories[i].ID,
-							"id2", groupMemories[j].ID,
-							"error", err)
+				for j := i + 1; j < len(groupMemories); j++ {
+					if merged[groupMemories[j].ID] {
 						continue
 					}
-					merged[groupMemories[j].ID] = true
-					result.Consolidated++
-					result.MergedIDs = append(result.MergedIDs, groupMemories[j].ID)
+
+					sim := cosineSimilarity(groupMemories[i].Embedding, groupMemories[j].Embedding)
+					if sim >= similarityThreshold {
+						err := s.mergeMemories(ctx, &groupMemories[i], &groupMemories[j])
+						if err != nil {
+							slog.Warn("failed to merge memories",
+								"id1", groupMemories[i].ID,
+								"id2", groupMemories[j].ID,
+								"error", err)
+							continue
+						}
+						merged[groupMemories[j].ID] = true
+						result.Consolidated++
+						result.MergedIDs = append(result.MergedIDs, groupMemories[j].ID)
+					}
 				}
 			}
 		}
@@ -101,7 +127,7 @@ func (s *ConsolidationService) ConsolidateTenant(ctx context.Context, similarity
 
 	// Compress verbose memories
 	for _, m := range memories {
-		if len(m.Content) > 2000 && s.openRouter != nil {
+		if len(m.Content) > 2000 && s.llm != nil {
 			compressed, err := s.compressMemory(ctx, &m)
 			if err != nil {
 				slog.Warn("failed to compress memory", "id", m.ID, "error", err)
@@ -129,7 +155,7 @@ Memory 2:
 Respond with JSON:
 {"content": "merged content", "summary": "brief summary"}`, primary.Content, secondary.Content)
 
-	response, err := s.openRouter.Chat(ctx, []ChatMessage{
+	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a memory consolidation system. Merge similar memories while preserving all unique information. Respond with valid JSON only."},
 		{Role: "user", Content: prompt},
 	})
@@ -203,7 +229,7 @@ Content:
 Respond with JSON:
 {"content": "compressed content", "summary": "brief summary"}`, m.Content)
 
-	response, err := s.openRouter.Chat(ctx, []ChatMessage{
+	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a content compressor. Reduce verbosity while keeping all essential information. Respond with valid JSON only."},
 		{Role: "user", Content: prompt},
 	})

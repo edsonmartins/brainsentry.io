@@ -17,14 +17,39 @@ import (
 
 // MemoryService handles memory business logic.
 type MemoryService struct {
-	memoryRepo       *postgres.MemoryRepository
+	memoryRepo       memoryRepository
 	versionRepo      *postgres.VersionRepository
-	memoryGraphRepo  *graphrepo.MemoryGraphRepository
+	memoryGraphRepo  memoryGraphRepository
 	auditService     *AuditService
 	openRouter       *OpenRouterService
-	embeddingService *EmbeddingService
+	embeddingService embeddingGenerator
 	piiService       *PIIService
 	autoImportance   bool
+}
+
+type memoryRepository interface {
+	Create(ctx context.Context, m *domain.Memory) error
+	FindByID(ctx context.Context, id string) (*domain.Memory, error)
+	List(ctx context.Context, page, size int) ([]domain.Memory, int64, error)
+	Update(ctx context.Context, m *domain.Memory) error
+	Delete(ctx context.Context, id string) error
+	FindByCategory(ctx context.Context, category domain.MemoryCategory) ([]domain.Memory, error)
+	FindByImportance(ctx context.Context, importance domain.ImportanceLevel) ([]domain.Memory, error)
+	FullTextSearch(ctx context.Context, query string, limit int) ([]domain.Memory, error)
+	IncrementAccessCount(ctx context.Context, id string) error
+	RecordFeedback(ctx context.Context, id string, helpful bool) error
+	FindSimHashes(ctx context.Context) (map[string]string, error)
+	BoostAccessCount(ctx context.Context, id string, boost int) error
+	SupersedeMemory(ctx context.Context, oldID, newID string) error
+}
+
+type memoryGraphRepository interface {
+	VectorSearch(ctx context.Context, embedding []float32, limit int, tenantID string) ([]string, []float64, error)
+}
+
+type embeddingGenerator interface {
+	Embed(text string) []float32
+	HasAPI() bool
 }
 
 // NewMemoryService creates a new MemoryService.
@@ -37,13 +62,21 @@ func NewMemoryService(
 	embeddingService *EmbeddingService,
 	autoImportance bool,
 ) *MemoryService {
+	var graphRepo memoryGraphRepository
+	if memoryGraphRepo != nil {
+		graphRepo = memoryGraphRepo
+	}
+	var embeddings embeddingGenerator
+	if embeddingService != nil {
+		embeddings = embeddingService
+	}
 	return &MemoryService{
 		memoryRepo:       memoryRepo,
 		versionRepo:      versionRepo,
-		memoryGraphRepo:  memoryGraphRepo,
+		memoryGraphRepo:  graphRepo,
 		auditService:     auditService,
 		openRouter:       openRouter,
-		embeddingService: embeddingService,
+		embeddingService: embeddings,
 		piiService:       NewPIIService(),
 		autoImportance:   autoImportance,
 	}
@@ -362,7 +395,7 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 		if err == nil && len(ids) > 0 {
 			for i, id := range ids {
 				m, err := s.memoryRepo.FindByID(ctx, id)
-				if err != nil || IsExpired(m, time.Now()) {
+				if err != nil || isInactiveMemory(m, time.Now()) {
 					continue
 				}
 				trace := ComputeHybridScore(m, scores[i], queryTokens, -1, req.Tags, DefaultScoringWeights)
@@ -380,7 +413,7 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 				existingIDs[sr.memory.ID] = true
 			}
 			for _, m := range textResults {
-				if existingIDs[m.ID] || IsExpired(&m, time.Now()) {
+				if existingIDs[m.ID] || isInactiveMemory(&m, time.Now()) {
 					continue
 				}
 				trace := ComputeHybridScore(&m, 0.3, queryTokens, -1, req.Tags, DefaultScoringWeights)

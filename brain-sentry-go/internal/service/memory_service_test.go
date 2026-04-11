@@ -1,11 +1,15 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/integraltech/brainsentry/internal/domain"
+	"github.com/integraltech/brainsentry/internal/dto"
 )
 
 // --- extractChainOfThought tests ---
@@ -120,9 +124,9 @@ func TestRelevanceScore_Formula(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &domain.Memory{
-				AccessCount:    tt.accessCount,
-				InjectionCount: tt.injectionCount,
-				HelpfulCount:   tt.helpful,
+				AccessCount:     tt.accessCount,
+				InjectionCount:  tt.injectionCount,
+				HelpfulCount:    tt.helpful,
 				NotHelpfulCount: tt.notHelpful,
 			}
 			score := m.RelevanceScore()
@@ -275,12 +279,12 @@ func TestMemoryToResponse_PreservesFields(t *testing.T) {
 
 func TestMemoryToResponse_IncludesComputedFields(t *testing.T) {
 	m := domain.Memory{
-		AccessCount:    10,
-		InjectionCount: 5,
-		HelpfulCount:   3,
+		AccessCount:     10,
+		InjectionCount:  5,
+		HelpfulCount:    3,
 		NotHelpfulCount: 1,
-		MemoryType:     domain.MemoryTypeSemantic,
-		CreatedAt:      time.Now(),
+		MemoryType:      domain.MemoryTypeSemantic,
+		CreatedAt:       time.Now(),
 	}
 	resp := memoryToResponse(m)
 	if resp.RelevanceScore <= 0 {
@@ -288,5 +292,270 @@ func TestMemoryToResponse_IncludesComputedFields(t *testing.T) {
 	}
 	if resp.HelpfulnessRate != 0.75 {
 		t.Errorf("expected 0.75 helpfulness rate, got %f", resp.HelpfulnessRate)
+	}
+}
+
+type fakeMemoryRepository struct {
+	byID            map[string]*domain.Memory
+	fullTextResults []domain.Memory
+	fullTextQueries []string
+}
+
+func (f *fakeMemoryRepository) Create(_ context.Context, m *domain.Memory) error {
+	if f.byID == nil {
+		f.byID = make(map[string]*domain.Memory)
+	}
+	copyMemory := *m
+	f.byID[m.ID] = &copyMemory
+	return nil
+}
+
+func (f *fakeMemoryRepository) FindByID(_ context.Context, id string) (*domain.Memory, error) {
+	if f.byID != nil {
+		if m, ok := f.byID[id]; ok {
+			copyMemory := *m
+			return &copyMemory, nil
+		}
+	}
+	return nil, errors.New("memory not found")
+}
+
+func (f *fakeMemoryRepository) List(_ context.Context, _ int, _ int) ([]domain.Memory, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeMemoryRepository) Update(_ context.Context, m *domain.Memory) error {
+	if f.byID == nil {
+		f.byID = make(map[string]*domain.Memory)
+	}
+	copyMemory := *m
+	f.byID[m.ID] = &copyMemory
+	return nil
+}
+
+func (f *fakeMemoryRepository) Delete(_ context.Context, id string) error {
+	delete(f.byID, id)
+	return nil
+}
+
+func (f *fakeMemoryRepository) FindByCategory(_ context.Context, _ domain.MemoryCategory) ([]domain.Memory, error) {
+	return nil, nil
+}
+
+func (f *fakeMemoryRepository) FindByImportance(_ context.Context, _ domain.ImportanceLevel) ([]domain.Memory, error) {
+	return nil, nil
+}
+
+func (f *fakeMemoryRepository) FullTextSearch(_ context.Context, query string, limit int) ([]domain.Memory, error) {
+	f.fullTextQueries = append(f.fullTextQueries, query)
+	if limit > 0 && len(f.fullTextResults) > limit {
+		return f.fullTextResults[:limit], nil
+	}
+	return f.fullTextResults, nil
+}
+
+func (f *fakeMemoryRepository) IncrementAccessCount(_ context.Context, _ string) error {
+	return nil
+}
+
+func (f *fakeMemoryRepository) RecordFeedback(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (f *fakeMemoryRepository) FindSimHashes(_ context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
+func (f *fakeMemoryRepository) BoostAccessCount(_ context.Context, _ string, _ int) error {
+	return nil
+}
+
+func (f *fakeMemoryRepository) SupersedeMemory(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+type fakeMemoryGraphRepository struct {
+	ids    []string
+	scores []float64
+}
+
+func (f *fakeMemoryGraphRepository) VectorSearch(_ context.Context, _ []float32, _ int, _ string) ([]string, []float64, error) {
+	return f.ids, f.scores, nil
+}
+
+type fakeEmbeddingGenerator struct {
+	api bool
+}
+
+func (f fakeEmbeddingGenerator) Embed(_ string) []float32 {
+	return []float32{1, 0, 0}
+}
+
+func (f fakeEmbeddingGenerator) HasAPI() bool {
+	return f.api
+}
+
+func TestSearchMemories_TextFallbackFiltersInactiveAndSorts(t *testing.T) {
+	now := time.Now()
+	expiredAt := now.Add(-time.Hour)
+	repo := &fakeMemoryRepository{
+		fullTextResults: []domain.Memory{
+			{
+				ID:         "lower-score",
+				Content:    "postgres memory",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceMinor,
+				Tags:       []string{"other"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+			{
+				ID:         "expired-high-score",
+				Content:    "postgres memory integrity",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceCritical,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				ValidTo:    &expiredAt,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+			{
+				ID:           "superseded-high-score",
+				Content:      "postgres memory integrity",
+				Category:     domain.CategoryKnowledge,
+				Importance:   domain.ImportanceCritical,
+				Tags:         []string{"core"},
+				MemoryType:   domain.MemoryTypeSemantic,
+				SupersededBy: "replacement",
+				CreatedAt:    now,
+				UpdatedAt:    now,
+				DecayRate:    GetDecayRate(domain.MemoryTypeSemantic),
+			},
+			{
+				ID:         "best-active",
+				Content:    "postgres memory integrity",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceCritical,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+		},
+	}
+	svc := &MemoryService{
+		memoryRepo: repo,
+		piiService: NewPIIService(),
+	}
+
+	resp, err := svc.SearchMemories(context.Background(), dto.SearchRequest{
+		Query: "postgres memory integrity",
+		Tags:  []string{"core"},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("SearchMemories() error = %v", err)
+	}
+
+	if resp.Total != 2 {
+		t.Fatalf("expected 2 active results, got %d: %#v", resp.Total, resp.Results)
+	}
+	if resp.Results[0].ID != "best-active" {
+		t.Fatalf("expected best-active first, got %s", resp.Results[0].ID)
+	}
+	if resp.Results[1].ID != "lower-score" {
+		t.Fatalf("expected lower-score second, got %s", resp.Results[1].ID)
+	}
+	if len(repo.fullTextQueries) != 1 || repo.fullTextQueries[0] != "postgres memory integrity" {
+		t.Fatalf("full-text queries = %v", repo.fullTextQueries)
+	}
+}
+
+func TestSearchMemories_DeduplicatesVectorAndTextResults(t *testing.T) {
+	now := time.Now()
+	repo := &fakeMemoryRepository{
+		byID: map[string]*domain.Memory{
+			"vector-duplicate": {
+				ID:         "vector-duplicate",
+				Content:    "postgres memory integrity vector duplicate",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceCritical,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+			"vector-only": {
+				ID:         "vector-only",
+				Content:    "postgres memory integrity vector only",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceImportant,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+		},
+		fullTextResults: []domain.Memory{
+			{
+				ID:         "vector-duplicate",
+				Content:    "postgres memory integrity vector duplicate",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceCritical,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+			{
+				ID:         "text-only",
+				Content:    "postgres memory integrity text only",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceMinor,
+				Tags:       []string{"core"},
+				MemoryType: domain.MemoryTypeSemantic,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+				DecayRate:  GetDecayRate(domain.MemoryTypeSemantic),
+			},
+		},
+	}
+	svc := &MemoryService{
+		memoryRepo:       repo,
+		memoryGraphRepo:  &fakeMemoryGraphRepository{ids: []string{"vector-duplicate", "vector-only"}, scores: []float64{0.95, 0.9}},
+		embeddingService: fakeEmbeddingGenerator{api: true},
+		piiService:       NewPIIService(),
+	}
+
+	resp, err := svc.SearchMemories(context.Background(), dto.SearchRequest{
+		Query: "postgres memory integrity",
+		Tags:  []string{"core"},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("SearchMemories() error = %v", err)
+	}
+
+	gotIDs := make([]string, 0, len(resp.Results))
+	seen := make(map[string]bool, len(resp.Results))
+	for _, result := range resp.Results {
+		gotIDs = append(gotIDs, result.ID)
+		if seen[result.ID] {
+			t.Fatalf("duplicate result %q in %v", result.ID, gotIDs)
+		}
+		seen[result.ID] = true
+	}
+
+	wantIDs := []string{"vector-duplicate", "vector-only", "text-only"}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("result IDs = %v, want %v", gotIDs, wantIDs)
 	}
 }

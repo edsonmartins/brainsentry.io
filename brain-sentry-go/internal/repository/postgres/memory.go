@@ -178,14 +178,16 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 	query := `UPDATE memories SET content=$1, summary=$2, category=$3, importance=$4,
 		validation_status=$5, embedding=$6, metadata=$7, source_type=$8, source_reference=$9,
 		updated_at=$10, version=$11, code_example=$12, programming_language=$13, memory_type=$14,
-		emotional_weight=$15, sim_hash=$16, valid_from=$17, valid_to=$18, decay_rate=$19, superseded_by=$20
-		WHERE id=$21 AND tenant_id=$22`
+		emotional_weight=$15, sim_hash=$16, valid_from=$17, valid_to=$18, decay_rate=$19, superseded_by=$20,
+		access_count=$21, injection_count=$22, helpful_count=$23, not_helpful_count=$24
+		WHERE id=$25 AND tenant_id=$26`
 
 	_, err = tx.Exec(ctx, query,
 		m.Content, m.Summary, m.Category, m.Importance,
 		m.ValidationStatus, m.Embedding, m.Metadata, m.SourceType, m.SourceReference,
 		m.UpdatedAt, m.Version, m.CodeExample, m.ProgrammingLanguage, m.MemoryType,
 		m.EmotionalWeight, m.SimHash, m.ValidFrom, m.ValidTo, m.DecayRate, m.SupersededBy,
+		m.AccessCount, m.InjectionCount, m.HelpfulCount, m.NotHelpfulCount,
 		m.ID, tenantID,
 	)
 	if err != nil {
@@ -251,6 +253,9 @@ func (r *MemoryRepository) FullTextSearch(ctx context.Context, query string, lim
 	q := fmt.Sprintf(`SELECT %s FROM memories WHERE tenant_id = $1
 		AND (to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')) @@ plainto_tsquery('english', $2))
 		AND deleted_at IS NULL
+		AND (valid_from IS NULL OR valid_from <= NOW())
+		AND (valid_to IS NULL OR valid_to > NOW())
+		AND COALESCE(superseded_by, '') = ''
 		ORDER BY ts_rank(to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')), plainto_tsquery('english', $2)) DESC
 		LIMIT $3`, memoryColumns)
 
@@ -377,7 +382,21 @@ func (r *MemoryRepository) FindAll(ctx context.Context) ([]domain.Memory, error)
 		return nil, fmt.Errorf("finding all memories: %w", err)
 	}
 	defer rows.Close()
-	return scanMemories(rows)
+
+	memories, err := scanMemories(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range memories {
+		tags, err := r.loadTags(ctx, memories[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		memories[i].Tags = tags
+	}
+
+	return memories, nil
 }
 
 func (r *MemoryRepository) loadTags(ctx context.Context, memoryID string) ([]string, error) {

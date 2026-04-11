@@ -16,6 +16,11 @@ func NewAutoForgetHandler(svc *service.AutoForgetService) *AutoForgetHandler {
 }
 
 func (h *AutoForgetHandler) Run(w http.ResponseWriter, r *http.Request) {
+	if h.svc == nil {
+		writeError(w, http.StatusServiceUnavailable, "auto-forget service is not available")
+		return
+	}
+
 	dryRun := r.URL.Query().Get("dryRun") == "true"
 
 	result, err := h.svc.Run(r.Context(), dryRun)

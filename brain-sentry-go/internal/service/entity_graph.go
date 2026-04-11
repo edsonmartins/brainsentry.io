@@ -12,9 +12,23 @@ import (
 
 // EntityGraphService handles entity extraction and graph storage.
 type EntityGraphService struct {
-	entityGraphRepo *graph.EntityGraphRepository
+	entityGraphRepo entityGraphRepository
+	entityExtractor entityExtractor
 	openRouter      *OpenRouterService
 	auditService    *AuditService
+}
+
+type entityGraphRepository interface {
+	StoreEntity(ctx context.Context, name, entityType, tenantID, sourceMemoryID string, properties map[string]string) (string, error)
+	StoreRelationship(ctx context.Context, sourceNodeID, targetNodeID, relType, tenantID string, properties map[string]string) error
+	FindEntitiesByMemory(ctx context.Context, memoryID, tenantID string) ([]dto.EntityNode, error)
+	FindRelationshipsByMemory(ctx context.Context, memoryID, tenantID string) ([]dto.EntityEdge, error)
+	SearchEntities(ctx context.Context, searchTerm, tenantID string, limit int) ([]dto.EntityNode, error)
+	GetKnowledgeGraph(ctx context.Context, tenantID string, limit int) (*dto.KnowledgeGraphResponse, error)
+}
+
+type entityExtractor interface {
+	ExtractEntities(ctx context.Context, content string) (*EntityExtractionResult, error)
 }
 
 // NewEntityGraphService creates a new EntityGraphService.
@@ -23,8 +37,13 @@ func NewEntityGraphService(
 	openRouter *OpenRouterService,
 	auditService *AuditService,
 ) *EntityGraphService {
+	var extractor entityExtractor
+	if openRouter != nil {
+		extractor = openRouter
+	}
 	return &EntityGraphService{
 		entityGraphRepo: entityGraphRepo,
+		entityExtractor: extractor,
 		openRouter:      openRouter,
 		auditService:    auditService,
 	}
@@ -32,13 +51,13 @@ func NewEntityGraphService(
 
 // ExtractAndStoreEntities extracts entities from memory content and stores them in the graph.
 func (s *EntityGraphService) ExtractAndStoreEntities(ctx context.Context, m *domain.Memory) error {
-	if s.openRouter == nil {
+	if s.entityExtractor == nil || s.entityGraphRepo == nil {
 		return nil
 	}
 
 	tenantID := tenant.FromContext(ctx)
 
-	result, err := s.openRouter.ExtractEntities(ctx, m.Content)
+	result, err := s.entityExtractor.ExtractEntities(ctx, m.Content)
 	if err != nil {
 		slog.Warn("entity extraction failed", "error", err, "memoryId", m.ID)
 		return err

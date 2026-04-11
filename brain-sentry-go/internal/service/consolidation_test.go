@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"math"
 	"testing"
 
 	"github.com/integraltech/brainsentry/internal/domain"
+	"github.com/integraltech/brainsentry/pkg/tenant"
 )
 
 // TestCosineSimilarity_KnownVectors tests cosine similarity with analytically known results.
@@ -217,4 +219,164 @@ func TestImportanceRank_UnknownLevels(t *testing.T) {
 			t.Errorf("unknown importance level %q should rank below MINOR, got %d", level, rank)
 		}
 	}
+}
+
+type fakeConsolidationMemoryRepo struct {
+	memories []domain.Memory
+	updated  []domain.Memory
+	deleted  []string
+}
+
+func (f *fakeConsolidationMemoryRepo) FindAll(_ context.Context) ([]domain.Memory, error) {
+	memories := make([]domain.Memory, len(f.memories))
+	copy(memories, f.memories)
+	return memories, nil
+}
+
+func (f *fakeConsolidationMemoryRepo) Update(_ context.Context, m *domain.Memory) error {
+	copyMemory := *m
+	f.updated = append(f.updated, copyMemory)
+	return nil
+}
+
+func (f *fakeConsolidationMemoryRepo) Delete(_ context.Context, id string) error {
+	f.deleted = append(f.deleted, id)
+	return nil
+}
+
+func TestConsolidateTenant_MergesSimilarMemories(t *testing.T) {
+	repo := &fakeConsolidationMemoryRepo{
+		memories: []domain.Memory{
+			{
+				ID:              "primary",
+				Content:         "store memory metadata in jsonb",
+				Summary:         "metadata in jsonb",
+				Category:        domain.CategoryKnowledge,
+				Importance:      domain.ImportanceMinor,
+				Tags:            []string{"postgres"},
+				Embedding:       []float32{1, 0, 0},
+				Version:         2,
+				AccessCount:     3,
+				HelpfulCount:    1,
+				NotHelpfulCount: 1,
+			},
+			{
+				ID:              "secondary",
+				Content:         "store metadata and tags in postgres jsonb",
+				Summary:         "tags in jsonb",
+				Category:        domain.CategoryKnowledge,
+				Importance:      domain.ImportanceCritical,
+				Tags:            []string{"tags"},
+				Embedding:       []float32{1, 0, 0},
+				AccessCount:     4,
+				HelpfulCount:    2,
+				NotHelpfulCount: 3,
+			},
+		},
+	}
+	llm := &mockLLMProvider{
+		name:     "test",
+		response: `{"content":"store memory metadata and tags in postgres jsonb","summary":"metadata and tags in jsonb"}`,
+	}
+	svc := NewConsolidationServiceWithLLM(repo, llm, nil, nil)
+	ctx := tenant.WithTenant(context.Background(), "tenant-test")
+
+	result, err := svc.ConsolidateTenant(ctx, 0.99)
+	if err != nil {
+		t.Fatalf("ConsolidateTenant() error = %v", err)
+	}
+
+	if result.Consolidated != 1 {
+		t.Fatalf("expected one consolidation, got %d", result.Consolidated)
+	}
+	if len(result.MergedIDs) != 1 || result.MergedIDs[0] != "secondary" {
+		t.Fatalf("merged IDs = %v", result.MergedIDs)
+	}
+	if len(repo.updated) != 1 {
+		t.Fatalf("expected one updated primary memory, got %d", len(repo.updated))
+	}
+	updated := repo.updated[0]
+	if updated.ID != "primary" {
+		t.Fatalf("updated ID = %s", updated.ID)
+	}
+	if updated.Content != "store memory metadata and tags in postgres jsonb" {
+		t.Fatalf("merged content = %q", updated.Content)
+	}
+	if updated.Summary != "metadata and tags in jsonb" {
+		t.Fatalf("merged summary = %q", updated.Summary)
+	}
+	if updated.Importance != domain.ImportanceCritical {
+		t.Fatalf("expected higher importance to be preserved, got %s", updated.Importance)
+	}
+	if updated.AccessCount != 7 || updated.HelpfulCount != 3 || updated.NotHelpfulCount != 4 {
+		t.Fatalf("expected counters to be summed, got access=%d helpful=%d notHelpful=%d",
+			updated.AccessCount, updated.HelpfulCount, updated.NotHelpfulCount)
+	}
+	if updated.Version != 3 {
+		t.Fatalf("expected version increment to 3, got %d", updated.Version)
+	}
+	assertHasTag(t, updated.Tags, "postgres")
+	assertHasTag(t, updated.Tags, "tags")
+	if len(repo.deleted) != 1 || repo.deleted[0] != "secondary" {
+		t.Fatalf("deleted IDs = %v", repo.deleted)
+	}
+	if llm.callCount != 1 {
+		t.Fatalf("expected one LLM call, got %d", llm.callCount)
+	}
+}
+
+func TestConsolidateTenant_CompressesVerboseMemory(t *testing.T) {
+	verbose := ""
+	for i := 0; i < 250; i++ {
+		verbose += "verbose memory detail "
+	}
+	repo := &fakeConsolidationMemoryRepo{
+		memories: []domain.Memory{
+			{
+				ID:         "verbose-memory",
+				Content:    verbose,
+				Summary:    "verbose",
+				Category:   domain.CategoryKnowledge,
+				Importance: domain.ImportanceMinor,
+				Version:    1,
+			},
+		},
+	}
+	llm := &mockLLMProvider{
+		name:     "test",
+		response: `{"content":"compressed memory detail","summary":"compressed"}`,
+	}
+	svc := NewConsolidationServiceWithLLM(repo, llm, nil, nil)
+
+	result, err := svc.ConsolidateTenant(context.Background(), 0.99)
+	if err != nil {
+		t.Fatalf("ConsolidateTenant() error = %v", err)
+	}
+
+	if result.Compressed != 1 {
+		t.Fatalf("expected one compressed memory, got %d", result.Compressed)
+	}
+	if len(repo.updated) != 1 {
+		t.Fatalf("expected one updated compressed memory, got %d", len(repo.updated))
+	}
+	updated := repo.updated[0]
+	if updated.Content != "compressed memory detail" {
+		t.Fatalf("compressed content = %q", updated.Content)
+	}
+	if updated.Summary != "compressed" {
+		t.Fatalf("compressed summary = %q", updated.Summary)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("expected version increment to 2, got %d", updated.Version)
+	}
+}
+
+func assertHasTag(t *testing.T, tags []string, want string) {
+	t.Helper()
+	for _, tag := range tags {
+		if tag == want {
+			return
+		}
+	}
+	t.Fatalf("expected tag %q in %v", want, tags)
 }

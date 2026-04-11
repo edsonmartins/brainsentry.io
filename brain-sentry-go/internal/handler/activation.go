@@ -20,6 +20,11 @@ func NewActivationHandler(activationService *service.SpreadingActivationService)
 
 // Activate handles POST /v1/memories/activate — propagates activation from seed memories.
 func (h *ActivationHandler) Activate(w http.ResponseWriter, r *http.Request) {
+	if h.activationService == nil {
+		writeError(w, http.StatusServiceUnavailable, "activation service is not available")
+		return
+	}
+
 	var req struct {
 		SeedIDs         []string  `json:"seedIds"`
 		SeedActivations []float64 `json:"seedActivations"`

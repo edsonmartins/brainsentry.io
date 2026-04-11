@@ -13,13 +13,13 @@ import (
 
 // AutoForgetConfig holds configuration for auto-forget behavior.
 type AutoForgetConfig struct {
-	TTLEnabled              bool          // enable TTL-based expiry
-	ContradictionEnabled    bool          // enable contradiction detection
-	LowValueEnabled         bool          // enable low-value cleanup
-	LowValueMaxAgeDays      int           // max age for low-value check (default 180)
-	LowValueMaxImportance   string        // importance threshold (default MINOR)
-	ContradictionThreshold  float64       // Jaccard similarity threshold (default 0.9)
-	MaxDeletesPerRun        int           // safety limit per run (default 50)
+	TTLEnabled             bool    // enable TTL-based expiry
+	ContradictionEnabled   bool    // enable contradiction detection
+	LowValueEnabled        bool    // enable low-value cleanup
+	LowValueMaxAgeDays     int     // max age for low-value check (default 180)
+	LowValueMaxImportance  string  // importance threshold (default MINOR)
+	ContradictionThreshold float64 // Jaccard similarity threshold (default 0.9)
+	MaxDeletesPerRun       int     // safety limit per run (default 50)
 }
 
 // DefaultAutoForgetConfig returns sensible defaults.
@@ -37,17 +37,23 @@ func DefaultAutoForgetConfig() AutoForgetConfig {
 
 // AutoForgetResult holds the result of an auto-forget run.
 type AutoForgetResult struct {
-	TTLExpired       int      `json:"ttl_expired"`
-	Contradictions   int      `json:"contradictions"`
-	LowValue         int      `json:"low_value"`
-	TotalDeleted     int      `json:"total_deleted"`
-	DeletedIDs       []string `json:"deleted_ids,omitempty"`
-	DryRun           bool     `json:"dry_run"`
+	TTLExpired     int      `json:"ttl_expired"`
+	Contradictions int      `json:"contradictions"`
+	LowValue       int      `json:"low_value"`
+	TotalDeleted   int      `json:"total_deleted"`
+	DeletedIDs     []string `json:"deleted_ids,omitempty"`
+	DryRun         bool     `json:"dry_run"`
+}
+
+type autoForgetMemoryRepository interface {
+	List(ctx context.Context, page, size int) ([]domain.Memory, int64, error)
+	Delete(ctx context.Context, id string) error
+	SupersedeMemory(ctx context.Context, oldID, newID string) error
 }
 
 // AutoForgetService handles intelligent memory cleanup.
 type AutoForgetService struct {
-	memoryRepo   *postgres.MemoryRepository
+	memoryRepo   autoForgetMemoryRepository
 	auditService *AuditService
 	config       AutoForgetConfig
 }
@@ -114,9 +120,11 @@ func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetRe
 			"total_deleted", result.TotalDeleted,
 		)
 
-		go s.auditService.LogError(context.Background(), "auto_forget",
-			fmt.Sprintf("ttl=%d contradictions=%d low_value=%d total=%d",
-				result.TTLExpired, result.Contradictions, result.LowValue, result.TotalDeleted))
+		if s.auditService != nil {
+			go s.auditService.LogError(context.Background(), "auto_forget",
+				fmt.Sprintf("ttl=%d contradictions=%d low_value=%d total=%d",
+					result.TTLExpired, result.Contradictions, result.LowValue, result.TotalDeleted))
+		}
 	}
 
 	return result, nil
@@ -126,7 +134,7 @@ func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetRe
 func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool) ([]string, error) {
 	now := time.Now()
 
-	memories, _, err := s.memoryRepo.List(ctx, 1, 500)
+	memories, _, err := s.memoryRepo.List(ctx, 0, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +163,7 @@ func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool) ([]strin
 // detectContradictions finds memories with very similar content (Jaccard > threshold)
 // and marks the older one as superseded.
 func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun bool) ([]string, error) {
-	memories, _, err := s.memoryRepo.List(ctx, 1, 200)
+	memories, _, err := s.memoryRepo.List(ctx, 0, 200)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +239,7 @@ func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun boo
 
 // cleanupLowValue removes old memories with low importance and no recent access.
 func (s *AutoForgetService) cleanupLowValue(ctx context.Context, dryRun bool) ([]string, error) {
-	memories, _, err := s.memoryRepo.List(ctx, 1, 500)
+	memories, _, err := s.memoryRepo.List(ctx, 0, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -316,4 +324,3 @@ func jaccardSimilarity(a, b map[string]bool) float64 {
 
 	return float64(intersection) / float64(union)
 }
-

@@ -42,13 +42,13 @@ func NewRetrievalPlannerService(
 
 // RetrievalPlan represents the planner's analysis of a query.
 type RetrievalPlan struct {
-	OriginalQuery string         `json:"originalQuery"`
-	InfoNeeds     []InfoNeed     `json:"infoNeeds"`
-	SubQueries    []SubQuery     `json:"subQueries"`
-	Rounds        int            `json:"rounds"`
-	Coverage      float64        `json:"coverage"`
-	Results       []PlanResult   `json:"results"`
-	TotalTimeMs   int64          `json:"totalTimeMs"`
+	OriginalQuery string       `json:"originalQuery"`
+	InfoNeeds     []InfoNeed   `json:"infoNeeds"`
+	SubQueries    []SubQuery   `json:"subQueries"`
+	Rounds        int          `json:"rounds"`
+	Coverage      float64      `json:"coverage"`
+	Results       []PlanResult `json:"results"`
+	TotalTimeMs   int64        `json:"totalTimeMs"`
 }
 
 // InfoNeed represents a type of information needed to answer the query.
@@ -67,11 +67,11 @@ type SubQuery struct {
 
 // PlanResult is a memory retrieved by the planner with its source sub-query.
 type PlanResult struct {
-	MemoryID    string  `json:"memoryId"`
-	Content     string  `json:"content"`
-	Score       float64 `json:"score"`
-	Source      string  `json:"source"` // which sub-query found it
-	Round       int     `json:"round"`
+	MemoryID string  `json:"memoryId"`
+	Content  string  `json:"content"`
+	Score    float64 `json:"score"`
+	Source   string  `json:"source"` // which sub-query found it
+	Round    int     `json:"round"`
 }
 
 // PlanAndRetrieve performs intent-aware retrieval with reflection.
@@ -194,7 +194,7 @@ func (s *RetrievalPlannerService) executeSubQuery(ctx context.Context, sq SubQue
 			if err == nil {
 				for i, id := range ids {
 					m, err := s.memoryRepo.FindByID(ctx, id)
-					if err != nil || IsExpired(m, time.Now()) {
+					if err != nil || isInactiveMemory(m, time.Now()) {
 						continue
 					}
 					results = append(results, PlanResult{
@@ -211,7 +211,7 @@ func (s *RetrievalPlannerService) executeSubQuery(ctx context.Context, sq SubQue
 		memories, err := s.memoryRepo.FullTextSearch(ctx, sq.Query, limit)
 		if err == nil {
 			for _, m := range memories {
-				if IsExpired(&m, time.Now()) {
+				if isInactiveMemory(&m, time.Now()) {
 					continue
 				}
 				results = append(results, PlanResult{
@@ -228,7 +228,7 @@ func (s *RetrievalPlannerService) executeSubQuery(ctx context.Context, sq SubQue
 		memories, err := s.memoryRepo.FullTextSearch(ctx, sq.Query, limit)
 		if err == nil {
 			for _, m := range memories {
-				if IsExpired(&m, time.Now()) {
+				if isInactiveMemory(&m, time.Now()) {
 					continue
 				}
 				results = append(results, PlanResult{
@@ -322,4 +322,3 @@ func sortPlanResults(results []PlanResult) {
 		results[j+1] = key
 	}
 }
-

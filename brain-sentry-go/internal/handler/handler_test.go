@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/integraltech/brainsentry/internal/dto"
+	"github.com/integraltech/brainsentry/internal/service"
 )
 
 // --- Auth Handler Tests ---
@@ -577,6 +578,99 @@ func TestInterceptionHandler_Intercept_EmptyBody(t *testing.T) {
 		t.Errorf("expected status 400, got %d", rr.Code)
 	}
 	assertErrorMessage(t, rr, "prompt is required")
+}
+
+// --- Learning Lifecycle Handler Tests ---
+
+func TestReconciliationHandler_Reconcile_ServiceUnavailable(t *testing.T) {
+	h := NewReconciliationHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/reconcile", strings.NewReader(`{"content":"fact"}`))
+	rr := httptest.NewRecorder()
+
+	h.Reconcile(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "reconciliation service is not available")
+}
+
+func TestReconciliationHandler_Reconcile_InvalidJSON(t *testing.T) {
+	h := NewReconciliationHandler(&service.ReconciliationService{})
+	req := httptest.NewRequest(http.MethodPost, "/v1/reconcile", strings.NewReader(`{bad`))
+	rr := httptest.NewRecorder()
+
+	h.Reconcile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "invalid request body")
+}
+
+func TestReconciliationHandler_Reconcile_MissingContent(t *testing.T) {
+	h := NewReconciliationHandler(&service.ReconciliationService{})
+	req := httptest.NewRequest(http.MethodPost, "/v1/reconcile", strings.NewReader(`{"sessionId":"s1"}`))
+	rr := httptest.NewRecorder()
+
+	h.Reconcile(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "content is required")
+}
+
+func TestConsolidationHandler_Consolidate_ServiceUnavailable(t *testing.T) {
+	h := NewConsolidationHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/consolidate", strings.NewReader(`{"similarityThreshold":0.9}`))
+	rr := httptest.NewRecorder()
+
+	h.Consolidate(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "consolidation service is not available")
+}
+
+func TestSemanticMemoryHandler_Consolidate_ServiceUnavailable(t *testing.T) {
+	h := NewSemanticMemoryHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/semantic/consolidate?minMemories=3", nil)
+	rr := httptest.NewRecorder()
+
+	h.Consolidate(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "semantic memory service is not available")
+}
+
+func TestAutoForgetHandler_Run_ServiceUnavailable(t *testing.T) {
+	h := NewAutoForgetHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/auto-forget?dryRun=true", nil)
+	rr := httptest.NewRecorder()
+
+	h.Run(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "auto-forget service is not available")
+}
+
+func TestActivationHandler_Activate_ServiceUnavailable(t *testing.T) {
+	h := NewActivationHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/memories/activate", strings.NewReader(`{"seedIds":["m1"]}`))
+	rr := httptest.NewRecorder()
+
+	h.Activate(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503, got %d", rr.Code)
+	}
+	assertErrorMessage(t, rr, "activation service is not available")
 }
 
 // --- Relationship Handler Tests ---

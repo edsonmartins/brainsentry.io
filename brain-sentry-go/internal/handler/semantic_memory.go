@@ -17,6 +17,11 @@ func NewSemanticMemoryHandler(svc *service.SemanticMemoryService) *SemanticMemor
 }
 
 func (h *SemanticMemoryHandler) Consolidate(w http.ResponseWriter, r *http.Request) {
+	if h.svc == nil {
+		writeError(w, http.StatusServiceUnavailable, "semantic memory service is not available")
+		return
+	}
+
 	minMemories := 5
 	if v := r.URL.Query().Get("minMemories"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {

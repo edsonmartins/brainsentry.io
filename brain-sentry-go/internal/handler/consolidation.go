@@ -19,6 +19,11 @@ func NewConsolidationHandler(consolidationService *service.ConsolidationService)
 
 // Consolidate handles POST /v1/consolidate — merges similar memories and compresses verbose ones.
 func (h *ConsolidationHandler) Consolidate(w http.ResponseWriter, r *http.Request) {
+	if h.consolidationService == nil {
+		writeError(w, http.StatusServiceUnavailable, "consolidation service is not available")
+		return
+	}
+
 	var req struct {
 		SimilarityThreshold float64 `json:"similarityThreshold"`
 	}

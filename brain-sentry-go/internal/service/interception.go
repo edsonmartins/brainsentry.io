@@ -318,12 +318,16 @@ func filterActiveMemories(memories []domain.Memory) []domain.Memory {
 	now := time.Now()
 	var active []domain.Memory
 	for _, m := range memories {
-		if IsExpired(&m, now) || m.SupersededBy != "" {
+		if isInactiveMemory(&m, now) {
 			continue
 		}
 		active = append(active, m)
 	}
 	return active
+}
+
+func isInactiveMemory(m *domain.Memory, now time.Time) bool {
+	return IsExpired(m, now) || m.SupersededBy != ""
 }
 
 func containsErrorKeywords(text string) bool {

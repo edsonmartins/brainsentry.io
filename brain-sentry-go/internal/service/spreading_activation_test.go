@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"math"
 	"testing"
 )
 
@@ -200,5 +202,125 @@ func TestSpread_EmptySeedActivations_UsesDefault(t *testing.T) {
 	}
 	if len(result.SeedIDs) != 2 {
 		t.Errorf("expected 2 seeds, got %d", len(result.SeedIDs))
+	}
+}
+
+type fakeSpreadingNeighborProvider struct {
+	neighbors map[string][]graphNeighbor
+	calls     []string
+}
+
+func (f *fakeSpreadingNeighborProvider) GetNeighbors(_ context.Context, memoryID, _ string) ([]graphNeighbor, error) {
+	f.calls = append(f.calls, memoryID)
+	return f.neighbors[memoryID], nil
+}
+
+func TestSpread_PropagatesThroughGraphWithDecayAndCycles(t *testing.T) {
+	provider := &fakeSpreadingNeighborProvider{
+		neighbors: map[string][]graphNeighbor{
+			"a": {
+				{ID: "b", Strength: 10},
+			},
+			"b": {
+				{ID: "a", Strength: 10},
+				{ID: "c", Strength: 10},
+			},
+			"c": {
+				{ID: "a", Strength: 10},
+			},
+		},
+	}
+	svc := NewSpreadingActivationService(nil, nil)
+	svc.neighborProvider = provider
+
+	result, err := svc.Spread(context.Background(), []string{"a"}, []float64{1}, "tenant-graph")
+	if err != nil {
+		t.Fatalf("Spread() error = %v", err)
+	}
+
+	if result.TotalActivated != 2 {
+		t.Fatalf("expected 2 activated memories, got %d: %#v", result.TotalActivated, result.Activations)
+	}
+	if result.Activations[0].MemoryID != "b" {
+		t.Fatalf("expected b first, got %#v", result.Activations)
+	}
+	assertFloatClose(t, result.Activations[0].Activation, 0.5)
+	if result.Activations[0].HopsFromSeed != 1 {
+		t.Fatalf("b hops = %d, want 1", result.Activations[0].HopsFromSeed)
+	}
+	if result.Activations[1].MemoryID != "c" {
+		t.Fatalf("expected c second, got %#v", result.Activations)
+	}
+	assertFloatClose(t, result.Activations[1].Activation, 0.25)
+	if result.Activations[1].HopsFromSeed != 2 {
+		t.Fatalf("c hops = %d, want 2", result.Activations[1].HopsFromSeed)
+	}
+}
+
+func TestSpread_StrongerPathWinsForExistingActivation(t *testing.T) {
+	provider := &fakeSpreadingNeighborProvider{
+		neighbors: map[string][]graphNeighbor{
+			"a": {
+				{ID: "x", Strength: 2},
+				{ID: "b", Strength: 10},
+			},
+			"b": {
+				{ID: "x", Strength: 10},
+			},
+		},
+	}
+	svc := NewSpreadingActivationService(nil, nil)
+	svc.neighborProvider = provider
+
+	result, err := svc.Spread(context.Background(), []string{"a"}, []float64{1}, "tenant-graph")
+	if err != nil {
+		t.Fatalf("Spread() error = %v", err)
+	}
+
+	var x MemoryActivation
+	found := false
+	for _, activation := range result.Activations {
+		if activation.MemoryID == "x" {
+			x = activation
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected x activation in %#v", result.Activations)
+	}
+	assertFloatClose(t, x.Activation, 0.25)
+	if x.HopsFromSeed != 2 {
+		t.Fatalf("expected stronger two-hop path to win, got hops=%d activation=%f", x.HopsFromSeed, x.Activation)
+	}
+	if x.PathStrength != 10 {
+		t.Fatalf("expected path strength 10, got %f", x.PathStrength)
+	}
+}
+
+func TestSpread_DropsActivationBelowThreshold(t *testing.T) {
+	provider := &fakeSpreadingNeighborProvider{
+		neighbors: map[string][]graphNeighbor{
+			"a": {
+				{ID: "too-weak", Strength: 1},
+			},
+		},
+	}
+	svc := NewSpreadingActivationService(nil, nil)
+	svc.neighborProvider = provider
+
+	result, err := svc.Spread(context.Background(), []string{"a"}, []float64{0.9}, "tenant-graph")
+	if err != nil {
+		t.Fatalf("Spread() error = %v", err)
+	}
+	if result.TotalActivated != 0 {
+		t.Fatalf("expected weak activation to be dropped, got %#v", result.Activations)
+	}
+}
+
+func assertFloatClose(t *testing.T, got, want float64) {
+	t.Helper()
+	if math.Abs(got-want) > 0.000001 {
+		t.Fatalf("got %f, want %f", got, want)
 	}
 }

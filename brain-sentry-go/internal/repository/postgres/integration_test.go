@@ -421,6 +421,82 @@ func TestMemoryRepository_ExpireAndSupersedeLifecycle(t *testing.T) {
 	}
 }
 
+func TestMemoryRepository_FullTextSearchReturnsOnlyCurrentTenantActiveMemories(t *testing.T) {
+	repo := NewMemoryRepository(testPool)
+	ctx := tenant.WithTenant(context.Background(), "tenant-search-active")
+	otherCtx := tenant.WithTenant(context.Background(), "tenant-search-other")
+	ensureTenantExists(t, ctx, "tenant-search-active")
+	ensureTenantExists(t, otherCtx, "tenant-search-other")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	past := now.Add(-1 * time.Hour)
+	future := now.Add(1 * time.Hour)
+	searchTerm := fmt.Sprintf("coresearch%d", now.UnixNano())
+
+	active := &domain.Memory{
+		Content:    "Active searchable memory " + searchTerm,
+		Summary:    "Active memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceCritical,
+		Tags:       []string{"active-search", searchTerm},
+		ValidFrom:  &past,
+		ValidTo:    &future,
+	}
+	expired := &domain.Memory{
+		Content:    "Expired searchable memory " + searchTerm,
+		Summary:    "Expired memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceCritical,
+		ValidFrom:  &past,
+		ValidTo:    &past,
+	}
+	superseded := &domain.Memory{
+		Content:      "Superseded searchable memory " + searchTerm,
+		Summary:      "Superseded memory",
+		Category:     domain.CategoryKnowledge,
+		Importance:   domain.ImportanceCritical,
+		SupersededBy: "replacement-memory-id",
+	}
+	deleted := &domain.Memory{
+		Content:    "Deleted searchable memory " + searchTerm,
+		Summary:    "Deleted memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceCritical,
+	}
+	otherTenant := &domain.Memory{
+		Content:    "Other tenant searchable memory " + searchTerm,
+		Summary:    "Other tenant memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceCritical,
+	}
+
+	for _, memory := range []*domain.Memory{active, expired, superseded, deleted} {
+		if err := repo.Create(ctx, memory); err != nil {
+			t.Fatalf("Create failed for %s: %v", memory.Summary, err)
+		}
+	}
+	if err := repo.Create(otherCtx, otherTenant); err != nil {
+		t.Fatalf("Create failed for other tenant: %v", err)
+	}
+	if err := repo.Delete(ctx, deleted.ID); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	results, err := repo.FullTextSearch(ctx, searchTerm, 10)
+	if err != nil {
+		t.Fatalf("FullTextSearch failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected only the active current-tenant memory, got %d: %#v", len(results), results)
+	}
+	if results[0].ID != active.ID {
+		t.Fatalf("expected active memory %s, got %s", active.ID, results[0].ID)
+	}
+	if len(results[0].Tags) != 2 || results[0].Tags[0] != "active-search" || results[0].Tags[1] != searchTerm {
+		t.Fatalf("expected search result tags to be loaded, got %#v", results[0].Tags)
+	}
+}
+
 // --- Audit Repository Tests ---
 
 func TestAuditRepository_CRUD(t *testing.T) {

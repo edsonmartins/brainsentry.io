@@ -52,8 +52,9 @@ type ReconciliationResult struct {
 
 // ReconciliationService handles LLM-driven fact extraction and reconciliation.
 type ReconciliationService struct {
-	openRouter  *OpenRouterService
-	memoryRepo  *postgres.MemoryRepository
+	openRouter    *OpenRouterService
+	llm           LLMProvider
+	memoryRepo    *postgres.MemoryRepository
 	memoryService *MemoryService
 }
 
@@ -63,8 +64,26 @@ func NewReconciliationService(
 	memoryRepo *postgres.MemoryRepository,
 	memoryService *MemoryService,
 ) *ReconciliationService {
+	var llm LLMProvider
+	if openRouter != nil {
+		llm = NewOpenRouterProvider(openRouter)
+	}
 	return &ReconciliationService{
 		openRouter:    openRouter,
+		llm:           llm,
+		memoryRepo:    memoryRepo,
+		memoryService: memoryService,
+	}
+}
+
+// NewReconciliationServiceWithLLM creates a ReconciliationService with a generic LLM provider.
+func NewReconciliationServiceWithLLM(
+	llm LLMProvider,
+	memoryRepo *postgres.MemoryRepository,
+	memoryService *MemoryService,
+) *ReconciliationService {
+	return &ReconciliationService{
+		llm:           llm,
 		memoryRepo:    memoryRepo,
 		memoryService: memoryService,
 	}
@@ -72,7 +91,7 @@ func NewReconciliationService(
 
 // ReconcileFacts extracts atomic facts from content and reconciles with existing memories.
 func (s *ReconciliationService) ReconcileFacts(ctx context.Context, content string, sessionID string) (*ReconciliationResult, error) {
-	if s.openRouter == nil {
+	if s.llm == nil {
 		return &ReconciliationResult{}, nil
 	}
 
@@ -95,10 +114,14 @@ func (s *ReconciliationService) ReconcileFacts(ctx context.Context, content stri
 	for _, fact := range facts {
 		// Search for existing memories similar to this fact
 		searchQuery := fmt.Sprintf("%s %s %s", fact.Subject, fact.Predicate, fact.Object)
-		existingMemories, err := s.memoryRepo.FullTextSearch(ctx, searchQuery, 5)
-		if err != nil {
-			slog.Warn("failed to search for existing facts", "error", err)
-			existingMemories = nil
+		var existingMemories []domain.Memory
+		if s.memoryRepo != nil {
+			var err error
+			existingMemories, err = s.memoryRepo.FullTextSearch(ctx, searchQuery, 5)
+			if err != nil {
+				slog.Warn("failed to search for existing facts", "error", err)
+				existingMemories = nil
+			}
 		}
 
 		// Phase 3: LLM decides action per fact
@@ -147,7 +170,7 @@ Respond in JSON format only:
 Text:
 %s`, truncate(content, 4000))
 
-	response, err := s.openRouter.Chat(ctx, []ChatMessage{
+	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a fact extraction system. Extract atomic facts as subject-predicate-object triples. Respond with valid JSON only."},
 		{Role: "user", Content: prompt},
 	})
@@ -203,7 +226,7 @@ Respond in JSON format only:
   "mergedContent": "new content for the memory if UPDATE"
 }`, fact.Subject, fact.Predicate, fact.Object, fact.Context, existingContext)
 
-	response, err := s.openRouter.Chat(ctx, []ChatMessage{
+	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a fact reconciliation system. Decide how to handle new facts relative to existing memories. Respond with valid JSON only."},
 		{Role: "user", Content: prompt},
 	})
@@ -235,6 +258,9 @@ func (s *ReconciliationService) executeDecision(ctx context.Context, decision *F
 
 	switch decision.Action {
 	case FactActionAdd:
+		if s.memoryService == nil {
+			return
+		}
 		content := fmt.Sprintf("%s %s %s", decision.Fact.Subject, decision.Fact.Predicate, decision.Fact.Object)
 		if decision.Fact.Context != "" {
 			content += ". " + decision.Fact.Context
@@ -248,7 +274,7 @@ func (s *ReconciliationService) executeDecision(ctx context.Context, decision *F
 		}()
 
 	case FactActionUpdate:
-		if decision.ExistingMemoryID == "" || decision.MergedContent == "" {
+		if s.memoryService == nil || decision.ExistingMemoryID == "" || decision.MergedContent == "" {
 			return
 		}
 		go func() {
@@ -260,7 +286,7 @@ func (s *ReconciliationService) executeDecision(ctx context.Context, decision *F
 		}()
 
 	case FactActionDelete:
-		if decision.ExistingMemoryID == "" {
+		if s.memoryRepo == nil || decision.ExistingMemoryID == "" {
 			return
 		}
 		go func() {

@@ -113,6 +113,50 @@ func TestFilterActiveMemories_Empty(t *testing.T) {
 	}
 }
 
+func TestIsInactiveMemory(t *testing.T) {
+	now := time.Now()
+	past := now.Add(-1 * time.Hour)
+	future := now.Add(1 * time.Hour)
+
+	tests := []struct {
+		name   string
+		memory domain.Memory
+		want   bool
+	}{
+		{
+			name:   "active",
+			memory: domain.Memory{ValidTo: &future},
+			want:   false,
+		},
+		{
+			name:   "expired",
+			memory: domain.Memory{ValidTo: &past},
+			want:   true,
+		},
+		{
+			name:   "superseded",
+			memory: domain.Memory{SupersededBy: "new-memory-id"},
+			want:   true,
+		},
+		{
+			name: "expired and superseded",
+			memory: domain.Memory{
+				ValidTo:      &past,
+				SupersededBy: "new-memory-id",
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isInactiveMemory(&tt.memory, now); got != tt.want {
+				t.Fatalf("isInactiveMemory() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // --- filterByImportance tests ---
 
 func TestFilterByImportance_PrefersCritical(t *testing.T) {

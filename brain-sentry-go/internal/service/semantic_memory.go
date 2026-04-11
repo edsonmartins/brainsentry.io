@@ -39,14 +39,27 @@ type ProceduralWorkflow struct {
 
 // SemanticMemoryService consolidates memories into higher-order semantic facts and procedural workflows.
 type SemanticMemoryService struct {
-	memoryRepo *postgres.MemoryRepository
+	memoryRepo semanticMemoryRepository
 	llm        LLMProvider
 	auditSvc   *AuditService
+}
+
+type semanticMemoryRepository interface {
+	List(ctx context.Context, page, size int) ([]domain.Memory, int64, error)
+	Create(ctx context.Context, m *domain.Memory) error
 }
 
 // NewSemanticMemoryService creates a new SemanticMemoryService.
 func NewSemanticMemoryService(
 	memoryRepo *postgres.MemoryRepository,
+	llm LLMProvider,
+	auditSvc *AuditService,
+) *SemanticMemoryService {
+	return NewSemanticMemoryServiceWithRepository(memoryRepo, llm, auditSvc)
+}
+
+func NewSemanticMemoryServiceWithRepository(
+	memoryRepo semanticMemoryRepository,
 	llm LLMProvider,
 	auditSvc *AuditService,
 ) *SemanticMemoryService {
@@ -59,10 +72,10 @@ func NewSemanticMemoryService(
 
 // SemanticConsolidationResult holds the outcome of a consolidation run.
 type SemanticConsolidationResult struct {
-	SemanticFacts  []SemanticFact       `json:"semanticFacts"`
-	Workflows      []ProceduralWorkflow `json:"workflows"`
-	MemoriesUsed   int                  `json:"memoriesUsed"`
-	DurationMs     int64                `json:"durationMs"`
+	SemanticFacts []SemanticFact       `json:"semanticFacts"`
+	Workflows     []ProceduralWorkflow `json:"workflows"`
+	MemoriesUsed  int                  `json:"memoriesUsed"`
+	DurationMs    int64                `json:"durationMs"`
 }
 
 const semanticExtractionPrompt = `Given a collection of related memories, extract:
@@ -88,7 +101,7 @@ func (s *SemanticMemoryService) Consolidate(ctx context.Context, minMemories int
 	}
 
 	// Get memories for consolidation
-	memories, _, err := s.memoryRepo.List(ctx, 1, 100)
+	memories, _, err := s.memoryRepo.List(ctx, 0, 100)
 	if err != nil {
 		return nil, fmt.Errorf("listing memories for consolidation: %w", err)
 	}
@@ -225,9 +238,9 @@ func (s *SemanticMemoryService) storeConsolidation(ctx context.Context, result *
 	if len(result.SemanticFacts) > 0 {
 		factsJSON, _ := json.Marshal(result.SemanticFacts)
 		meta, _ := json.Marshal(map[string]any{
-			"type":           "semantic_consolidation",
-			"factCount":      len(result.SemanticFacts),
-			"semanticFacts":  result.SemanticFacts,
+			"type":          "semantic_consolidation",
+			"factCount":     len(result.SemanticFacts),
+			"semanticFacts": result.SemanticFacts,
 		})
 
 		m := &domain.Memory{
@@ -247,9 +260,9 @@ func (s *SemanticMemoryService) storeConsolidation(ctx context.Context, result *
 	// Store procedural workflows
 	if len(result.Workflows) > 0 {
 		meta, _ := json.Marshal(map[string]any{
-			"type":           "procedural_consolidation",
-			"workflowCount":  len(result.Workflows),
-			"workflows":      result.Workflows,
+			"type":          "procedural_consolidation",
+			"workflowCount": len(result.Workflows),
+			"workflows":     result.Workflows,
 		})
 
 		m := &domain.Memory{

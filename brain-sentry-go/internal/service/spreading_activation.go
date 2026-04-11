@@ -12,11 +12,16 @@ import (
 // SpreadingActivationService propagates saliency boosts through graph neighbors.
 // Simulates associative activation in cognitive science.
 type SpreadingActivationService struct {
-	graphRepo    *graphrepo.MemoryGraphRepository
-	graphClient  *graphrepo.Client
-	maxHops      int     // max propagation depth
-	decayFactor  float64 // decay per hop (0-1)
-	minThreshold float64 // stop propagation below this
+	graphRepo        *graphrepo.MemoryGraphRepository
+	graphClient      *graphrepo.Client
+	neighborProvider spreadingNeighborProvider
+	maxHops          int     // max propagation depth
+	decayFactor      float64 // decay per hop (0-1)
+	minThreshold     float64 // stop propagation below this
+}
+
+type spreadingNeighborProvider interface {
+	GetNeighbors(ctx context.Context, memoryID, tenantID string) ([]graphNeighbor, error)
 }
 
 // NewSpreadingActivationService creates a new SpreadingActivationService.
@@ -24,40 +29,45 @@ func NewSpreadingActivationService(
 	graphRepo *graphrepo.MemoryGraphRepository,
 	graphClient *graphrepo.Client,
 ) *SpreadingActivationService {
+	var neighborProvider spreadingNeighborProvider
+	if graphClient != nil {
+		neighborProvider = graphClientNeighborProvider{client: graphClient}
+	}
 	return &SpreadingActivationService{
-		graphRepo:    graphRepo,
-		graphClient:  graphClient,
-		maxHops:      3,
-		decayFactor:  0.5,   // halves each hop
-		minThreshold: 0.05,  // stop below 5%
+		graphRepo:        graphRepo,
+		graphClient:      graphClient,
+		neighborProvider: neighborProvider,
+		maxHops:          3,
+		decayFactor:      0.5,  // halves each hop
+		minThreshold:     0.05, // stop below 5%
 	}
 }
 
 // ActivationResult represents the spreading activation output.
 type ActivationResult struct {
-	SeedIDs       []string              `json:"seedIds"`
-	Activations   []MemoryActivation    `json:"activations"`
-	TotalActivated int                  `json:"totalActivated"`
-	MaxHops        int                  `json:"maxHops"`
+	SeedIDs        []string           `json:"seedIds"`
+	Activations    []MemoryActivation `json:"activations"`
+	TotalActivated int                `json:"totalActivated"`
+	MaxHops        int                `json:"maxHops"`
 }
 
 // MemoryActivation represents a memory's activation level.
 type MemoryActivation struct {
-	MemoryID    string  `json:"memoryId"`
-	Activation  float64 `json:"activation"`  // 0-1 activation strength
-	HopsFromSeed int    `json:"hopsFromSeed"`
+	MemoryID     string  `json:"memoryId"`
+	Activation   float64 `json:"activation"` // 0-1 activation strength
+	HopsFromSeed int     `json:"hopsFromSeed"`
 	PathStrength float64 `json:"pathStrength"` // edge strength along path
 }
 
 // Spread propagates activation from seed memories through graph neighbors.
 func (s *SpreadingActivationService) Spread(ctx context.Context, seedIDs []string, seedActivations []float64, tenantID string) (*ActivationResult, error) {
-	if s.graphClient == nil || len(seedIDs) == 0 {
+	if s.neighborProvider == nil || len(seedIDs) == 0 {
 		return &ActivationResult{SeedIDs: seedIDs}, nil
 	}
 
 	result := &ActivationResult{
-		SeedIDs:  seedIDs,
-		MaxHops:  s.maxHops,
+		SeedIDs: seedIDs,
+		MaxHops: s.maxHops,
 	}
 
 	// Initialize activation map with seeds
@@ -156,6 +166,17 @@ type graphNeighbor struct {
 }
 
 func (s *SpreadingActivationService) getNeighbors(ctx context.Context, memoryID, tenantID string) ([]graphNeighbor, error) {
+	if s.neighborProvider == nil {
+		return nil, nil
+	}
+	return s.neighborProvider.GetNeighbors(ctx, memoryID, tenantID)
+}
+
+type graphClientNeighborProvider struct {
+	client *graphrepo.Client
+}
+
+func (p graphClientNeighborProvider) GetNeighbors(ctx context.Context, memoryID, tenantID string) ([]graphNeighbor, error) {
 	cypher := fmt.Sprintf(`MATCH (m:Memory {id: '%s'})-[r:RELATED_TO]-(neighbor:Memory)
 WHERE neighbor.tenantId = '%s'
 RETURN neighbor.id as id, coalesce(r.strength, 1) as strength
@@ -164,7 +185,7 @@ LIMIT 20`,
 		graphrepo.EscapeCypher(tenantID),
 	)
 
-	result, err := s.graphClient.Query(ctx, cypher)
+	result, err := p.client.Query(ctx, cypher)
 	if err != nil {
 		return nil, err
 	}
