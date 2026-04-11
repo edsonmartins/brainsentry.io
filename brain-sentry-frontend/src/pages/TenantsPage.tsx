@@ -263,7 +263,7 @@ export function TenantsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+      <header className="sticky top-0 z-10 border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white">
         <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

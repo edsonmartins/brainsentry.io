@@ -1,63 +1,63 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Search, Sparkles, Brain, ChevronDown, ChevronUp, Info } from "lucide-react";
 import { useDebounce } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
-import { Input, SearchInput, FilterSelect } from "@/components/ui/filter";
+import { Input, FilterSelect } from "@/components/ui/filter";
 import { Spinner, Skeleton } from "@/components/ui/spinner";
-import { Pagination } from "@/components/ui/pagination";
 import { useToast } from "@/components/ui/toast";
 import { MemoryCard } from "@/components/memory";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api/client";
 
-interface SearchResponse {
-  query: string;
-  results: Array<{
-    id: string;
-    content: string;
-    summary: string;
-    category: string;
-    importance: string;
-    score: number;
-    createdAt: string;
-    tags: string[];
-  }>;
-  totalResults: number;
-  searchTimeMs: number;
-}
-
-interface MemoryResponse {
+interface SearchResultItem {
   id: string;
   content: string;
   summary: string;
   category: string;
   importance: string;
-  validationStatus: string;
+  score: number;
   tags: string[];
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  accessCount?: number;
+  injectionCount?: number;
+  helpfulCount?: number;
+  scoreTrace?: {
+    vectorScore?: number;
+    graphScore?: number;
+    recencyScore?: number;
+    importanceBoost?: number;
+    totalScore?: number;
+    explanation?: string;
+  };
 }
 
-interface CategoryOption {
-  value: string;
-  label: string;
+interface PlanSearchResult {
+  query: string;
+  rounds: Array<{
+    round: number;
+    subQuery: string;
+    results: SearchResultItem[];
+    coverage: number;
+  }>;
+  finalResults: SearchResultItem[];
+  totalCoverage: number;
+  searchTimeMs: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
-
-const CATEGORY_OPTIONS: CategoryOption[] = [
+const CATEGORY_OPTIONS = [
   { value: "", label: "Todas" },
-  { value: "DECISION", label: "Decisões" },
-  { value: "PATTERN", label: "Padrões" },
-  { value: "ANTIPATTERN", label: "Anti-padrões" },
-  { value: "DOMAIN", label: "Domínio" },
-  { value: "BUG", label: "Bugs" },
-  { value: "OPTIMIZATION", label: "Otimizações" },
-  { value: "INTEGRATION", label: "Integrações" },
+  { value: "INSIGHT", label: "Insights" },
+  { value: "WARNING", label: "Alertas" },
+  { value: "KNOWLEDGE", label: "Conhecimento" },
+  { value: "ACTION", label: "Ações" },
+  { value: "CONTEXT", label: "Contexto" },
+  { value: "REFERENCE", label: "Referências" },
+  { value: "GENERAL", label: "Geral" },
 ];
 
-const IMPORTANCE_OPTIONS: CategoryOption[] = [
+const IMPORTANCE_OPTIONS = [
   { value: "", label: "Todas" },
   { value: "CRITICAL", label: "Crítico" },
   { value: "IMPORTANT", label: "Importante" },
@@ -73,30 +73,31 @@ export function SearchPage() {
   const debouncedQuery = useDebounce(searchQuery, 500);
   const [category, setCategory] = useState("");
   const [importance, setImportance] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(12);
 
   // Results state
-  const [searchResults, setSearchResults] = useState<MemoryResponse[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [searchTimeMs, setSearchTimeMs] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // Build search query
+  // Advanced search (retrieval planner)
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [planResult, setPlanResult] = useState<PlanSearchResult | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+
+  // ScoreTrace expanded
+  const [expandedScores, setExpandedScores] = useState<Set<string>>(new Set());
+
   const shouldSearch = debouncedQuery.length >= 2 || category || importance;
 
-  // Memoize search params to prevent unnecessary re-renders
-  const searchParams = useMemo(() => ({
-    query: debouncedQuery || "*",
-    category: category || undefined,
-    importance: importance || undefined,
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-  }), [debouncedQuery, category, importance, pageSize, page]);
-
-  // Fetch search results
+  // Server-side search
   const performSearch = useCallback(async () => {
     if (!shouldSearch) {
       setSearchResults([]);
+      setTotalResults(0);
       setError(null);
       return;
     }
@@ -105,61 +106,96 @@ export function SearchPage() {
     setError(null);
 
     try {
-      const response = await api.axiosInstance.post<MemoryResponse[]>(
+      const response = await api.axiosInstance.post<SearchResultItem[] | { results: SearchResultItem[]; total: number; searchTimeMs: number }>(
         "/v1/memories/search",
-        searchParams
+        {
+          query: debouncedQuery || "*",
+          category: category || undefined,
+          importance: importance || undefined,
+          limit: pageSize,
+          offset: page * pageSize,
+        }
       );
-      setSearchResults(response.data);
+
+      // Handle both array and object response formats
+      if (Array.isArray(response.data)) {
+        setSearchResults(response.data);
+        setTotalResults(response.data.length);
+      } else {
+        setSearchResults(response.data.results || []);
+        setTotalResults(response.data.total || response.data.results?.length || 0);
+        setSearchTimeMs(response.data.searchTimeMs || 0);
+      }
     } catch (err) {
-      const error = err as Error;
-      setError(error);
-      toast({
-        title: "Erro na busca",
-        description: error.message,
-        variant: "error",
-      });
+      setError(err as Error);
+      toast({ title: "Erro na busca", description: (err as Error).message, variant: "error" });
     } finally {
       setIsLoading(false);
     }
-  }, [shouldSearch, searchParams, toast]);
+  }, [shouldSearch, debouncedQuery, category, importance, pageSize, page, toast]);
 
-  // Auto-search when params change (debounced)
+  // Auto-search when params change
   useEffect(() => {
-    performSearch();
-  }, [performSearch]);
+    if (!advancedMode) performSearch();
+  }, [performSearch, advancedMode]);
 
-  const results = searchResults || [];
-  const totalResults = results.length;
+  // Reset page on filter change
+  useEffect(() => { setPage(0); }, [debouncedQuery, category, importance]);
+
   const totalPages = Math.ceil(totalResults / pageSize);
+
+  // Advanced search with retrieval planner
+  const handlePlanSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setPlanLoading(true);
+    setPlanResult(null);
+    try {
+      const data = await api.planSearch(searchQuery, pageSize);
+      setPlanResult(data);
+      if (data?.finalResults) {
+        setSearchResults(data.finalResults);
+        setTotalResults(data.finalResults.length);
+      }
+    } catch (err) {
+      toast({ title: "Erro na busca avançada", description: (err as Error).message, variant: "error" });
+    } finally {
+      setPlanLoading(false);
+    }
+  };
 
   const handleSearch = () => {
     if (searchQuery.length < 2 && !category && !importance) {
-      toast({
-        title: "Busca muito curta",
-        description: "Digite pelo menos 2 caracteres ou selecione um filtro.",
-        variant: "warning",
-      });
+      toast({ title: "Busca muito curta", description: "Digite pelo menos 2 caracteres.", variant: "warning" });
       return;
     }
-    performSearch();
+    if (advancedMode) {
+      handlePlanSearch();
+    } else {
+      performSearch();
+    }
   };
 
   const handleClearFilters = () => {
     setSearchQuery("");
     setCategory("");
     setImportance("");
-    setPage(1);
+    setPage(0);
+    setPlanResult(null);
   };
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const toggleScoreTrace = (id: string) => {
+    setExpandedScores(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
+
+  const results = searchResults;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+      <header className="sticky top-0 z-10 border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white">
         <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -168,9 +204,7 @@ export function SearchPage() {
               </div>
               <div>
                 <h1 className="text-base font-bold leading-tight">Busca Semântica</h1>
-                <p className="text-xs text-white/80">
-                  Encontre memórias usando IA
-                </p>
+                <p className="text-xs text-white/80">Encontre memórias usando IA</p>
               </div>
             </div>
           </div>
@@ -186,161 +220,226 @@ export function SearchPage() {
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                  <Input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Digite sua dúvida ou contexto técnico..."
                     className="pl-10 h-12"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSearch();
-                    }}
-                  />
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }} />
                 </div>
-                <Button size="lg" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleSearch}>
-                  <Search className="h-5 w-5 mr-2" />
-                  Buscar
+                <Button size="lg" className="bg-gradient-to-r from-brain-primary to-brain-accent text-white" onClick={handleSearch}>
+                  <Search className="h-5 w-5 mr-2" /> Buscar
                 </Button>
               </div>
 
-              {/* Filters */}
+              {/* Filters + Advanced Toggle */}
               <div className="flex flex-wrap gap-4 items-end">
-                <FilterSelect
-                  label="Categoria"
-                  options={CATEGORY_OPTIONS}
-                  value={category}
-                  onChange={setCategory}
-                />
-                <FilterSelect
-                  label="Importância"
-                  options={IMPORTANCE_OPTIONS}
-                  value={importance}
-                  onChange={setImportance}
-                />
+                <FilterSelect label="Categoria" options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
+                <FilterSelect label="Importância" options={IMPORTANCE_OPTIONS} value={importance} onChange={setImportance} />
+
+                <Button
+                  variant={advancedMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAdvancedMode(!advancedMode)}
+                  className={advancedMode ? "bg-brain-accent hover:bg-brain-accent/90" : ""}
+                >
+                  <Brain className="h-4 w-4 mr-1" />
+                  Busca Avançada
+                </Button>
+
                 {(searchQuery || category || importance) && (
-                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                    Limpar filtros
-                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>Limpar filtros</Button>
                 )}
               </div>
+
+              {advancedMode && (
+                <div className="p-3 bg-brain-accent/10 rounded-md text-sm text-muted-foreground flex items-center gap-2">
+                  <Info className="h-4 w-4 shrink-0" />
+                  <span>
+                    Modo avançado usa o Retrieval Planner para busca multi-round com cobertura progressiva.
+                    O sistema gera sub-queries e combina resultados de múltiplas perspectivas.
+                  </span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
+        {/* Plan Search Rounds */}
+        {planResult && planResult.rounds && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Brain className="h-4 w-4 text-brain-accent" />
+                Plano de Busca — {planResult.rounds.length} rounds, cobertura {((planResult.totalCoverage || 0) * 100).toFixed(0)}%
+                {planResult.searchTimeMs > 0 && <span className="text-xs text-muted-foreground">({planResult.searchTimeMs}ms)</span>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {planResult.rounds.map((round) => (
+                  <div key={round.round} className="flex items-center gap-3 p-2 bg-accent rounded-md">
+                    <span className="text-xs font-bold text-brain-primary bg-brain-primary/10 px-2 py-1 rounded">
+                      Round {round.round}
+                    </span>
+                    <span className="text-sm flex-1">"{round.subQuery}"</span>
+                    <span className="text-xs text-muted-foreground">{round.results?.length || 0} resultados</span>
+                    <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-brain-accent rounded-full" style={{ width: `${(round.coverage || 0) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Loading State */}
-        {isLoading && (
+        {(isLoading || planLoading) && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <Card key={i}>
                 <CardContent className="p-6">
                   <Skeleton variant="text" width="60%" className="mb-4" />
                   <Skeleton variant="rectangular" height={80} className="mb-4" />
-                  <div className="flex gap-2">
-                    <Skeleton variant="text" width={60} />
-                    <Skeleton variant="text" width={60} />
-                  </div>
+                  <div className="flex gap-2"><Skeleton variant="text" width={60} /><Skeleton variant="text" width={60} /></div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
 
-        {/* Error State */}
+        {/* Error */}
         {error && (
           <Card className="mb-6">
             <CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">
-                Erro na busca: {(error as Error).message}
-              </p>
-              <Button className="mt-4" onClick={handleSearch}>
-                Tentar novamente
-              </Button>
+              <p className="text-muted-foreground">Erro na busca: {error.message}</p>
+              <Button className="mt-4" onClick={handleSearch}>Tentar novamente</Button>
             </CardContent>
           </Card>
         )}
 
         {/* No Results */}
-        {!isLoading && shouldSearch && results.length === 0 && (
+        {!isLoading && !planLoading && shouldSearch && results.length === 0 && (
           <Card className="mb-6">
             <CardContent className="p-12 text-center">
               <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">
-                Nenhum resultado encontrado
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                Tente ajustar sua busca ou filtros
-              </p>
-              <Button variant="outline" onClick={handleClearFilters}>
-                Limpar filtros
-              </Button>
+              <h3 className="text-lg font-semibold mb-2">Nenhum resultado encontrado</h3>
+              <p className="text-muted-foreground mb-4">Tente ajustar sua busca ou filtros</p>
+              <Button variant="outline" onClick={handleClearFilters}>Limpar filtros</Button>
             </CardContent>
           </Card>
         )}
 
         {/* Results */}
-        {!isLoading && results.length > 0 && (
+        {!isLoading && !planLoading && results.length > 0 && (
           <>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>{totalResults} resultados encontrados</span>
+                {searchTimeMs > 0 && <span>em {searchTimeMs}ms</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Por página:</span>
+                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                  {[6, 12, 24, 48].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               {results.map((memory) => (
-                <MemoryCard key={memory.id} memory={memory} />
+                <div key={memory.id}>
+                  <MemoryCard memory={memory} />
+                  {/* ScoreTrace */}
+                  {(memory.score !== undefined || memory.scoreTrace) && (
+                    <div className="mt-1 px-3">
+                      <button
+                        onClick={() => toggleScoreTrace(memory.id)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {expandedScores.has(memory.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        Score: {(memory.score || memory.scoreTrace?.totalScore || 0).toFixed(3)}
+                      </button>
+                      {expandedScores.has(memory.id) && (
+                        <div className="mt-1 p-2 bg-accent rounded-md text-xs space-y-1">
+                          {memory.scoreTrace ? (
+                            <>
+                              {memory.scoreTrace.vectorScore !== undefined && (
+                                <div className="flex justify-between">
+                                  <span>Vector:</span>
+                                  <span className="font-mono">{memory.scoreTrace.vectorScore.toFixed(4)}</span>
+                                </div>
+                              )}
+                              {memory.scoreTrace.graphScore !== undefined && (
+                                <div className="flex justify-between">
+                                  <span>Graph:</span>
+                                  <span className="font-mono">{memory.scoreTrace.graphScore.toFixed(4)}</span>
+                                </div>
+                              )}
+                              {memory.scoreTrace.recencyScore !== undefined && (
+                                <div className="flex justify-between">
+                                  <span>Recency:</span>
+                                  <span className="font-mono">{memory.scoreTrace.recencyScore.toFixed(4)}</span>
+                                </div>
+                              )}
+                              {memory.scoreTrace.importanceBoost !== undefined && (
+                                <div className="flex justify-between">
+                                  <span>Importance:</span>
+                                  <span className="font-mono">{memory.scoreTrace.importanceBoost.toFixed(4)}</span>
+                                </div>
+                              )}
+                              {memory.scoreTrace.explanation && (
+                                <p className="text-muted-foreground mt-1 border-t pt-1">{memory.scoreTrace.explanation}</p>
+                              )}
+                            </>
+                          ) : (
+                            <div className="flex justify-between">
+                              <span>Total Score:</span>
+                              <span className="font-mono">{(memory.score || 0).toFixed(4)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
 
-            {/* Pagination */}
+            {/* Server-side Pagination */}
             {totalPages > 1 && (
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                pageSize={pageSize}
-                totalItems={totalResults}
-                showPageSizeSelector
-                pageSizeOptions={[6, 12, 24, 48]}
-                onPageSizeChange={(size) => {
-                  setPageSize(size);
-                  setPage(1);
-                }}
-              />
+              <div className="flex items-center justify-center gap-4">
+                <Button size="sm" variant="outline" disabled={page === 0}
+                  onClick={() => setPage(p => Math.max(0, p - 1))}>
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {page + 1} de {totalPages}
+                </span>
+                <Button size="sm" variant="outline" disabled={page >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}>
+                  Próxima
+                </Button>
+              </div>
             )}
           </>
         )}
 
         {/* Initial State */}
-        {!shouldSearch && (
+        {!shouldSearch && !planResult && (
           <Card>
             <CardContent className="p-12 text-center">
               <div className="max-w-md mx-auto">
                 <div className="p-4 bg-gradient-to-br from-brain-primary/20 to-brain-accent/20 rounded-full w-16 h-16 mx-auto mb-4">
                   <Search className="h-8 w-8 text-brain-primary mx-auto mt-4" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Busque em suas memórias
-                </h3>
+                <h3 className="text-lg font-semibold mb-2">Busque em suas memórias</h3>
                 <p className="text-muted-foreground mb-6">
-                  Digite uma pergunta, descrição ou contexto técnico para
-                  encontrar memórias relevantes usando busca semântica.
+                  Digite uma pergunta ou contexto para encontrar memórias relevantes usando busca semântica.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {[
-                    "Spring Boot configuration",
-                    "React hooks patterns",
-                    "API REST best practices",
-                    "Docker optimization",
-                  ].map((suggestion) => (
-                    <Button
-                      key={suggestion}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSearchQuery(suggestion)}
-                    >
-                      {suggestion}
-                    </Button>
+                  {["Spring Boot configuration", "React hooks patterns", "API REST best practices", "Docker optimization"].map((s) => (
+                    <Button key={s} variant="outline" size="sm" onClick={() => setSearchQuery(s)}>{s}</Button>
                   ))}
                 </div>
               </div>

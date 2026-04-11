@@ -75,12 +75,18 @@ export function AuditPage() {
   const [pageSize] = useState(20);
 
   // Fetch audit logs
+  const queryParams = new URLSearchParams({
+    page: String(page - 1),
+    size: String(pageSize),
+    ...(eventType && { eventType }),
+    ...(searchTerm && { search: searchTerm }),
+  });
   const { data, isLoading, error, refetch } = useFetch<{ content: AuditLog[]; totalElements: number }>(
-    `${API_URL}/v1/audit-logs?page=${page - 1}&size=${pageSize}`
+    `${API_URL}/v1/audit/logs?${queryParams.toString()}`
   );
 
   // Fetch stats
-  const { data: stats } = useFetch<StatsResponse>(`${API_URL}/v1/audit-logs/stats`);
+  const { data: stats } = useFetch<StatsResponse>(`${API_URL}/v1/audit/logs/stats`);
 
   const logs = data?.content || [];
   const totalElements = data?.totalElements || 0;
@@ -88,9 +94,13 @@ export function AuditPage() {
 
   const handleExport = async () => {
     try {
-      const response = await fetch(`${API_URL}/v1/audit-logs/export`, {
+      const token = localStorage.getItem("brain_sentry_token");
+      const tenantId = localStorage.getItem("tenant_id") || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
+      const response = await fetch(`${API_URL}/v1/audit/logs/export`, {
         headers: {
           "Content-Type": "application/json",
+          "X-Tenant-ID": tenantId,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
 
@@ -133,7 +143,7 @@ export function AuditPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white -mx-0">
+      <header className="sticky top-0 z-10 border-b bg-gradient-to-r from-brain-primary to-brain-accent text-white">
         <div className="px-4 py-[14px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

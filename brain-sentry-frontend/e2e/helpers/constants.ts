@@ -1,0 +1,30 @@
+export const DEMO_EMAIL = "demo@example.com";
+export const DEMO_PASSWORD = "demo123";
+export const DEFAULT_TENANT_ID = "a9f814d2-4dae-41f3-851b-8aa3d4706561";
+
+export const API_BASE = "http://localhost:8081/api";
+
+export const ROUTES = {
+  login: "/login",
+  dashboard: "/app/dashboard",
+  memories: "/app/memories",
+  search: "/app/search",
+  relationships: "/app/relationships",
+  timeline: "/app/timeline",
+  audit: "/app/audit",
+  users: "/app/users",
+  tenants: "/app/tenants",
+  configuration: "/app/configuration",
+  analytics: "/app/analytics",
+  profile: "/app/profile",
+  playground: "/app/playground",
+  connectors: "/app/connectors",
+  notes: "/app/notes",
+  tasks: "/app/tasks",
+} as const;
+
+export const STORAGE_KEYS = {
+  token: "brain_sentry_token",
+  user: "brain_sentry_user",
+  tenantId: "tenant_id",
+} as const;

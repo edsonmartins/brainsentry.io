@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -80,6 +81,17 @@ func testContext() context.Context {
 	return tenant.WithTenant(context.Background(), "test-tenant-integration")
 }
 
+func ensureTenantExists(t *testing.T, ctx context.Context, id string) {
+	t.Helper()
+	repo := NewTenantRepository(testPool)
+	_ = repo.Create(ctx, &domain.Tenant{
+		ID:     id,
+		Name:   "Integration Test " + id,
+		Slug:   fmt.Sprintf("%s-%d", id, time.Now().UnixNano()),
+		Active: true,
+	})
+}
+
 // --- Tenant Repository Tests ---
 
 func TestTenantRepository_CRUD(t *testing.T) {
@@ -144,13 +156,7 @@ func TestMemoryRepository_CRUD(t *testing.T) {
 	ctx := testContext()
 
 	// Ensure tenant exists
-	tenantRepo := NewTenantRepository(testPool)
-	tenantRepo.Create(ctx, &domain.Tenant{
-		ID:     "test-tenant-integration",
-		Name:   "Integration Test",
-		Slug:   fmt.Sprintf("integration-%d", time.Now().UnixNano()),
-		Active: true,
-	})
+	ensureTenantExists(t, ctx, "test-tenant-integration")
 
 	// Create
 	m := &domain.Memory{
@@ -241,6 +247,177 @@ func TestMemoryRepository_CRUD(t *testing.T) {
 	_, err = repo.FindByID(ctx, m.ID)
 	if err == nil {
 		t.Error("expected error after delete")
+	}
+}
+
+func TestMemoryRepository_PreservesFieldsAndTenantIsolation(t *testing.T) {
+	repo := NewMemoryRepository(testPool)
+	ctxTenant1 := tenant.WithTenant(context.Background(), "tenant-integrity-a")
+	ctxTenant2 := tenant.WithTenant(context.Background(), "tenant-integrity-b")
+
+	ensureTenantExists(t, ctxTenant1, "tenant-integrity-a")
+	ensureTenantExists(t, ctxTenant2, "tenant-integrity-b")
+
+	validFrom := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+	validTo := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	metadata := map[string]any{
+		"origin": "integration-test",
+		"scope":  "memory-integrity",
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("failed to marshal metadata: %v", err)
+	}
+
+	m := &domain.Memory{
+		Content:             "Memory with metadata, tags and provenance",
+		Summary:             "Integrity memory",
+		Category:            domain.CategoryKnowledge,
+		Importance:          domain.ImportanceCritical,
+		Tags:                []string{"integrity", "tenant-a"},
+		Metadata:            metadataJSON,
+		SourceType:          "manual",
+		SourceReference:     "integration-test",
+		CreatedBy:           "qa@brainsentry.io",
+		CodeExample:         "fmt.Println(\"ok\")",
+		ProgrammingLanguage: "go",
+		MemoryType:          domain.MemoryTypeSemantic,
+		EmotionalWeight:     0.75,
+		SimHash:             "abc123def456",
+		ValidFrom:           &validFrom,
+		ValidTo:             &validTo,
+		DecayRate:           0.005,
+	}
+
+	if err := repo.Create(ctxTenant1, m); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	found, err := repo.FindByID(ctxTenant1, m.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+
+	if found.TenantID != "tenant-integrity-a" {
+		t.Fatalf("expected tenant-integrity-a, got %s", found.TenantID)
+	}
+	if len(found.Tags) != 2 || found.Tags[0] != "integrity" || found.Tags[1] != "tenant-a" {
+		t.Fatalf("tags not persisted correctly: %#v", found.Tags)
+	}
+	if found.SourceType != "manual" || found.SourceReference != "integration-test" {
+		t.Fatalf("provenance not preserved: %s / %s", found.SourceType, found.SourceReference)
+	}
+	if found.SimHash != "abc123def456" {
+		t.Fatalf("simhash not preserved: %s", found.SimHash)
+	}
+	if found.EmotionalWeight != 0.75 {
+		t.Fatalf("expected emotional weight 0.75, got %f", found.EmotionalWeight)
+	}
+	if found.ValidFrom == nil || !found.ValidFrom.Equal(validFrom) {
+		t.Fatalf("validFrom not preserved: %#v", found.ValidFrom)
+	}
+	if found.ValidTo == nil || !found.ValidTo.Equal(validTo) {
+		t.Fatalf("validTo not preserved: %#v", found.ValidTo)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(found.Metadata, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal metadata: %v", err)
+	}
+	if decoded["origin"] != "integration-test" || decoded["scope"] != "memory-integrity" {
+		t.Fatalf("metadata not preserved: %#v", decoded)
+	}
+
+	if _, err := repo.FindByID(ctxTenant2, m.ID); err == nil {
+		t.Fatal("expected tenant isolation to block FindByID from another tenant")
+	}
+
+	memoriesTenant2, totalTenant2, err := repo.List(ctxTenant2, 0, 20)
+	if err != nil {
+		t.Fatalf("List for tenant 2 failed: %v", err)
+	}
+	for _, memory := range memoriesTenant2 {
+		if memory.ID == m.ID {
+			t.Fatal("memory from tenant A leaked into tenant B list")
+		}
+	}
+	if totalTenant2 < int64(len(memoriesTenant2)) {
+		t.Fatalf("inconsistent pagination count for tenant 2: total=%d len=%d", totalTenant2, len(memoriesTenant2))
+	}
+}
+
+func TestMemoryRepository_ExpireAndSupersedeLifecycle(t *testing.T) {
+	repo := NewMemoryRepository(testPool)
+	ctx := tenant.WithTenant(context.Background(), "tenant-lifecycle")
+	ensureTenantExists(t, ctx, "tenant-lifecycle")
+
+	expiredAt := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	activeUntil := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+
+	expired := &domain.Memory{
+		Content:    "Expired memory",
+		Summary:    "Expired memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceMinor,
+		ValidTo:    &expiredAt,
+	}
+	current := &domain.Memory{
+		Content:    "Current memory",
+		Summary:    "Current memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceImportant,
+		ValidTo:    &activeUntil,
+	}
+	replacement := &domain.Memory{
+		Content:    "Replacement memory",
+		Summary:    "Replacement memory",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceCritical,
+	}
+
+	for _, memory := range []*domain.Memory{expired, current, replacement} {
+		if err := repo.Create(ctx, memory); err != nil {
+			t.Fatalf("Create failed for %s: %v", memory.Summary, err)
+		}
+	}
+
+	rowsAffected, err := repo.ExpireStaleMemories(ctx)
+	if err != nil {
+		t.Fatalf("ExpireStaleMemories failed: %v", err)
+	}
+	if rowsAffected == 0 {
+		t.Fatal("expected at least one expired memory to be soft-deleted")
+	}
+	if _, err := repo.FindByID(ctx, expired.ID); err == nil {
+		t.Fatal("expired memory should not be retrievable after expiration")
+	}
+
+	if err := repo.SupersedeMemory(ctx, current.ID, replacement.ID); err != nil {
+		t.Fatalf("SupersedeMemory failed: %v", err)
+	}
+
+	superseded, err := repo.FindByID(ctx, current.ID)
+	if err != nil {
+		t.Fatalf("FindByID current failed: %v", err)
+	}
+	if superseded.SupersededBy != replacement.ID {
+		t.Fatalf("expected supersededBy=%s, got %s", replacement.ID, superseded.SupersededBy)
+	}
+	if superseded.ValidTo == nil {
+		t.Fatal("expected superseded memory to receive validTo")
+	}
+
+	active, err := repo.FindActiveMemories(ctx, 10)
+	if err != nil {
+		t.Fatalf("FindActiveMemories failed: %v", err)
+	}
+	for _, memory := range active {
+		if memory.ID == expired.ID {
+			t.Fatal("expired memory leaked into active memories")
+		}
+		if memory.ID == current.ID {
+			t.Fatal("superseded memory leaked into active memories")
+		}
 	}
 }
 

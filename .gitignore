@@ -49,6 +49,8 @@ brain-sentry-frontend/dist-ssr/
 brain-sentry-frontend/build/
 brain-sentry-frontend/.turbo/
 brain-sentry-frontend/coverage/
+brain-sentry-frontend/playwright-report/
+brain-sentry-frontend/test-results/
 brain-sentry-frontend/nuxt/
 brain-sentry-frontend/.nitro/
 brain-sentry-frontend/cache/
@@ -76,6 +78,7 @@ ssl/
 
 # Database dumps
 *.sql
+!brain-sentry-go/internal/repository/postgres/migrations/*.sql
 *.dump
 *.bak
 
@@ -88,6 +91,9 @@ temp/
 # Build artifacts
 build/
 out/
+brain-sentry-go/brain-sentry
+brain-sentry-go/server
+brain-sentry-go/tui
 
 # Package files
 *.jar

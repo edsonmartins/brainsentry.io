@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -73,6 +74,11 @@ func (h *MemoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var metadata map[string]any
+	if m.Metadata != nil {
+		_ = json.Unmarshal(m.Metadata, &metadata)
+	}
+
 	resp := dto.MemoryResponse{
 		ID:                  m.ID,
 		Content:             m.Content,
@@ -80,6 +86,7 @@ func (h *MemoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		Category:            m.Category,
 		Importance:          m.Importance,
 		ValidationStatus:    m.ValidationStatus,
+		Metadata:            metadata,
 		Tags:                m.Tags,
 		SourceType:          m.SourceType,
 		SourceReference:     m.SourceReference,
@@ -98,6 +105,13 @@ func (h *MemoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		CodeExample:         m.CodeExample,
 		ProgrammingLanguage: m.ProgrammingLanguage,
 		MemoryType:          m.MemoryType,
+		EmotionalWeight:     m.EmotionalWeight,
+		SimHash:             m.SimHash,
+		ValidFrom:           m.ValidFrom,
+		ValidTo:             m.ValidTo,
+		DecayRate:           m.DecayRate,
+		SupersededBy:        m.SupersededBy,
+		DecayedRelevance:    service.ComputeDecayedRelevance(m, time.Now()),
 	}
 
 	// Populate related memories if relationship service is available

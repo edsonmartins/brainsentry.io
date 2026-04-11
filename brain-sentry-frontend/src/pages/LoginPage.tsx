@@ -53,19 +53,14 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Create or get demo user
-      const response = await fetch(`${API_URL}/v1/auth/demo`, {
+      // Ensure demo user exists by calling demo endpoint
+      await fetch(`${API_URL}/v1/auth/demo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
 
-      if (!response.ok) {
-        throw new Error("Demo login not available");
-      }
-
-      const data = await response.json();
-      localStorage.setItem("brain_sentry_token", data.token);
-      localStorage.setItem("brain_sentry_user", JSON.stringify(data.user));
+      // Login through AuthContext to properly update state
+      await login("demo@example.com", "demo123");
 
       toast({
         title: "Demo login realizado",

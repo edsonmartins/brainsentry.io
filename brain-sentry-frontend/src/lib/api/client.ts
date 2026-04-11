@@ -36,13 +36,26 @@ export interface Memory {
   summary: string;
   category: MemoryCategory | string;
   importance: ImportanceLevel | string;
+  validationStatus?: string;
+  metadata?: Record<string, unknown>;
   tags: string[];
+  sourceType?: string;
+  sourceReference?: string;
+  createdBy?: string;
   createdAt: string;
   updatedAt?: string;
   accessCount?: number;
   injectionCount?: number;
   helpfulCount?: number;
   embedding?: number[];
+  memoryType?: string;
+  emotionalWeight?: number;
+  simHash?: string;
+  validFrom?: string;
+  validTo?: string;
+  decayRate?: number;
+  supersededBy?: string;
+  decayedRelevance?: number;
 }
 
 export interface CreateMemoryRequest {
@@ -64,9 +77,12 @@ export interface UpdateMemoryRequest {
 export interface MemoryListResponse {
   memories: Memory[];
   total: number;
+  totalElements?: number;
   page: number;
   size: number;
   totalPages: number;
+  hasNext?: boolean;
+  hasPrevious?: boolean;
 }
 
 export interface SearchRequest {
@@ -84,6 +100,18 @@ export interface MemoryStats {
   helpfulnessRate: number;
   totalInjections: number;
   activeMemories24h: number;
+}
+
+type SearchResponse = Memory[] | { results?: Memory[]; total?: number; searchTimeMs?: number };
+type RawMemoryListResponse = Omit<MemoryListResponse, "total"> & { total?: number };
+
+function normalizeMemoryListResponse(data: RawMemoryListResponse): MemoryListResponse {
+  const total = data.total ?? data.totalElements ?? data.memories?.length ?? 0;
+  return {
+    ...data,
+    total,
+    totalElements: data.totalElements ?? total,
+  };
 }
 
 // Interceptador para adicionar headers de autenticação
@@ -154,7 +182,7 @@ class ApiClient {
     const response = await this.client.get<MemoryListResponse>("/v1/memories", {
       params: { page, size },
     });
-    return response.data;
+    return normalizeMemoryListResponse(response.data);
   }
 
   async getMemory(id: string): Promise<Memory> {
@@ -177,11 +205,11 @@ class ApiClient {
   }
 
   async searchMemories(query: string, limit: number = 10): Promise<Memory[]> {
-    const response = await this.client.post<Memory[]>("/v1/memories/search", {
+    const response = await this.client.post<SearchResponse>("/v1/memories/search", {
       query,
       limit,
     });
-    return response.data;
+    return Array.isArray(response.data) ? response.data : response.data.results || [];
   }
 
   async getMemoriesByCategory(category: string): Promise<Memory[]> {
