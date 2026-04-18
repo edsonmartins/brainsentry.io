@@ -283,6 +283,58 @@ func main() {
 	_ = privacyStrippingService
 	_ = slidingWindowService
 
+	// ---- P1 Cognee: Triplet Extraction, Query Router, Cascade Extraction, Feedback Learning ----
+
+	// Query Router (rule-based, LLM-free)
+	queryRouterService := service.NewQueryRouterService(service.DefaultQueryRouterConfig())
+
+	// Feedback Learning Service
+	feedbackLearningService := service.NewFeedbackLearningService(service.DefaultFeedbackLearningConfig())
+
+	// Triplet Extraction (requires LLM)
+	var tripletExtractionService *service.TripletExtractionService
+	if llmProvider != nil {
+		tripletExtractionService = service.NewTripletExtractionService(llmProvider)
+	}
+
+	// Cascade Entity Extraction (requires LLM)
+	var cascadeExtractionService *service.CascadeEntityExtractionService
+	if llmProvider != nil {
+		cascadeExtractionService = service.NewCascadeEntityExtractionService(llmProvider)
+	}
+
+	logger.Info("P1-Cognee services initialized",
+		"queryRouter", queryRouterService != nil,
+		"feedbackLearning", feedbackLearningService != nil,
+		"tripletExtraction", tripletExtractionService != nil,
+		"cascadeExtraction", cascadeExtractionService != nil,
+	)
+
+	// ---- P2 Cognee: AgentTrace, NodeSet, Semantic API, Middleware ----
+
+	// AgentTrace (procedural memory — in-memory for now)
+	agentTraceService := service.NewAgentTraceService(service.DefaultAgentTraceConfig())
+
+	// NodeSet (multi-set grouping via metadata JSON)
+	nodeSetService := service.NewNodeSetService(memoryRepo)
+
+	// Semantic API (high-level remember/recall/improve/forget)
+	semanticAPIService := service.NewSemanticAPIService(
+		memoryService,
+		autoForgetService,
+		feedbackLearningService,
+		nodeSetService,
+		agentTraceService,
+		queryRouterService,
+		memoryRepo,
+	)
+
+	logger.Info("P2-Cognee services initialized",
+		"agentTrace", agentTraceService != nil,
+		"nodeSet", nodeSetService != nil,
+		"semanticAPI", semanticAPIService != nil,
+	)
+
 	// Session Service
 	sessionRepo := postgres.NewSessionRepository(pool)
 	sessionService := service.NewSessionService(service.DefaultSessionConfig(), sessionRepo)
@@ -395,6 +447,17 @@ func main() {
 	semanticMemoryHandler := handler.NewSemanticMemoryHandler(semanticMemoryService)
 	actionsHandler := handler.NewActionsHandler(actionService)
 	meshHandler := handler.NewMeshHandler(meshSyncService)
+
+	// P1-Cognee handlers
+	queryRouterHandler := handler.NewQueryRouterHandler(queryRouterService)
+	tripletHandler := handler.NewTripletHandler(tripletExtractionService)
+	cascadeExtractionHandler := handler.NewCascadeExtractionHandler(cascadeExtractionService)
+	feedbackLearningHandler := handler.NewFeedbackLearningHandler(feedbackLearningService, memoryRepo)
+
+	// P2-Cognee handlers
+	agentTraceHandler := handler.NewAgentTraceHandler(agentTraceService)
+	nodeSetHandler := handler.NewNodeSetHandler(nodeSetService, memoryRepo)
+	semanticAPIHandler := handler.NewSemanticAPIHandler(semanticAPIService)
 
 	// Router
 	r := chi.NewRouter()
@@ -675,6 +738,40 @@ func main() {
 			r.Post("/peers", meshHandler.RegisterPeer)
 			r.Get("/peers", meshHandler.ListPeers)
 			r.Post("/sync", meshHandler.Sync)
+		})
+
+		// P1-Cognee: Query Router (rule-based, LLM-free)
+		r.Post("/v1/router/classify", queryRouterHandler.Classify)
+
+		// P1-Cognee: Triplet Extraction (S,P,O from content)
+		r.Post("/v1/triplets/extract", tripletHandler.Extract)
+
+		// P1-Cognee: Cascade Entity Extraction (3-pass LLM)
+		r.Post("/v1/cascade-extract", cascadeExtractionHandler.Extract)
+
+		// P1-Cognee: Feedback Learning weight inspection
+		r.Get("/v1/memories/{id}/feedback-weight", feedbackLearningHandler.GetWeight)
+
+		// P2-Cognee: Semantic API (remember/recall/improve/forget)
+		r.Post("/v1/remember", semanticAPIHandler.Remember)
+		r.Post("/v1/recall", semanticAPIHandler.Recall)
+		r.Post("/v1/improve", semanticAPIHandler.Improve)
+		r.Post("/v1/forget", semanticAPIHandler.Forget)
+
+		// P2-Cognee: AgentTrace (procedural memory)
+		r.Route("/v1/traces", func(r chi.Router) {
+			r.Post("/", agentTraceHandler.Record)
+			r.Get("/", agentTraceHandler.List)
+			r.Get("/stats", agentTraceHandler.Stats)
+			r.Get("/{id}", agentTraceHandler.Get)
+			r.Delete("/{id}", agentTraceHandler.Delete)
+		})
+
+		// P2-Cognee: NodeSet (multi-set grouping)
+		r.Route("/v1/memories/{id}/sets", func(r chi.Router) {
+			r.Get("/", nodeSetHandler.GetSets)
+			r.Post("/", nodeSetHandler.AddToSet)
+			r.Delete("/", nodeSetHandler.RemoveFromSet)
 		})
 	})
 
