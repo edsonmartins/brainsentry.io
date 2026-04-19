@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { User, Brain, Sparkles, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function ProfilePage() {
       const data = await api.axiosInstance.get<UserProfile>("/v1/profile");
       setProfile(data.data);
     } catch (err: any) {
-      setError(err.message || "Erro ao carregar perfil");
+      setError(err.message || t("profile.loadError"));
     } finally {
       setLoading(false);
     }
@@ -55,9 +57,9 @@ export default function ProfilePage() {
                 <User className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Perfil</h1>
+                <h1 className="text-base font-bold leading-tight">{t("profile.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Perfil cognitivo gerado por IA
+                  {t("profile.subtitle")}
                 </p>
               </div>
             </div>
@@ -79,7 +81,7 @@ export default function ProfilePage() {
           <Card>
             <CardContent className="p-8 text-center">
               <p className="text-destructive mb-4">{error}</p>
-              <Button onClick={fetchProfile}>Tentar novamente</Button>
+              <Button onClick={fetchProfile}>{t("profile.tryAgain")}</Button>
             </CardContent>
           </Card>
         )}
@@ -91,7 +93,7 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Brain className="h-5 w-5" />
-                  Perfil Estático
+                  {t("profile.static")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -99,7 +101,7 @@ export default function ProfilePage() {
 
                 {profile.staticProfile.traits.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Traços</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.traits")}</h4>
                     <div className="flex flex-wrap gap-2">
                       {profile.staticProfile.traits.map((trait, i) => (
                         <span key={i} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">
@@ -112,7 +114,7 @@ export default function ProfilePage() {
 
                 {profile.staticProfile.preferences.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Preferências</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.preferences")}</h4>
                     <div className="flex flex-wrap gap-2">
                       {profile.staticProfile.preferences.map((pref, i) => (
                         <span key={i} className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
@@ -125,7 +127,7 @@ export default function ProfilePage() {
 
                 {profile.staticProfile.expertise.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Expertise</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.expertise")}</h4>
                     <div className="flex flex-wrap gap-2">
                       {profile.staticProfile.expertise.map((exp, i) => (
                         <span key={i} className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full">
@@ -143,7 +145,7 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5" />
-                  Perfil Dinâmico
+                  {t("profile.dynamic")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -151,7 +153,7 @@ export default function ProfilePage() {
 
                 {profile.dynamicProfile.recentFocus.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Foco Recente</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.recentFocus")}</h4>
                     <ul className="space-y-1">
                       {profile.dynamicProfile.recentFocus.map((focus, i) => (
                         <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
@@ -165,7 +167,7 @@ export default function ProfilePage() {
 
                 {profile.dynamicProfile.goals.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Objetivos</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.goals")}</h4>
                     <ul className="space-y-1">
                       {profile.dynamicProfile.goals.map((goal, i) => (
                         <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
@@ -179,7 +181,7 @@ export default function ProfilePage() {
 
                 {profile.dynamicProfile.activity && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Atividade</h4>
+                    <h4 className="text-sm font-medium mb-2">{t("profile.activity")}</h4>
                     <p className="text-sm text-muted-foreground">{profile.dynamicProfile.activity}</p>
                   </div>
                 )}
@@ -192,11 +194,11 @@ export default function ProfilePage() {
           <Card>
             <CardContent className="p-12 text-center">
               <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum perfil disponível</h3>
+              <h3 className="text-lg font-semibold mb-2">{t("profile.empty")}</h3>
               <p className="text-muted-foreground mb-4">
-                O perfil é gerado automaticamente com base nas suas memórias.
+                {t("profile.emptyDesc")}
               </p>
-              <Button onClick={fetchProfile}>Gerar Perfil</Button>
+              <Button onClick={fetchProfile}>{t("profile.generate")}</Button>
             </CardContent>
           </Card>
         )}

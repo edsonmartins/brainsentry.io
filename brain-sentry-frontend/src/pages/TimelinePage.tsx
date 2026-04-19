@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Clock, Brain, Search, AlertTriangle, Zap, FileText, Settings,
   ChevronDown, Filter, RefreshCw,
@@ -38,6 +39,7 @@ const CATEGORY_ICONS: Record<string, typeof Brain> = {
 };
 
 export default function TimelinePage() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,14 +95,14 @@ export default function TimelinePage() {
   const grouped = useMemo(() => {
     const groups: Record<string, TimelineEvent[]> = {};
     for (const e of visible) {
-      const date = new Date(e.createdAt).toLocaleDateString("en-US", {
+      const date = new Date(e.createdAt).toLocaleDateString(i18n.language, {
         weekday: "short", year: "numeric", month: "short", day: "numeric",
       });
       if (!groups[date]) groups[date] = [];
       groups[date].push(e);
     }
     return Object.entries(groups);
-  }, [visible]);
+  }, [visible, i18n.language]);
 
   const handleRefresh = () => {
     setLoading(true);
@@ -112,7 +114,7 @@ export default function TimelinePage() {
         )
       );
       setLoading(false);
-      toast({ title: "Timeline updated", variant: "info" });
+      toast({ title: t("timeline.updated"), variant: "info" });
     });
   };
 
@@ -126,8 +128,8 @@ export default function TimelinePage() {
                 <Clock className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Timeline</h1>
-                <p className="text-xs text-white/80">{events.length} events</p>
+                <h1 className="text-base font-bold leading-tight">{t("timeline.title")}</h1>
+                <p className="text-xs text-white/80">{t("timeline.events", { count: events.length })}</p>
               </div>
             </div>
             <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={handleRefresh}>
@@ -143,7 +145,7 @@ export default function TimelinePage() {
           <TypeChips items={categoryChips} selected={selectedCategory} onSelect={setSelectedCategory} />
           <div className="flex items-center gap-2">
             <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Min Importance:</span>
+            <span className="text-xs text-muted-foreground">{t("timeline.minImportance")}</span>
             {["MINOR", "IMPORTANT", "CRITICAL"].map((level) => (
               <button
                 key={level}
@@ -159,7 +161,7 @@ export default function TimelinePage() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            Showing {visible.length} of {filtered.length} events
+            {t("timeline.showing", { visible: visible.length, total: filtered.length })}
           </p>
         </div>
 
@@ -168,9 +170,9 @@ export default function TimelinePage() {
         ) : events.length === 0 ? (
           <EmptyState
             icon={Clock}
-            title="No events yet"
-            description="Create memories to see them appear in the timeline"
-            action={{ label: "Create Memory", onClick: () => window.location.href = "/app/memories" }}
+            title={t("timeline.empty.title")}
+            description={t("timeline.empty.desc")}
+            action={{ label: t("timeline.createMemory"), onClick: () => window.location.href = "/app/memories" }}
           />
         ) : (
           <>
@@ -206,7 +208,7 @@ export default function TimelinePage() {
                                   {event.category}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground">
-                                  {new Date(event.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                  {new Date(event.createdAt).toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                               </div>
 
@@ -252,7 +254,7 @@ export default function TimelinePage() {
                     className="gap-2"
                   >
                     <ChevronDown className="h-4 w-4" />
-                    Load more ({filtered.length - visibleCount} remaining)
+                    {t("timeline.loadMore", { count: filtered.length - visibleCount })}
                   </Button>
                 </div>
               )}

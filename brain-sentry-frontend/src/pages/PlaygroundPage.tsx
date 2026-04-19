@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Wand2, Send, MessageSquare, Brain } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ interface NLQueryResult {
 }
 
 export default function PlaygroundPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   // Intercept state
@@ -51,7 +53,7 @@ export default function PlaygroundPage() {
       });
       setInterceptResult(resp.data);
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "error" });
+      toast({ title: t("playground.error"), description: err.message, variant: "error" });
     } finally {
       setInterceptLoading(false);
     }
@@ -66,7 +68,7 @@ export default function PlaygroundPage() {
       });
       setNLResult(resp.data);
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "error" });
+      toast({ title: t("playground.error"), description: err.message, variant: "error" });
     } finally {
       setNLLoading(false);
     }
@@ -81,9 +83,9 @@ export default function PlaygroundPage() {
               <Wand2 className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold leading-tight">Playground</h1>
+              <h1 className="text-base font-bold leading-tight">{t("playground.title")}</h1>
               <p className="text-xs text-white/80">
-                Teste interception e consultas ao grafo
+                {t("playground.subtitle")}
               </p>
             </div>
           </div>
@@ -96,7 +98,7 @@ export default function PlaygroundPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
-              Interceptação de Prompt
+              {t("playground.interceptTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -104,35 +106,35 @@ export default function PlaygroundPage() {
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Digite um prompt para interceptar com memórias..."
+                placeholder={t("playground.promptPlaceholder")}
                 className="flex-1 min-h-[100px] p-3 border rounded-md bg-background resize-y text-sm"
               />
             </div>
             <Button onClick={handleIntercept} disabled={interceptLoading || !prompt.trim()}>
               {interceptLoading ? <Spinner size="sm" /> : <Send className="h-4 w-4 mr-2" />}
-              Interceptar
+              {t("playground.intercept")}
             </Button>
 
             {interceptResult && (
               <div className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-3 bg-muted rounded-md">
-                    <p className="text-xs text-muted-foreground">Confiança</p>
+                    <p className="text-xs text-muted-foreground">{t("playground.confidence")}</p>
                     <p className="text-lg font-bold">{(interceptResult.confidence * 100).toFixed(0)}%</p>
                   </div>
                   <div className="p-3 bg-muted rounded-md">
-                    <p className="text-xs text-muted-foreground">Tokens Injetados</p>
+                    <p className="text-xs text-muted-foreground">{t("playground.tokensInjected")}</p>
                     <p className="text-lg font-bold">{interceptResult.tokensInjected}</p>
                   </div>
                   <div className="p-3 bg-muted rounded-md">
-                    <p className="text-xs text-muted-foreground">Latência</p>
+                    <p className="text-xs text-muted-foreground">{t("playground.latency")}</p>
                     <p className="text-lg font-bold">{interceptResult.latencyMs}ms</p>
                   </div>
                 </div>
 
                 {interceptResult.enhanced && interceptResult.enhancedPrompt && (
                   <div>
-                    <h4 className="text-sm font-medium mb-1">Prompt Enhanced</h4>
+                    <h4 className="text-sm font-medium mb-1">{t("playground.enhancedPrompt")}</h4>
                     <pre className="p-3 bg-muted rounded-md text-sm whitespace-pre-wrap overflow-x-auto">
                       {interceptResult.enhancedPrompt}
                     </pre>
@@ -141,7 +143,7 @@ export default function PlaygroundPage() {
 
                 {interceptResult.contextInjected && (
                   <div>
-                    <h4 className="text-sm font-medium mb-1">Contexto Injetado</h4>
+                    <h4 className="text-sm font-medium mb-1">{t("playground.contextInjected")}</h4>
                     <pre className="p-3 bg-muted rounded-md text-sm whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">
                       {interceptResult.contextInjected}
                     </pre>
@@ -150,7 +152,7 @@ export default function PlaygroundPage() {
 
                 {interceptResult.memoriesUsed.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium mb-1">Memórias Usadas ({interceptResult.memoriesUsed.length})</h4>
+                    <h4 className="text-sm font-medium mb-1">{t("playground.memoriesUsed", { count: interceptResult.memoriesUsed.length })}</h4>
                     <ul className="space-y-1">
                       {interceptResult.memoriesUsed.map((m) => (
                         <li key={m.id} className="text-sm text-muted-foreground p-2 bg-muted rounded">
@@ -163,7 +165,7 @@ export default function PlaygroundPage() {
 
                 {interceptResult.reasoning && (
                   <div>
-                    <h4 className="text-sm font-medium mb-1">Raciocínio</h4>
+                    <h4 className="text-sm font-medium mb-1">{t("playground.reasoning")}</h4>
                     <p className="text-sm text-muted-foreground">{interceptResult.reasoning}</p>
                   </div>
                 )}
@@ -177,7 +179,7 @@ export default function PlaygroundPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
-              Consulta ao Grafo (Linguagem Natural)
+              {t("playground.nlTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -185,36 +187,36 @@ export default function PlaygroundPage() {
               <Input
                 value={nlQuestion}
                 onChange={(e) => setNLQuestion(e.target.value)}
-                placeholder="Quais memórias estão relacionadas a autenticação?"
+                placeholder={t("playground.nlPlaceholder")}
                 className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && handleNLQuery()}
               />
               <Button onClick={handleNLQuery} disabled={nlLoading || !nlQuestion.trim()}>
                 {nlLoading ? <Spinner size="sm" /> : <Brain className="h-4 w-4 mr-2" />}
-                Perguntar
+                {t("playground.ask")}
               </Button>
             </div>
 
             {nlResult && (
               <div className="space-y-3 mt-4">
                 <div>
-                  <h4 className="text-sm font-medium mb-1">Cypher Gerado</h4>
+                  <h4 className="text-sm font-medium mb-1">{t("playground.cypherGenerated")}</h4>
                   <pre className="p-3 bg-muted rounded-md text-sm font-mono overflow-x-auto">
                     {nlResult.cypher}
                   </pre>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Tentativas: {nlResult.attempts}
+                  {t("playground.attempts", { count: nlResult.attempts })}
                 </div>
                 {nlResult.results.length > 0 ? (
                   <div>
-                    <h4 className="text-sm font-medium mb-1">Resultados ({nlResult.results.length})</h4>
+                    <h4 className="text-sm font-medium mb-1">{t("playground.results", { count: nlResult.results.length })}</h4>
                     <pre className="p-3 bg-muted rounded-md text-sm whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">
                       {JSON.stringify(nlResult.results, null, 2)}
                     </pre>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Nenhum resultado encontrado.</p>
+                  <p className="text-sm text-muted-foreground">{t("playground.noResults")}</p>
                 )}
               </div>
             )}

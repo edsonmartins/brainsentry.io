@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Building2,
   Plus,
@@ -59,9 +60,11 @@ interface UpdateTenantRequest {
 }
 
 export function TenantsPage() {
+  const { t, i18n } = useTranslation();
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const tenantId = currentUser?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -133,8 +136,8 @@ export function TenantsPage() {
       }
 
       toast({
-        title: "Tenant criado",
-        description: `O tenant "${formData.name}" foi criado com sucesso.`,
+        title: t("tenants.tenantCreated"),
+        description: t("tenants.tenantCreatedDesc", { name: formData.name }),
         variant: "success",
       });
 
@@ -143,8 +146,8 @@ export function TenantsPage() {
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: (err as Error).message || "Não foi possível criar o tenant.",
+        title: t("common.error"),
+        description: (err as Error).message || t("tenants.createError"),
         variant: "error",
       });
     }
@@ -175,8 +178,8 @@ export function TenantsPage() {
       }
 
       toast({
-        title: "Tenant atualizado",
-        description: `O tenant "${selectedTenant.name}" foi atualizado.`,
+        title: t("tenants.tenantUpdated"),
+        description: t("tenants.tenantUpdatedDesc", { name: selectedTenant.name }),
         variant: "success",
       });
 
@@ -185,8 +188,8 @@ export function TenantsPage() {
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: (err as Error).message || "Não foi possível atualizar o tenant.",
+        title: t("common.error"),
+        description: (err as Error).message || t("tenants.updateError"),
         variant: "error",
       });
     }
@@ -195,9 +198,7 @@ export function TenantsPage() {
   // Delete tenant
   const handleDeleteTenant = async (tenantIdToDelete: string, name: string) => {
     if (
-      !confirm(
-        `Tem certeza que deseja excluir o tenant "${name}"? Todos os dados associados serão perdidos.`
-      )
+      !confirm(t("tenants.deleteConfirm", { name }))
     ) {
       return;
     }
@@ -216,16 +217,16 @@ export function TenantsPage() {
       }
 
       toast({
-        title: "Tenant excluído",
-        description: `O tenant "${name}" foi excluído.`,
+        title: t("tenants.tenantDeleted"),
+        description: t("tenants.tenantDeletedDesc", { name }),
         variant: "success",
       });
 
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir o tenant.",
+        title: t("common.error"),
+        description: t("tenants.deleteError"),
         variant: "error",
       });
     }
@@ -253,7 +254,7 @@ export function TenantsPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("pt-BR");
+    return new Date(dateString).toLocaleString(dateLocale);
   };
 
   const getTenantStats = (tenant: Tenant) => {
@@ -271,9 +272,9 @@ export function TenantsPage() {
                 <Building2 className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Tenants</h1>
+                <h1 className="text-base font-bold leading-tight">{t("tenants.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Gerencie as organizações do sistema
+                  {t("tenants.subtitle")}
                 </p>
               </div>
             </div>
@@ -283,7 +284,7 @@ export function TenantsPage() {
               </Button>
               <Button className="bg-white text-brain-primary hover:bg-white/90" onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Novo Tenant
+                {t("tenants.newTenant")}
               </Button>
             </div>
           </div>
@@ -296,7 +297,7 @@ export function TenantsPage() {
           <SearchInput
             value={searchQuery}
             onChange={setSearchQuery}
-            placeholder="Buscar tenants por nome ou slug..."
+            placeholder={t("tenants.searchPlaceholder")}
           />
         </div>
 
@@ -318,17 +319,17 @@ export function TenantsPage() {
             <CardContent className="text-center py-12 text-muted-foreground">
               <Building2 className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-semibold mb-2">
-                {searchQuery ? "Nenhum tenant encontrado" : "Nenhum tenant cadastrado"}
+                {searchQuery ? t("tenants.notFound") : t("tenants.noneRegistered")}
               </h3>
               <p className="mb-4">
                 {searchQuery
-                  ? "Tente buscar com outro termo."
-                  : "Comece adicionando um novo tenant ao sistema."}
+                  ? t("tenants.tryOther")
+                  : t("tenants.startAdding")}
               </p>
               {!searchQuery && (
                 <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => setShowCreateDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Tenant
+                  {t("tenants.addTenant")}
                 </Button>
               )}
             </CardContent>
@@ -375,17 +376,17 @@ export function TenantsPage() {
                         <div className="p-2 bg-muted/50 rounded-lg">
                           <Database className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
                           <p className="text-lg font-semibold">{stats.memoryCount}</p>
-                          <p className="text-xs text-muted-foreground">Memórias</p>
+                          <p className="text-xs text-muted-foreground">{t("tenants.memories")}</p>
                         </div>
                         <div className="p-2 bg-muted/50 rounded-lg">
                           <Users className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
                           <p className="text-lg font-semibold">{stats.userCount}</p>
-                          <p className="text-xs text-muted-foreground">Usuários</p>
+                          <p className="text-xs text-muted-foreground">{t("tenants.users")}</p>
                         </div>
                         <div className="p-2 bg-muted/50 rounded-lg">
                           <Key className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
                           <p className="text-lg font-semibold">{stats.relationshipCount}</p>
-                          <p className="text-xs text-muted-foreground">Relações</p>
+                          <p className="text-xs text-muted-foreground">{t("tenants.relations")}</p>
                         </div>
                       </div>
                     )}
@@ -393,17 +394,17 @@ export function TenantsPage() {
                     {/* Limits */}
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Limite de memórias</span>
+                        <span className="text-muted-foreground">{t("tenants.memoryLimit")}</span>
                         <span className="font-medium">
-                          {tenant.maxMemories || "Ilimitado"}
+                          {tenant.maxMemories || t("tenants.unlimited")}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Limite de usuários</span>
-                        <span className="font-medium">{tenant.maxUsers || "Ilimitado"}</span>
+                        <span className="text-muted-foreground">{t("tenants.userLimit")}</span>
+                        <span className="font-medium">{tenant.maxUsers || t("tenants.unlimited")}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Criado em</span>
+                        <span className="text-muted-foreground">{t("tenants.createdAt")}</span>
                         <span className="font-medium text-xs">
                           {formatDate(tenant.createdAt)}
                         </span>
@@ -419,7 +420,7 @@ export function TenantsPage() {
                         onClick={() => openEditDialog(tenant)}
                       >
                         <Edit className="h-3 w-3 mr-1" />
-                        Editar
+                        {t("common.edit")}
                       </Button>
                       <Button
                         variant="outline"
@@ -433,7 +434,7 @@ export function TenantsPage() {
 
                     {isCurrentTenant && (
                       <div className="text-xs text-center text-primary font-medium bg-primary/10 py-1 rounded">
-                        Tenant atual
+                        {t("tenants.currentTenant")}
                       </div>
                     )}
                   </CardContent>
@@ -459,11 +460,11 @@ export function TenantsPage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Novo Tenant</DialogTitle>
+            <DialogTitle>{t("tenants.newTenant")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="text-sm font-medium mb-2">Nome</label>
+              <label className="text-sm font-medium mb-2">{t("tenants.name")}</label>
               <Input
                 type="text"
                 value={formData.name}
@@ -475,26 +476,26 @@ export function TenantsPage() {
                     slug: generateSlug(name),
                   });
                 }}
-                placeholder="Minha Organização"
+                placeholder={t("tenants.orgPlaceholder")}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Slug (identificador único)</label>
+              <label className="text-sm font-medium mb-2">{t("tenants.slugLabel")}</label>
               <Input
                 type="text"
                 value={formData.slug}
                 onChange={(e) =>
                   setFormData({ ...formData, slug: e.target.value.toLowerCase() })
                 }
-                placeholder="minha-organizacao"
+                placeholder={t("tenants.slugPlaceholder")}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Usado em URLs e IDs. Deve ser único.
+                {t("tenants.slugHint")}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-2">Limite de Memórias</label>
+                <label className="text-sm font-medium mb-2">{t("tenants.maxMemories")}</label>
                 <Input
                   type="number"
                   value={formData.maxMemories || ""}
@@ -508,7 +509,7 @@ export function TenantsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-2">Limite de Usuários</label>
+                <label className="text-sm font-medium mb-2">{t("tenants.maxUsers")}</label>
                 <Input
                   type="number"
                   value={formData.maxUsers || ""}
@@ -525,10 +526,10 @@ export function TenantsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleCreateTenant} disabled={!formData.name || !formData.slug}>
-              Criar Tenant
+              {t("tenants.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -538,11 +539,11 @@ export function TenantsPage() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Editar Tenant</DialogTitle>
+            <DialogTitle>{t("tenants.editTenant")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="text-sm font-medium mb-2">Nome</label>
+              <label className="text-sm font-medium mb-2">{t("tenants.name")}</label>
               <Input
                 type="text"
                 value={formData.name}
@@ -553,11 +554,11 @@ export function TenantsPage() {
               <label className="text-sm font-medium mb-2">Slug</label>
               <Input type="text" value={formData.slug} disabled />
               <p className="text-xs text-muted-foreground mt-1">
-                O slug não pode ser alterado após a criação.
+                {t("tenants.slugLocked")}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Status</label>
+              <label className="text-sm font-medium mb-2">{t("common.status")}</label>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -568,7 +569,7 @@ export function TenantsPage() {
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
-                  Ativo
+                  {t("common.active")}
                 </button>
                 <button
                   type="button"
@@ -579,13 +580,13 @@ export function TenantsPage() {
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
-                  Inativo
+                  {t("common.inactive")}
                 </button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-2">Limite de Memórias</label>
+                <label className="text-sm font-medium mb-2">{t("tenants.maxMemories")}</label>
                 <Input
                   type="number"
                   value={formData.maxMemories || ""}
@@ -598,7 +599,7 @@ export function TenantsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-2">Limite de Usuários</label>
+                <label className="text-sm font-medium mb-2">{t("tenants.maxUsers")}</label>
                 <Input
                   type="number"
                   value={formData.maxUsers || ""}
@@ -614,9 +615,9 @@ export function TenantsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
-            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleUpdateTenant}>Salvar Alterações</Button>
+            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleUpdateTenant}>{t("tenants.saveChanges")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { X } from "lucide-react";
@@ -21,20 +22,20 @@ interface MemoryFormProps {
   inline?: boolean; // Se true, não renderiza o Card wrapper
 }
 
-const categories: { value: MemoryCategory; label: string; color: string }[] = [
-  { value: "INSIGHT", label: "Insight", color: "bg-blue-500" },
-  { value: "DECISION", label: "Decisão", color: "bg-purple-500" },
-  { value: "WARNING", label: "Atenção", color: "bg-red-500" },
-  { value: "KNOWLEDGE", label: "Conhecimento", color: "bg-indigo-500" },
-  { value: "ACTION", label: "Ação", color: "bg-green-500" },
-  { value: "CONTEXT", label: "Contexto", color: "bg-cyan-500" },
-  { value: "REFERENCE", label: "Referência", color: "bg-orange-500" },
+const categoryDefs: { value: MemoryCategory; color: string }[] = [
+  { value: "INSIGHT", color: "bg-blue-500" },
+  { value: "DECISION", color: "bg-purple-500" },
+  { value: "WARNING", color: "bg-red-500" },
+  { value: "KNOWLEDGE", color: "bg-indigo-500" },
+  { value: "ACTION", color: "bg-green-500" },
+  { value: "CONTEXT", color: "bg-cyan-500" },
+  { value: "REFERENCE", color: "bg-orange-500" },
 ];
 
-const importanceLevels: { value: ImportanceLevel; label: string; color: string }[] = [
-  { value: "CRITICAL", label: "Crítico", color: "bg-red-500" },
-  { value: "IMPORTANT", label: "Importante", color: "bg-orange-500" },
-  { value: "MINOR", label: "Menor", color: "bg-gray-500" },
+const importanceDefs: { value: ImportanceLevel; color: string }[] = [
+  { value: "CRITICAL", color: "bg-red-500" },
+  { value: "IMPORTANT", color: "bg-orange-500" },
+  { value: "MINOR", color: "bg-gray-500" },
 ];
 
 export function MemoryForm({
@@ -42,9 +43,18 @@ export function MemoryForm({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  title = "Nova Memória",
+  title,
   inline = false,
 }: MemoryFormProps) {
+  const { t } = useTranslation();
+  const categories = categoryDefs.map((c) => ({
+    ...c,
+    label: t(`memory.categories.${c.value}`),
+  }));
+  const importanceLevels = importanceDefs.map((l) => ({
+    ...l,
+    label: t(`memory.importanceLevels.${l.value}`),
+  }));
   const [formData, setFormData] = useState<MemoryFormData>({
     content: initialData?.content || "",
     summary: initialData?.summary || "",
@@ -84,7 +94,7 @@ export function MemoryForm({
           {/* Content */}
           <div className="space-y-2">
             <label htmlFor="content" className="text-sm font-medium">
-              Conteúdo <span className="text-destructive">*</span>
+              {t("memory.content")} <span className="text-destructive">*</span>
             </label>
             <textarea
               id="content"
@@ -92,7 +102,7 @@ export function MemoryForm({
               rows={4}
               value={formData.content}
               onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
-              placeholder="Descreva o padrão, decisão ou bug..."
+              placeholder={t("memory.contentPlaceholder")}
               className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             />
           </div>
@@ -100,7 +110,7 @@ export function MemoryForm({
           {/* Summary */}
           <div className="space-y-2">
             <label htmlFor="summary" className="text-sm font-medium">
-              Resumo <span className="text-destructive">*</span>
+              {t("memory.summary")} <span className="text-destructive">*</span>
             </label>
             <input
               id="summary"
@@ -108,14 +118,14 @@ export function MemoryForm({
               required
               value={formData.summary}
               onChange={(e) => setFormData((prev) => ({ ...prev, summary: e.target.value }))}
-              placeholder="Um breve resumo..."
+              placeholder={t("memory.summaryPlaceholder")}
               className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
           {/* Category */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Categoria</label>
+            <label className="text-sm font-medium">{t("memory.category")}</label>
             <div className="flex flex-wrap gap-2">
               {categories.map((cat) => (
                 <button
@@ -138,7 +148,7 @@ export function MemoryForm({
 
           {/* Importance */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Importância</label>
+            <label className="text-sm font-medium">{t("memory.importance")}</label>
             <div className="flex flex-wrap gap-2">
               {importanceLevels.map((level) => (
                 <button
@@ -162,7 +172,7 @@ export function MemoryForm({
           {/* Tags */}
           <div className="space-y-2">
             <label htmlFor="tags" className="text-sm font-medium">
-              Tags
+              {t("common.tags")}
             </label>
             <div className="flex gap-2">
               <input
@@ -171,11 +181,11 @@ export function MemoryForm({
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
-                placeholder="Adicione tags e pressione Enter"
+                placeholder={t("memory.tagsPlaceholder")}
                 className="flex-1 px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <Button type="button" size="sm" variant="secondary" onClick={addTag}>
-                Adicionar
+                {t("common.add")}
               </Button>
             </div>
             {formData.tags.length > 0 && (
@@ -203,11 +213,11 @@ export function MemoryForm({
           <div className="flex items-center justify-end gap-3 pt-4 border-t">
             {onCancel && (
               <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-                Cancelar
+                {t("common.cancel")}
               </Button>
             )}
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar"}
+              {isSubmitting ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </form>
@@ -221,9 +231,9 @@ export function MemoryForm({
   // Caso contrário, retorna com o Card wrapper
   return (
     <Card className="max-w-2xl mx-auto">
-      {title && (
+      {(title || title === undefined) && (
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle>{title ?? t("memory.new")}</CardTitle>
         </CardHeader>
       )}
       <CardContent>

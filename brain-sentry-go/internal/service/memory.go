@@ -25,6 +25,50 @@ type MemoryService struct {
 	embeddingService embeddingGenerator
 	piiService       *PIIService
 	autoImportance   bool
+
+	// Optional pipeline enhancers (set via With* methods). When nil, behavior is unchanged.
+	compressor     *MemoryCompressionService     // extracts facts/concepts on create
+	queryExpander  *QueryExpansionService        // expands search queries
+	stripper       *PrivacyStrippingService      // strips secrets before storage
+	tripletSvc     *TripletExtractionService     // extracts S-P-O triplets
+	stalenessSvc   *CascadingStalenessService    // propagates staleness on supersede
+	feedbackSvc    *FeedbackLearningService      // blends feedback into scoring
+}
+
+// WithCompressor enables LLM-driven content compression during CreateMemory.
+func (s *MemoryService) WithCompressor(c *MemoryCompressionService) *MemoryService {
+	s.compressor = c
+	return s
+}
+
+// WithQueryExpander enables LLM-based query reformulation during SearchMemories.
+func (s *MemoryService) WithQueryExpander(q *QueryExpansionService) *MemoryService {
+	s.queryExpander = q
+	return s
+}
+
+// WithPrivacyStripper enables secret/PII stripping before storage.
+func (s *MemoryService) WithPrivacyStripper(p *PrivacyStrippingService) *MemoryService {
+	s.stripper = p
+	return s
+}
+
+// WithTripletExtractor enables background triplet extraction after CreateMemory.
+func (s *MemoryService) WithTripletExtractor(t *TripletExtractionService) *MemoryService {
+	s.tripletSvc = t
+	return s
+}
+
+// WithCascadingStaleness enables BFS staleness propagation after SupersedeMemory.
+func (s *MemoryService) WithCascadingStaleness(c *CascadingStalenessService) *MemoryService {
+	s.stalenessSvc = c
+	return s
+}
+
+// WithFeedbackLearning enables feedback-weighted scoring during SearchMemories.
+func (s *MemoryService) WithFeedbackLearning(f *FeedbackLearningService) *MemoryService {
+	s.feedbackSvc = f
+	return s
 }
 
 type memoryRepository interface {
@@ -84,6 +128,14 @@ func NewMemoryService(
 
 // CreateMemory creates a new memory with auto-analysis and embedding generation.
 func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRequest) (*domain.Memory, error) {
+	// 1. Privacy stripping — strip secrets/PII before anything else touches the content.
+	if s.stripper != nil {
+		req.Content = s.stripper.StripBeforeStorage(req.Content)
+		if req.CodeExample != "" {
+			req.CodeExample = s.stripper.StripBeforeStorage(req.CodeExample)
+		}
+	}
+
 	m := &domain.Memory{
 		Content:             req.Content,
 		Summary:             req.Summary,
@@ -123,6 +175,16 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 	if req.Metadata != nil {
 		metaJSON, _ := json.Marshal(req.Metadata)
 		m.Metadata = metaJSON
+	}
+
+	// 2. LLM Compression — extract facts, concepts, narrative, importance.
+	// Enriches metadata and tags; may fill Summary if empty.
+	if s.compressor != nil {
+		if compressed, err := s.compressor.Compress(ctx, m.Content); err == nil && compressed != nil {
+			s.compressor.EnrichMemory(m, compressed)
+		} else if err != nil {
+			slog.Warn("memory compression failed, continuing without enrichment", "error", err)
+		}
 	}
 
 	// Compute SimHash for deduplication
@@ -213,10 +275,18 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 				if dist > 3 && dist <= 8 && m.Category != "" {
 					existing, err := s.memoryRepo.FindByID(ctx, existingID)
 					if err == nil && existing.Category == m.Category && existing.SupersededBy == "" {
-						// Supersede the old memory
+						// Supersede the old memory + propagate staleness through graph.
 						go func(oldID, newID, tid string) {
 							bgCtx := tenant.WithTenant(context.Background(), tid)
-							s.memoryRepo.SupersedeMemory(bgCtx, oldID, newID)
+							if err := s.memoryRepo.SupersedeMemory(bgCtx, oldID, newID); err != nil {
+								slog.Warn("supersede failed", "oldId", oldID, "error", err)
+								return
+							}
+							if s.stalenessSvc != nil {
+								if _, err := s.stalenessSvc.PropagateFromSupersession(bgCtx, oldID, newID); err != nil {
+									slog.Warn("staleness propagation failed", "oldId", oldID, "error", err)
+								}
+							}
 						}(existingID, m.ID, tenant.FromContext(ctx))
 						break
 					}
@@ -242,6 +312,37 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 	// Audit log
 	if s.auditService != nil {
 		go s.auditService.LogMemoryCreated(tenant.WithTenant(context.Background(), m.TenantID), m)
+	}
+
+	// 3. Triplet extraction — async, non-blocking. Results stored in metadata.
+	// (Triplet persistence to a dedicated table/collection is a future enhancement.)
+	if s.tripletSvc != nil {
+		go func() {
+			bgCtx := tenant.WithTenant(context.Background(), m.TenantID)
+			triplets, err := s.tripletSvc.ExtractAndBuild(bgCtx, m.ID, m.Content)
+			if err != nil {
+				slog.Warn("triplet extraction failed", "memoryId", m.ID, "error", err)
+				return
+			}
+			if len(triplets) == 0 {
+				return
+			}
+			// Merge triplet summaries into metadata for discoverability.
+			meta := make(map[string]any)
+			if len(m.Metadata) > 0 {
+				_ = json.Unmarshal(m.Metadata, &meta)
+			}
+			tripletSummaries := make([]string, 0, len(triplets))
+			for _, t := range triplets {
+				tripletSummaries = append(tripletSummaries, t.Text)
+			}
+			meta["triplets"] = tripletSummaries
+			meta["tripletCount"] = len(triplets)
+			if raw, err := json.Marshal(meta); err == nil {
+				m.Metadata = raw
+				_ = s.memoryRepo.Update(bgCtx, m)
+			}
+		}()
 	}
 
 	return m, nil
@@ -385,41 +486,72 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 		limit = 10
 	}
 
-	queryTokens := TokenizeQuery(req.Query)
-	var scoredResults []scoredMemory
-
-	// Try vector search via FalkorDB if available and embeddings are real
-	if s.memoryGraphRepo != nil && s.embeddingService != nil && s.embeddingService.HasAPI() {
-		embedding := s.embeddingService.Embed(req.Query)
-		ids, scores, err := s.memoryGraphRepo.VectorSearch(ctx, embedding, limit*2, tenant.FromContext(ctx))
-		if err == nil && len(ids) > 0 {
-			for i, id := range ids {
-				m, err := s.memoryRepo.FindByID(ctx, id)
-				if err != nil || isInactiveMemory(m, time.Now()) {
-					continue
+	// Query expansion: generate reformulations to broaden recall.
+	// Primary query is always first; reformulations augment (deduplicated).
+	expandedQueries := []string{req.Query}
+	if s.queryExpander != nil {
+		if expansion := s.queryExpander.Expand(ctx, req.Query); expansion != nil {
+			for _, r := range expansion.Reformulations {
+				if r != "" && r != req.Query {
+					expandedQueries = append(expandedQueries, r)
 				}
-				trace := ComputeHybridScore(m, scores[i], queryTokens, -1, req.Tags, DefaultScoringWeights)
-				scoredResults = append(scoredResults, scoredMemory{memory: *m, trace: trace})
 			}
 		}
 	}
 
-	// Fallback or supplement with full-text search
-	if len(scoredResults) < limit {
-		textResults, err := s.memoryRepo.FullTextSearch(ctx, req.Query, limit)
-		if err == nil {
-			existingIDs := make(map[string]bool, len(scoredResults))
-			for _, sr := range scoredResults {
-				existingIDs[sr.memory.ID] = true
-			}
-			for _, m := range textResults {
-				if existingIDs[m.ID] || isInactiveMemory(&m, time.Now()) {
-					continue
+	queryTokens := TokenizeQuery(req.Query)
+	scoredByID := make(map[string]scoredMemory)
+
+	addScored := func(m *domain.Memory, sim float64) {
+		existing, found := scoredByID[m.ID]
+		newTrace := ComputeHybridScore(m, sim, queryTokens, -1, req.Tags, DefaultScoringWeights)
+		if !found || newTrace.FinalScore > existing.trace.FinalScore {
+			scoredByID[m.ID] = scoredMemory{memory: *m, trace: newTrace}
+		}
+	}
+
+	for _, q := range expandedQueries {
+		// Vector search per query (when available)
+		if s.memoryGraphRepo != nil && s.embeddingService != nil && s.embeddingService.HasAPI() {
+			embedding := s.embeddingService.Embed(q)
+			ids, scores, err := s.memoryGraphRepo.VectorSearch(ctx, embedding, limit*2, tenant.FromContext(ctx))
+			if err == nil {
+				for i, id := range ids {
+					m, err := s.memoryRepo.FindByID(ctx, id)
+					if err != nil || isInactiveMemory(m, time.Now()) {
+						continue
+					}
+					addScored(m, scores[i])
 				}
-				trace := ComputeHybridScore(&m, 0.3, queryTokens, -1, req.Tags, DefaultScoringWeights)
-				scoredResults = append(scoredResults, scoredMemory{memory: m, trace: trace})
 			}
 		}
+	}
+
+	// Full-text search as fallback/supplement (primary query only to avoid duplicate work)
+	if len(scoredByID) < limit {
+		textResults, err := s.memoryRepo.FullTextSearch(ctx, req.Query, limit)
+		if err == nil {
+			for i := range textResults {
+				m := &textResults[i]
+				if _, exists := scoredByID[m.ID]; exists {
+					continue
+				}
+				if isInactiveMemory(m, time.Now()) {
+					continue
+				}
+				addScored(m, 0.3)
+			}
+		}
+	}
+
+	// Collect into slice for sorting
+	scoredResults := make([]scoredMemory, 0, len(scoredByID))
+	for _, sr := range scoredByID {
+		// Feedback blending: apply before sort so top-N reflects learned quality.
+		if s.feedbackSvc != nil {
+			s.feedbackSvc.ApplyFeedbackToTrace(&sr.trace, &sr.memory)
+		}
+		scoredResults = append(scoredResults, sr)
 	}
 
 	// Sort by hybrid score descending

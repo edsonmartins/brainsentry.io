@@ -9,16 +9,16 @@ test.describe("Dashboard", () => {
   });
 
   test("shows core stats and recent memories", async ({ authenticatedPage }) => {
-    await expect(authenticatedPage.getByText("Total Memories")).toBeVisible();
-    await expect(authenticatedPage.getByText("Categories")).toBeVisible();
-    await expect(authenticatedPage.getByText("Critical", { exact: true }).first()).toBeVisible();
-    await expect(authenticatedPage.getByText("Active 24h")).toBeVisible();
-    await expect(authenticatedPage.getByText("Recent Memories")).toBeVisible();
+    await expect(authenticatedPage.getByText("Total de Memórias")).toBeVisible();
+    await expect(authenticatedPage.getByText("Categorias", { exact: true })).toBeVisible();
+    await expect(authenticatedPage.getByText("Críticas", { exact: true }).first()).toBeVisible();
+    await expect(authenticatedPage.getByText("Ativas 24h")).toBeVisible();
+    await expect(authenticatedPage.getByText("Memórias Recentes")).toBeVisible();
     await expect(authenticatedPage.getByText("Autenticacao com refresh token")).toBeVisible();
   });
 
   test("navigates through quick actions", async ({ authenticatedPage }) => {
-    await authenticatedPage.getByRole("button", { name: /Nova Memoria/i }).click();
+    await authenticatedPage.getByRole("button", { name: /Nova Memória/i }).click();
     await expect(authenticatedPage).toHaveURL(/\/app\/memories/);
 
     await authenticatedPage.goto(ROUTES.dashboard);

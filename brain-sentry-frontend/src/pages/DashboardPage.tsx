@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Brain,
   Database,
@@ -9,7 +10,6 @@ import {
   Clock,
   Tag,
   Plus,
-  Filter,
   Network,
   Gauge,
   Zap,
@@ -51,6 +51,7 @@ interface RecentMemory {
 }
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -90,12 +91,12 @@ export function DashboardPage() {
     if (msg.type === "memory_created" || msg.type === "memory_updated" || msg.type === "memory_deleted") {
       fetchData();
       toast({
-        title: "Update received",
+        title: t("dashboard.updated"),
         description: `Memory ${msg.type.replace("memory_", "")}`,
         variant: "info",
       });
     }
-  }, [fetchData, toast]);
+  }, [fetchData, toast, t]);
 
   const { status: wsStatus } = useWebSocket({
     url: wsUrl,
@@ -106,8 +107,8 @@ export function DashboardPage() {
   const handleRefresh = () => {
     fetchData();
     toast({
-      title: "Dashboard atualizado",
-      description: "Os dados foram atualizados com sucesso.",
+      title: t("dashboard.updated"),
+      description: t("dashboard.updatedDesc"),
       variant: "info",
     });
   };
@@ -130,16 +131,16 @@ export function DashboardPage() {
                 <Brain className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Brain Sentry</h1>
+                <h1 className="text-base font-bold leading-tight">{t("dashboard.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Cognitive Memory System
+                  {t("dashboard.subtitle")}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <LiveIndicator status={wsStatus} className="bg-white/10 px-2 py-1 rounded-full" />
               <div className="text-xs text-white/80 hidden md:block">
-                Tenant: <span className="font-medium text-white">{tenantId.slice(0, 8)}...</span>
+                {t("dashboard.tenant")}: <span className="font-medium text-white">{tenantId.slice(0, 8)}...</span>
               </div>
               <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={handleRefresh}>
                 <Activity className="h-4 w-4" />
@@ -155,11 +156,11 @@ export function DashboardPage() {
           <div className="flex gap-2">
             <Button size="sm" className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => navigate("/app/memories")}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Memoria
+              {t("dashboard.newMemory")}
             </Button>
             <Button size="sm" variant="outline" onClick={() => navigate("/app/search")}>
               <Search className="h-4 w-4 mr-2" />
-              Buscar
+              {t("dashboard.search")}
             </Button>
           </div>
 
@@ -178,7 +179,7 @@ export function DashboardPage() {
                 {tab === "overview" && <Gauge className="h-3.5 w-3.5 inline mr-1" />}
                 {tab === "graph" && <Network className="h-3.5 w-3.5 inline mr-1" />}
                 {tab === "activity" && <Activity className="h-3.5 w-3.5 inline mr-1" />}
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {t(`dashboard.tabs.${tab}`)}
               </button>
             ))}
           </div>
@@ -187,26 +188,26 @@ export function DashboardPage() {
         {/* Stats Cards (always visible) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatsCard
-            title="Total Memories"
+            title={t("dashboard.totalMemories")}
             value={stats?.totalMemories || 0}
             icon={<Database className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Categories"
+            title={t("dashboard.categories")}
             value={Object.keys(stats?.memoriesByCategory || {}).length}
             icon={<Tag className="h-5 w-5" />}
             loading={statsLoading}
           />
           <StatsCard
-            title="Critical"
+            title={t("dashboard.critical")}
             value={stats?.memoriesByImportance?.CRITICAL || 0}
             icon={<TrendingUp className="h-5 w-5" />}
             loading={statsLoading}
             accent={stats?.memoriesByImportance?.CRITICAL ? "destructive" : undefined}
           />
           <StatsCard
-            title="Active 24h"
+            title={t("dashboard.active24h")}
             value={stats?.activeMemories24h || 0}
             icon={<Clock className="h-5 w-5" />}
             loading={statsLoading}
@@ -216,10 +217,10 @@ export function DashboardPage() {
         {/* System Metrics Row */}
         {stats && (stats.requestsToday > 0 || stats.totalInjections > 0) && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <MetricCard label="Requests Today" value={stats.requestsToday} icon={<Zap className="h-4 w-4" />} />
-            <MetricCard label="Injections" value={stats.totalInjections} suffix={` (${(stats.injectionRate * 100).toFixed(1)}%)`} icon={<HelpCircle className="h-4 w-4" />} />
-            <MetricCard label="Avg Latency" value={`${stats.avgLatencyMs.toFixed(0)}ms`} icon={<Clock className="h-4 w-4" />} />
-            <MetricCard label="Helpfulness" value={`${(stats.helpfulnessRate * 100).toFixed(0)}%`} icon={<TrendingUp className="h-4 w-4" />} />
+            <MetricCard label={t("dashboard.requestsToday")} value={stats.requestsToday} icon={<Zap className="h-4 w-4" />} />
+            <MetricCard label={t("dashboard.injections")} value={stats.totalInjections} suffix={` (${(stats.injectionRate * 100).toFixed(1)}%)`} icon={<HelpCircle className="h-4 w-4" />} />
+            <MetricCard label={t("dashboard.avgLatency")} value={`${stats.avgLatencyMs.toFixed(0)}ms`} icon={<Clock className="h-4 w-4" />} />
+            <MetricCard label={t("dashboard.helpfulness")} value={`${(stats.helpfulnessRate * 100).toFixed(0)}%`} icon={<TrendingUp className="h-4 w-4" />} />
           </div>
         )}
 
@@ -230,8 +231,8 @@ export function DashboardPage() {
             <div className="lg:col-span-2">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Recent Memories</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => navigate("/app/memories")}>View all</Button>
+                  <CardTitle>{t("dashboard.recentMemories")}</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/app/memories")}>{t("dashboard.viewAll")}</Button>
                 </CardHeader>
                 <CardContent>
                   {memoriesLoading ? (
@@ -241,8 +242,8 @@ export function DashboardPage() {
                   ) : memories.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No memories found</p>
-                      <p className="text-xs mt-1">Create memories to see them here</p>
+                      <p>{t("dashboard.noMemories")}</p>
+                      <p className="text-xs mt-1">{t("dashboard.createToSee")}</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -260,7 +261,7 @@ export function DashboardPage() {
               {/* Categories */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">By Category</CardTitle>
+                  <CardTitle className="text-sm">{t("dashboard.byCategory")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -285,7 +286,7 @@ export function DashboardPage() {
                       </div>
                     ))}
                     {categories.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center py-2">No data</p>
+                      <p className="text-xs text-muted-foreground text-center py-2">{t("dashboard.noData")}</p>
                     )}
                   </div>
                 </CardContent>
@@ -294,7 +295,7 @@ export function DashboardPage() {
               {/* Importance */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">By Importance</CardTitle>
+                  <CardTitle className="text-sm">{t("dashboard.byImportance")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -319,7 +320,7 @@ export function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Network className="h-5 w-5" />
-                Knowledge Graph
+                {t("dashboard.knowledgeGraph")}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -334,7 +335,7 @@ export function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
-                  Activity Heatmap
+                  {t("dashboard.activityHeatmap")}
                 </CardTitle>
               </CardHeader>
               <CardContent>

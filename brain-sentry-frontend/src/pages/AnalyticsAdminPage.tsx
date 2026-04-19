@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ interface BenchmarkResult {
 }
 
 export default function AnalyticsAdminPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [stats, setStats] = useState({
     totalMemories: 0,
@@ -71,9 +73,9 @@ export default function AnalyticsAdminPage() {
     try {
       const data = await api.runBenchmark(benchmarkQueryCount, benchmarkK);
       setBenchmarkResult(data);
-      toast({ title: "Benchmark concluído", variant: "success" });
+      toast({ title: t("analytics.benchmarkDone"), variant: "success" });
     } catch (err) {
-      toast({ title: "Erro no benchmark", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("analytics.benchmarkError"), description: getErrorMessage(err), variant: "error" });
     } finally {
       setBenchmarkRunning(false);
     }
@@ -97,7 +99,7 @@ export default function AnalyticsAdminPage() {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-muted-foreground">Carregando estatísticas...</span>
+        <span className="ml-2 text-muted-foreground">{t("analytics.loading")}</span>
       </div>
     );
   }
@@ -105,7 +107,7 @@ export default function AnalyticsAdminPage() {
   if (error) {
     return (
       <div className="bg-destructive/10 text-destructive p-4 rounded-md">
-        <p className="font-medium">Erro ao carregar estatísticas</p>
+        <p className="font-medium">{t("analytics.loadError")}</p>
         <p className="text-sm">{error}</p>
       </div>
     );
@@ -149,7 +151,7 @@ export default function AnalyticsAdminPage() {
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category" as const,
-      data: ["Requests Hoje", "Injeções Total", "Ativos 24h", "Latência (ms)"],
+      data: [t("analytics.opsLabels.requestsToday"), t("analytics.opsLabels.injections"), t("analytics.opsLabels.active24h"), t("analytics.opsLabels.latency")],
     },
     yAxis: { type: "value" as const },
     series: [{
@@ -173,8 +175,8 @@ export default function AnalyticsAdminPage() {
               <BarChart3 className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold leading-tight">Analytics</h1>
-              <p className="text-xs text-white/80">Métricas e estatísticas do sistema</p>
+              <h1 className="text-base font-bold leading-tight">{t("analytics.title")}</h1>
+              <p className="text-xs text-white/80">{t("analytics.subtitle")}</p>
             </div>
           </div>
         </div>
@@ -184,14 +186,14 @@ export default function AnalyticsAdminPage() {
         {/* Stats Cards - All fields */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
           {[
-            { title: "Total Memórias", value: stats.totalMemories, icon: Database, color: "text-blue-600" },
-            { title: "Taxa de Injeção", value: `${(stats.injectionRate * 100).toFixed(1)}%`, icon: Zap, color: "text-green-600" },
-            { title: "Satisfação", value: `${(stats.helpfulnessRate * 100).toFixed(0)}%`, icon: TrendingUp, color: "text-purple-600" },
-            { title: "Requests Hoje", value: stats.requestsToday, icon: Activity, color: "text-blue-500" },
-            { title: "Latência Média", value: `${stats.avgLatencyMs.toFixed(0)}ms`, icon: Clock, color: "text-orange-500" },
-            { title: "Total Injeções", value: stats.totalInjections, icon: Zap, color: "text-green-500" },
-            { title: "Ativos 24h", value: stats.activeMemories24h, icon: Timer, color: "text-purple-500" },
-            { title: "Categorias", value: Object.keys(stats.memoriesByCategory).length, icon: BarChart3, color: "text-cyan-500" },
+            { title: t("analytics.stats.totalMemories"), value: stats.totalMemories, icon: Database, color: "text-blue-600" },
+            { title: t("analytics.stats.injectionRate"), value: `${(stats.injectionRate * 100).toFixed(1)}%`, icon: Zap, color: "text-green-600" },
+            { title: t("analytics.stats.helpfulness"), value: `${(stats.helpfulnessRate * 100).toFixed(0)}%`, icon: TrendingUp, color: "text-purple-600" },
+            { title: t("analytics.stats.requestsToday"), value: stats.requestsToday, icon: Activity, color: "text-blue-500" },
+            { title: t("analytics.stats.avgLatency"), value: `${stats.avgLatencyMs.toFixed(0)}ms`, icon: Clock, color: "text-orange-500" },
+            { title: t("analytics.stats.totalInjections"), value: stats.totalInjections, icon: Zap, color: "text-green-500" },
+            { title: t("analytics.stats.active24h"), value: stats.activeMemories24h, icon: Timer, color: "text-purple-500" },
+            { title: t("analytics.stats.categories"), value: Object.keys(stats.memoriesByCategory).length, icon: BarChart3, color: "text-cyan-500" },
           ].map((stat) => (
             <Card key={stat.title} className="shadow-sm">
               <CardContent className="p-4">
@@ -213,10 +215,10 @@ export default function AnalyticsAdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* Category Distribution - Pie Chart */}
           <Card>
-            <CardHeader><CardTitle>Distribuição por Categoria</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("analytics.categoryDist")}</CardTitle></CardHeader>
             <CardContent>
               {Object.keys(stats.memoriesByCategory).length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma memória cadastrada</p>
+                <p className="text-sm text-muted-foreground text-center py-8">{t("analytics.noMemories")}</p>
               ) : (
                 <ReactEChartsCore echarts={echarts} option={categoryPieOption} style={{ height: 280 }} />
               )}
@@ -225,10 +227,10 @@ export default function AnalyticsAdminPage() {
 
           {/* Importance Distribution - Bar Chart */}
           <Card>
-            <CardHeader><CardTitle>Distribuição por Importância</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("analytics.importanceDist")}</CardTitle></CardHeader>
             <CardContent>
               {Object.keys(stats.memoriesByImportance).length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma memória cadastrada</p>
+                <p className="text-sm text-muted-foreground text-center py-8">{t("analytics.noMemories")}</p>
               ) : (
                 <ReactEChartsCore echarts={echarts} option={importanceBarOption} style={{ height: 280 }} />
               )}
@@ -238,7 +240,7 @@ export default function AnalyticsAdminPage() {
 
         {/* Operations Chart */}
         <Card className="mb-6">
-          <CardHeader><CardTitle>Métricas Operacionais</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("analytics.opsMetrics")}</CardTitle></CardHeader>
           <CardContent>
             <ReactEChartsCore echarts={echarts} option={operationsOption} style={{ height: 280 }} />
           </CardContent>
@@ -249,30 +251,30 @@ export default function AnalyticsAdminPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2"><Brain className="h-5 w-5" /> Benchmark de Retrieval</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">Avalie a qualidade e performance da busca de memórias</p>
+                <CardTitle className="flex items-center gap-2"><Brain className="h-5 w-5" /> {t("analytics.benchmarkTitle")}</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">{t("analytics.benchmarkDesc")}</p>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-end gap-4 mb-6">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Queries</label>
+                <label className="text-xs font-medium text-muted-foreground">{t("analytics.queries")}</label>
                 <input type="number" value={benchmarkQueryCount} min={1} max={100}
                   onChange={(e) => setBenchmarkQueryCount(Number(e.target.value))}
                   className="w-20 h-9 rounded-md border border-input bg-background px-2 text-sm" />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Top-K</label>
+                <label className="text-xs font-medium text-muted-foreground">{t("analytics.topK")}</label>
                 <input type="number" value={benchmarkK} min={1} max={100}
                   onChange={(e) => setBenchmarkK(Number(e.target.value))}
                   className="w-20 h-9 rounded-md border border-input bg-background px-2 text-sm" />
               </div>
               <Button onClick={handleRunBenchmark} disabled={benchmarkRunning}>
                 {benchmarkRunning ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Executando...</>
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("analytics.running")}</>
                 ) : (
-                  <><Play className="h-4 w-4 mr-2" /> Executar Benchmark</>
+                  <><Play className="h-4 w-4 mr-2" /> {t("analytics.runBenchmark")}</>
                 )}
               </Button>
             </div>
@@ -280,14 +282,14 @@ export default function AnalyticsAdminPage() {
             {benchmarkResult && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: "Latência Média", value: `${benchmarkResult.avgLatencyMs?.toFixed(1)}ms` },
-                  { label: "P50", value: `${benchmarkResult.p50LatencyMs?.toFixed(1)}ms` },
-                  { label: "P95", value: `${benchmarkResult.p95LatencyMs?.toFixed(1)}ms` },
-                  { label: "P99", value: `${benchmarkResult.p99LatencyMs?.toFixed(1)}ms` },
-                  { label: "Recall Médio", value: `${((benchmarkResult.avgRecall || 0) * 100).toFixed(1)}%` },
-                  { label: "Precisão Média", value: `${((benchmarkResult.avgPrecision || 0) * 100).toFixed(1)}%` },
-                  { label: "Throughput", value: `${benchmarkResult.throughputQps?.toFixed(1)} QPS` },
-                  { label: "Queries", value: `${benchmarkResult.queryCount}` },
+                  { label: t("analytics.metrics.avgLatency"), value: `${benchmarkResult.avgLatencyMs?.toFixed(1)}ms` },
+                  { label: t("analytics.metrics.p50"), value: `${benchmarkResult.p50LatencyMs?.toFixed(1)}ms` },
+                  { label: t("analytics.metrics.p95"), value: `${benchmarkResult.p95LatencyMs?.toFixed(1)}ms` },
+                  { label: t("analytics.metrics.p99"), value: `${benchmarkResult.p99LatencyMs?.toFixed(1)}ms` },
+                  { label: t("analytics.metrics.recall"), value: `${((benchmarkResult.avgRecall || 0) * 100).toFixed(1)}%` },
+                  { label: t("analytics.metrics.precision"), value: `${((benchmarkResult.avgPrecision || 0) * 100).toFixed(1)}%` },
+                  { label: t("analytics.metrics.throughput"), value: `${benchmarkResult.throughputQps?.toFixed(1)} QPS` },
+                  { label: t("analytics.metrics.queries"), value: `${benchmarkResult.queryCount}` },
                 ].map((m) => (
                   <div key={m.label} className="p-3 bg-accent rounded-lg">
                     <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -300,7 +302,7 @@ export default function AnalyticsAdminPage() {
             {!benchmarkResult && !benchmarkRunning && (
               <div className="text-center py-8 text-muted-foreground">
                 <CheckCircle className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">Execute o benchmark para avaliar a qualidade da busca.</p>
+                <p className="text-sm">{t("analytics.benchmarkTip")}</p>
               </div>
             )}
           </CardContent>

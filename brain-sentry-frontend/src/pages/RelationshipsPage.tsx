@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Network, Search, ArrowRight, Trash2, RefreshCw, Users, Package, Building,
   MapPin, Calendar, Tag, CircleDot, Link2, Zap, MessageSquare, Loader2,
@@ -70,14 +71,7 @@ interface Community {
   size: number;
 }
 
-const RELATIONSHIP_TYPES = [
-  { value: "RELATED", label: "Relacionado" },
-  { value: "DEPENDS_ON", label: "Depende de" },
-  { value: "DEPENDENT_OF", label: "Dependente" },
-  { value: "CONTRADICTS", label: "Contradiz" },
-  { value: "SIMILAR_TO", label: "Similar a" },
-  { value: "EXTENDS", label: "Estende" },
-];
+const RELATIONSHIP_TYPE_KEYS = ["RELATED", "DEPENDS_ON", "DEPENDENT_OF", "CONTRADICTS", "SIMILAR_TO", "EXTENDS"] as const;
 
 const ENTITY_TYPE_CONFIG: Record<string, { color: string; bgColor: string; icon: typeof Users; cyColor: string }> = {
   PESSOA: { color: "text-blue-600", bgColor: "bg-blue-100", icon: Users, cyColor: "#3B82F6" },
@@ -103,9 +97,14 @@ function getEntityConfig(type: string) {
 }
 
 export function RelationshipsPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
   const cyRef = useRef<any>(null);
+  const RELATIONSHIP_TYPES = RELATIONSHIP_TYPE_KEYS.map((k) => ({
+    value: k,
+    label: t(`relationships.types.${k}`),
+  }));
 
   // Tab state
   const [activeTab, setActiveTab] = useState<"graph" | "knowledge" | "memory">("graph");
@@ -286,7 +285,7 @@ export function RelationshipsPage() {
       const data = await api.nlQuery(nlQuestion);
       setNlAnswer(data);
     } catch (err) {
-      toast({ title: "Erro na consulta", description: (err as Error).message, variant: "error" });
+      toast({ title: t("relationships.askError"), description: (err as Error).message, variant: "error" });
     } finally {
       setNlLoading(false);
     }
@@ -301,7 +300,7 @@ export function RelationshipsPage() {
       const data = await api.activateMemories([activationSeedId]);
       setActivationResults(data);
     } catch (err) {
-      toast({ title: "Erro na ativação", description: (err as Error).message, variant: "error" });
+      toast({ title: t("relationships.activationError"), description: (err as Error).message, variant: "error" });
     } finally {
       setActivationLoading(false);
     }
@@ -314,10 +313,10 @@ export function RelationshipsPage() {
       const response = await api.axiosInstance.post<string>(
         `/v1/memories/extract-all-entities`, undefined, { timeout: 0 }
       );
-      toast({ title: "Reprocessamento concluído", description: response.data || "Entidades extraídas.", variant: "success" });
+      toast({ title: t("relationships.reprocessOk"), description: response.data || t("relationships.reprocessOkDesc"), variant: "success" });
       fetchKnowledgeGraph();
     } catch (err) {
-      toast({ title: "Erro no reprocessamento", description: (err as Error).message, variant: "error" });
+      toast({ title: t("relationships.reprocessError"), description: (err as Error).message, variant: "error" });
     } finally {
       setIsReprocessing(false);
     }
@@ -331,14 +330,14 @@ export function RelationshipsPage() {
         fromMemoryId: selectedMemory.id, toMemoryId: targetMemory.id,
         type: relationshipType, strength: 0.5,
       });
-      toast({ title: "Relacionamento criado", variant: "success" });
+      toast({ title: t("relationships.relationshipCreated"), variant: "success" });
       setShowCreateDialog(false);
       refetch();
       setSelectedMemory(null);
       setTargetMemory(null);
       setHighlightedMemory(null);
     } catch (err) {
-      toast({ title: "Erro", description: (err as Error).message, variant: "error" });
+      toast({ title: t("relationships.genericError"), description: (err as Error).message, variant: "error" });
     }
   };
 
@@ -346,10 +345,10 @@ export function RelationshipsPage() {
   const handleDeleteRelationship = async (relationshipId: string) => {
     try {
       await api.axiosInstance.delete("/v1/relationships/between", { data: { relationshipId } });
-      toast({ title: "Relacionamento removido", variant: "success" });
+      toast({ title: t("relationships.relationshipRemoved"), variant: "success" });
       refetch();
     } catch (err) {
-      toast({ title: "Erro", description: (err as Error).message, variant: "error" });
+      toast({ title: t("relationships.genericError"), description: (err as Error).message, variant: "error" });
     }
   };
 
@@ -434,15 +433,15 @@ export function RelationshipsPage() {
                 <Network className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Grafo de Conhecimento</h1>
-                <p className="text-xs text-white/80">Entidades, relacionamentos e comunidades</p>
+                <h1 className="text-base font-bold leading-tight">{t("relationships.title")}</h1>
+                <p className="text-xs text-white/80">{t("relationships.subtitle")}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30"
                 onClick={handleReprocessEntities} disabled={isReprocessing}>
                 {isReprocessing ? <Spinner className="h-4 w-4" /> : <Zap className="h-4 w-4 mr-1" />}
-                {isReprocessing ? "Processando..." : "Reprocessar"}
+                {isReprocessing ? t("relationships.processing") : t("relationships.reprocess")}
               </Button>
               <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30" onClick={refetch}>
                 <RefreshCw className="h-4 w-4" />
@@ -459,19 +458,19 @@ export function RelationshipsPage() {
             onClick={() => setActiveTab("graph")}
             className={activeTab === "graph" ? "bg-gradient-to-r from-brain-primary to-brain-accent" : ""}>
             <Brain className="h-4 w-4 mr-2" />
-            Grafo Interativo
+            {t("relationships.tabs.graph")}
           </Button>
           <Button variant={activeTab === "knowledge" ? "default" : "outline"}
             onClick={() => setActiveTab("knowledge")}
             className={activeTab === "knowledge" ? "bg-gradient-to-r from-brain-primary to-brain-accent" : ""}>
             <Network className="h-4 w-4 mr-2" />
-            Entidades
+            {t("relationships.tabs.knowledge")}
           </Button>
           <Button variant={activeTab === "memory" ? "default" : "outline"}
             onClick={() => setActiveTab("memory")}
             className={activeTab === "memory" ? "bg-gradient-to-r from-brain-primary to-brain-accent" : ""}>
             <ArrowRight className="h-4 w-4 mr-2" />
-            Memórias Conectadas
+            {t("relationships.tabs.memory")}
           </Button>
         </div>
 
@@ -483,7 +482,7 @@ export function RelationshipsPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-brain-primary" />
-                  Pergunte ao Grafo
+                  {t("relationships.askGraph")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -493,17 +492,17 @@ export function RelationshipsPage() {
                     value={nlQuestion}
                     onChange={(e) => setNlQuestion(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleNlQuery()}
-                    placeholder="Ex: Quais clientes compraram mais de 3 produtos?"
+                    placeholder={t("relationships.askPlaceholder")}
                     className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brain-primary/50"
                   />
                   <Button onClick={handleNlQuery} disabled={nlLoading || !nlQuestion.trim()}>
                     {nlLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-1" />}
-                    Consultar
+                    {t("relationships.ask")}
                   </Button>
                 </div>
                 {nlAnswer && (
                   <div className="mt-3 p-3 bg-accent rounded-md">
-                    <p className="text-sm font-medium mb-1">Resultado:</p>
+                    <p className="text-sm font-medium mb-1">{t("relationships.askResult")}</p>
                     {nlAnswer.cypher && (
                       <pre className="text-xs bg-background p-2 rounded mb-2 overflow-x-auto">{nlAnswer.cypher}</pre>
                     )}
@@ -520,31 +519,31 @@ export function RelationshipsPage() {
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-brain-primary">{knowledgeGraph?.totalNodes || 0}</div>
-                  <p className="text-sm text-muted-foreground">Entidades</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.entities")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-brain-accent">{knowledgeGraph?.totalEdges || 0}</div>
-                  <p className="text-sm text-muted-foreground">Relacionamentos</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.relationships")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-green-600">{new Set(knowledgeGraph?.nodes.map(n => n.type) || []).size}</div>
-                  <p className="text-sm text-muted-foreground">Tipos de Entidade</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.entityTypes")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-purple-600">{communities.length}</div>
-                  <p className="text-sm text-muted-foreground">Comunidades</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.communities")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-orange-600">{totalElements}</div>
-                  <p className="text-sm text-muted-foreground">Conexões Manuais</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.manualConnections")}</p>
                 </CardContent>
               </Card>
             </div>
@@ -555,14 +554,14 @@ export function RelationshipsPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Brain className="h-5 w-5" />
-                    Grafo de Conhecimento
+                    {t("relationships.graphTitle")}
                   </CardTitle>
                   {communities.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       {communities.slice(0, 6).map((c, idx) => (
                         <span key={c.id} className="flex items-center gap-1 text-xs">
                           <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length] }} />
-                          Comunidade {c.id} ({c.size})
+                          {t("relationships.community", { id: c.id, size: c.size })}
                         </span>
                       ))}
                     </div>
@@ -572,14 +571,14 @@ export function RelationshipsPage() {
               <CardContent>
                 {isLoadingGraph ? (
                   <div className="h-[500px] flex items-center justify-center">
-                    <Spinner /> <span className="ml-2 text-muted-foreground">Carregando grafo...</span>
+                    <Spinner /> <span className="ml-2 text-muted-foreground">{t("relationships.loadingGraph")}</span>
                   </div>
                 ) : cyElements.length === 0 ? (
                   <div className="h-[500px] flex items-center justify-center text-center text-muted-foreground">
                     <div>
                       <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">Nenhuma entidade extraída ainda</h3>
-                      <p className="max-w-md">Crie memórias e o sistema extrairá entidades automaticamente.</p>
+                      <h3 className="text-lg font-semibold mb-2">{t("relationships.noEntities")}</h3>
+                      <p className="max-w-md">{t("relationships.noEntitiesDesc")}</p>
                     </div>
                   </div>
                 ) : (
@@ -601,7 +600,7 @@ export function RelationshipsPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-brain-accent" />
-                  Ativação por Propagação
+                  {t("relationships.activation")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -610,12 +609,12 @@ export function RelationshipsPage() {
                     type="text"
                     value={activationSeedId}
                     onChange={(e) => setActivationSeedId(e.target.value)}
-                    placeholder="ID da memória semente..."
+                    placeholder={t("relationships.activationPlaceholder")}
                     className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brain-primary/50"
                   />
                   <Button onClick={handleActivation} disabled={activationLoading || !activationSeedId.trim()}>
                     {activationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                    Ativar
+                    {t("relationships.activate")}
                   </Button>
                 </div>
                 {activationResults && (
@@ -647,32 +646,32 @@ export function RelationshipsPage() {
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-brain-primary">{knowledgeGraph?.totalNodes || 0}</div>
-                  <p className="text-sm text-muted-foreground">Entidades</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.entities")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-brain-accent">{knowledgeGraph?.totalEdges || 0}</div>
-                  <p className="text-sm text-muted-foreground">Relacionamentos</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.relationships")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-green-600">{new Set(knowledgeGraph?.nodes.map(n => n.type) || []).size}</div>
-                  <p className="text-sm text-muted-foreground">Tipos de Entidade</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.entityTypes")}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-4">
                   <div className="text-2xl font-bold text-purple-600">{new Set(knowledgeGraph?.edges.map(e => e.type) || []).size}</div>
-                  <p className="text-sm text-muted-foreground">Tipos de Relação</p>
+                  <p className="text-sm text-muted-foreground">{t("relationships.stats.relationTypes")}</p>
                 </CardContent>
               </Card>
             </div>
 
             <Card className="mb-6">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Entidades Extraídas</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> {t("relationships.extractedEntities")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoadingGraph ? (
@@ -687,7 +686,7 @@ export function RelationshipsPage() {
                 ) : !knowledgeGraph || knowledgeGraph.nodes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <h3 className="text-lg font-semibold mb-2">Nenhuma entidade extraída</h3>
+                    <h3 className="text-lg font-semibold mb-2">{t("relationships.noEntities")}</h3>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -701,7 +700,7 @@ export function RelationshipsPage() {
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{entity.name}</p>
-                            <p className="text-xs text-muted-foreground">Tipo: {entity.type}</p>
+                            <p className="text-xs text-muted-foreground">{t("relationships.entityType", { type: entity.type })}</p>
                           </div>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.color}`}>{entity.type}</span>
                         </div>
@@ -714,7 +713,7 @@ export function RelationshipsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ArrowRight className="h-5 w-5" /> Relacionamentos entre Entidades</CardTitle>
+                <CardTitle className="flex items-center gap-2"><ArrowRight className="h-5 w-5" /> {t("relationships.entityRelations")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoadingGraph ? (
@@ -727,7 +726,7 @@ export function RelationshipsPage() {
                   </div>
                 ) : !knowledgeGraph || knowledgeGraph.edges.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">Nenhum relacionamento encontrado.</p>
+                    <p className="text-sm">{t("relationships.noRelations")}</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -753,10 +752,10 @@ export function RelationshipsPage() {
               <CardContent className="pt-6">
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Busque uma memória para criar conexões manuais..." />
+                    <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder={t("relationships.connectSearchPlaceholder")} />
                   </div>
                   <Button className="bg-gradient-to-r from-brain-primary to-brain-accent text-white">
-                    <Search className="h-4 w-4 mr-2" /> Buscar
+                    <Search className="h-4 w-4 mr-2" /> {t("common.search")}
                   </Button>
                 </div>
               </CardContent>
@@ -765,7 +764,7 @@ export function RelationshipsPage() {
             {shouldSearch && (
               <Card className="mb-6">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Search className="h-4 w-4" /> Selecione a memória de origem</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><Search className="h-4 w-4" /> {t("relationships.selectSource")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {isSearching ? (
@@ -786,14 +785,14 @@ export function RelationshipsPage() {
                           </div>
                           {highlightedMemory?.id === memory.id && (
                             <div className="flex items-center gap-1 text-brain-primary">
-                              <span className="text-xs font-medium">Selecionado</span>
+                              <span className="text-xs font-medium">{t("relationships.selected")}</span>
                             </div>
                           )}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-center text-muted-foreground py-4">Nenhuma memória encontrada para "{debouncedSearchQuery}"</p>
+                    <p className="text-center text-muted-foreground py-4">{t("relationships.noResultsFor", { query: debouncedSearchQuery })}</p>
                   )}
                 </CardContent>
               </Card>
@@ -803,10 +802,10 @@ export function RelationshipsPage() {
               <Card className="mb-6 border-brain-primary/30">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2"><Network className="h-5 w-5 text-brain-primary" /> Memória Selecionada</span>
+                    <span className="flex items-center gap-2"><Network className="h-5 w-5 text-brain-primary" /> {t("relationships.selectedMemory")}</span>
                     <Button className="bg-gradient-to-r from-brain-primary to-brain-accent text-white"
                       onClick={() => { setSelectedMemory(highlightedMemory); setShowCreateDialog(true); }}>
-                      <Link2 className="h-4 w-4 mr-2" /> Conectar
+                      <Link2 className="h-4 w-4 mr-2" /> {t("relationships.connect")}
                     </Button>
                   </CardTitle>
                 </CardHeader>
@@ -819,7 +818,7 @@ export function RelationshipsPage() {
                       <span className="text-xs text-muted-foreground">{highlightedMemory.tags?.join(", ") || "-"}</span>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">Conexões existentes:</h4>
+                  <h4 className="text-sm font-medium mb-2">{t("relationships.existingConnections")}</h4>
                   {isLoadingConnections ? (
                     <div className="flex justify-center py-4"><Spinner /></div>
                   ) : highlightedConnections.length > 0 ? (
@@ -837,7 +836,7 @@ export function RelationshipsPage() {
                       })}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground py-2">Nenhuma conexão encontrada.</p>
+                    <p className="text-sm text-muted-foreground py-2">{t("relationships.noConnections")}</p>
                   )}
                 </CardContent>
               </Card>
@@ -845,7 +844,7 @@ export function RelationshipsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Memórias Conectadas</CardTitle>
+                <CardTitle>{t("relationships.connectedMemories")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -860,8 +859,8 @@ export function RelationshipsPage() {
                 ) : relationships.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Network className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <h3 className="text-lg font-semibold mb-2">Nenhuma conexão manual</h3>
-                    <p>Use a busca acima para conectar memórias manualmente.</p>
+                    <h3 className="text-lg font-semibold mb-2">{t("relationships.noManualConnections")}</h3>
+                    <p>{t("relationships.useSearchAbove")}</p>
                   </div>
                 ) : (
                   <div className="space-y-4 max-h-[500px] overflow-y-auto">
@@ -881,13 +880,13 @@ export function RelationshipsPage() {
         <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Link2 className="h-5 w-5 text-brain-primary" /> Criar Conexão entre Memórias
+              <Link2 className="h-5 w-5 text-brain-primary" /> {t("relationships.dialogTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-6 py-4">
             {selectedMemory && (
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">Memória de Origem</label>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">{t("relationships.sourceMemory")}</label>
                 <div className="p-4 border rounded-lg bg-brain-primary/5 border-brain-primary/30">
                   <p className="font-medium">{selectedMemory.summary}</p>
                   <div className="flex items-center gap-2 mt-2">
@@ -897,15 +896,15 @@ export function RelationshipsPage() {
               </div>
             )}
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">Tipo de Relacionamento</label>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">{t("relationships.type")}</label>
               <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={relationshipType} onChange={(e) => setRelationshipType(e.target.value)}>
                 {RELATIONSHIP_TYPES.map((type) => (<option key={type.value} value={type.value}>{type.label}</option>))}
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">Buscar Memória de Destino</label>
-              <SearchInput value={dialogSearchQuery} onChange={setDialogSearchQuery} placeholder="Digite para buscar memórias..." />
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">{t("relationships.searchTarget")}</label>
+              <SearchInput value={dialogSearchQuery} onChange={setDialogSearchQuery} placeholder={t("relationships.searchTargetPlaceholder")} />
               {isDialogSearching ? (
                 <div className="flex justify-center py-4"><Spinner /></div>
               ) : dialogSearchResults.length > 0 ? (
@@ -923,12 +922,12 @@ export function RelationshipsPage() {
                   ))}
                 </div>
               ) : dialogSearchQuery.length >= 2 ? (
-                <p className="text-sm text-muted-foreground mt-3 text-center py-4">Nenhuma memória encontrada</p>
+                <p className="text-sm text-muted-foreground mt-3 text-center py-4">{t("memory.notFound")}</p>
               ) : null}
             </div>
             {targetMemory && (
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">Memória de Destino</label>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">{t("relationships.targetMemory")}</label>
                 <div className="p-4 border rounded-lg bg-brain-accent/5 border-brain-accent/30">
                   <p className="font-medium">{targetMemory.summary}</p>
                 </div>
@@ -936,7 +935,7 @@ export function RelationshipsPage() {
             )}
             {selectedMemory && targetMemory && (
               <div className="p-4 border-2 border-dashed rounded-lg bg-accent/30">
-                <p className="text-sm text-center text-muted-foreground mb-2">Prévia:</p>
+                <p className="text-sm text-center text-muted-foreground mb-2">{t("relationships.preview")}</p>
                 <div className="flex items-center justify-center gap-3 flex-wrap">
                   <span className="font-medium text-sm bg-brain-primary/10 px-3 py-1 rounded">{selectedMemory.summary.substring(0, 30)}...</span>
                   <span className="px-3 py-1 rounded-full bg-brain-primary text-white text-xs font-medium">
@@ -949,10 +948,10 @@ export function RelationshipsPage() {
             )}
           </div>
           <DialogFooter className="border-t pt-4">
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>{t("common.cancel")}</Button>
             <Button className="bg-gradient-to-r from-brain-primary to-brain-accent text-white"
               onClick={handleCreateRelationship} disabled={!selectedMemory || !targetMemory}>
-              <Link2 className="h-4 w-4 mr-2" /> Criar Conexão
+              <Link2 className="h-4 w-4 mr-2" /> {t("relationships.createConnection")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -967,9 +966,14 @@ interface RelationshipItemProps {
 }
 
 function RelationshipItem({ relationship, onDelete }: RelationshipItemProps) {
+  const { t } = useTranslation();
   const typeLabels: Record<string, string> = {
-    RELATED: "Relacionado", DEPENDS_ON: "Depende de", DEPENDENT_OF: "É dependência de",
-    CONTRADICTS: "Contradiz", SIMILAR_TO: "Similar a", EXTENDS: "Estende",
+    RELATED: t("relationships.types.RELATED"),
+    DEPENDS_ON: t("relationships.types.DEPENDS_ON"),
+    DEPENDENT_OF: t("relationships.types.DEPENDENT_OF_LONG"),
+    CONTRADICTS: t("relationships.types.CONTRADICTS"),
+    SIMILAR_TO: t("relationships.types.SIMILAR_TO"),
+    EXTENDS: t("relationships.types.EXTENDS"),
   };
   return (
     <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors">
@@ -987,10 +991,10 @@ function RelationshipItem({ relationship, onDelete }: RelationshipItemProps) {
               </div>
             </>
           ) : (
-            <div className="text-sm text-muted-foreground">Relacionamento ID: {relationship.id}</div>
+            <div className="text-sm text-muted-foreground">{t("relationships.relationshipId", { id: relationship.id })}</div>
           )}
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Força: {Math.round((relationship.strength || 0) * 100)}%</span>
+            <span>{t("relationships.strength", { pct: Math.round((relationship.strength || 0) * 100) })}</span>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => onDelete(relationship.id)}>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { StickyNote, RefreshCw, Eye, Lightbulb } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,9 @@ interface HindsightNote {
 }
 
 export default function NotesPage() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
   const [tab, setTab] = useState<"notes" | "hindsight">("notes");
   const [notes, setNotes] = useState<Note[]>([]);
   const [hindsight, setHindsight] = useState<HindsightNote[]>([]);
@@ -41,7 +44,7 @@ export default function NotesPage() {
         setHindsight(Array.isArray(resp.data) ? resp.data : []);
       }
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "error" });
+      toast({ title: t("notes.error"), description: err.message, variant: "error" });
     } finally {
       setLoading(false);
     }
@@ -61,9 +64,9 @@ export default function NotesPage() {
                 <StickyNote className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Notas</h1>
+                <h1 className="text-base font-bold leading-tight">{t("notes.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Notas de sessão e hindsight
+                  {t("notes.subtitle")}
                 </p>
               </div>
             </div>
@@ -83,7 +86,7 @@ export default function NotesPage() {
             onClick={() => setTab("notes")}
           >
             <Eye className="h-4 w-4 mr-2" />
-            Notas
+            {t("notes.tabs.notes")}
           </Button>
           <Button
             variant={tab === "hindsight" ? "default" : "outline"}
@@ -91,7 +94,7 @@ export default function NotesPage() {
             onClick={() => setTab("hindsight")}
           >
             <Lightbulb className="h-4 w-4 mr-2" />
-            Hindsight
+            {t("notes.tabs.hindsight")}
           </Button>
         </div>
 
@@ -107,9 +110,9 @@ export default function NotesPage() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <StickyNote className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-semibold mb-2">Nenhuma nota</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t("notes.empty")}</h3>
                   <p className="text-muted-foreground">
-                    Notas são geradas automaticamente durante sessões de interception.
+                    {t("notes.emptyDesc")}
                   </p>
                 </CardContent>
               </Card>
@@ -122,9 +125,9 @@ export default function NotesPage() {
                   <CardContent>
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{note.content}</p>
                     <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                      <span>Tipo: {note.noteType}</span>
-                      <span>Sessão: {note.sessionId?.slice(0, 8) || "-"}</span>
-                      <span>{new Date(note.createdAt).toLocaleString("pt-BR")}</span>
+                      <span>{t("notes.type", { type: note.noteType })}</span>
+                      <span>{t("notes.session", { id: note.sessionId?.slice(0, 8) || "-" })}</span>
+                      <span>{new Date(note.createdAt).toLocaleString(dateLocale)}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -139,9 +142,9 @@ export default function NotesPage() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <Lightbulb className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-semibold mb-2">Nenhuma nota hindsight</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t("notes.emptyHindsight")}</h3>
                   <p className="text-muted-foreground">
-                    Notas hindsight capturam lições aprendidas após o fato.
+                    {t("notes.emptyHindsightDesc")}
                   </p>
                 </CardContent>
               </Card>
@@ -153,13 +156,13 @@ export default function NotesPage() {
                     {note.impact && (
                       <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
                         <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                          Impacto: {note.impact}
+                          {t("notes.impact", { impact: note.impact })}
                         </p>
                       </div>
                     )}
                     <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                      <span>Sessão: {note.sessionId?.slice(0, 8) || "-"}</span>
-                      <span>{new Date(note.createdAt).toLocaleString("pt-BR")}</span>
+                      <span>{t("notes.session", { id: note.sessionId?.slice(0, 8) || "-" })}</span>
+                      <span>{new Date(note.createdAt).toLocaleString(dateLocale)}</span>
                     </div>
                   </CardContent>
                 </Card>

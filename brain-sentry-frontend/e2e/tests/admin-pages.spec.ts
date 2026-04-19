@@ -23,11 +23,11 @@ test.describe("Admin Coverage", () => {
   test("covers timeline filters", async ({ authenticatedPage }) => {
     await authenticatedPage.goto(ROUTES.timeline);
 
-    await expect(authenticatedPage.getByRole("heading", { name: "Timeline" })).toBeVisible();
-    await expect(authenticatedPage.getByText(/Showing 3 of 3 events/i)).toBeVisible();
+    await expect(authenticatedPage.getByRole("heading", { name: "Linha do Tempo" })).toBeVisible();
+    await expect(authenticatedPage.getByText(/Mostrando 3 de 3 eventos/i)).toBeVisible();
 
     await authenticatedPage.getByRole("button", { name: "CRITICAL" }).click();
-    await expect(authenticatedPage.getByText(/Showing 1 of 1 events/i)).toBeVisible();
+    await expect(authenticatedPage.getByText(/Mostrando 1 de 1 eventos/i)).toBeVisible();
   });
 
   test("covers audit list", async ({ authenticatedPage }) => {

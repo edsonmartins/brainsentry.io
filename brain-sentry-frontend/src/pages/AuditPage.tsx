@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Shield,
   Activity,
@@ -46,13 +47,13 @@ interface StatsResponse {
   recentActivity: number;
 }
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  context_injection: "Injeção de Contexto",
-  memory_created: "Memória Criada",
-  memory_updated: "Memória Atualizada",
-  memory_deleted: "Memória Excluída",
-  relationship_created: "Relacionamento Criado",
-  error: "Erro",
+const EVENT_TYPE_I18N: Record<string, string> = {
+  context_injection: "audit.events.contextInjection",
+  memory_created: "audit.events.memoryCreated",
+  memory_updated: "audit.events.memoryUpdated",
+  memory_deleted: "audit.events.memoryDeleted",
+  relationship_created: "audit.events.relationshipCreated",
+  error: "audit.events.error",
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -63,8 +64,10 @@ const OUTCOME_COLORS: Record<string, string> = {
 };
 
 export function AuditPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
   const tenantId = user?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
 
   // Filters
@@ -117,14 +120,14 @@ export function AuditPage() {
       window.URL.revokeObjectURL(url);
 
       toast({
-        title: "Exportação concluída",
-        description: "Os logs foram exportados com sucesso.",
+        title: t("audit.exported"),
+        description: t("audit.exportedDesc"),
         variant: "success",
       });
     } catch {
       toast({
-        title: "Erro na exportação",
-        description: "Não foi possível exportar os logs.",
+        title: t("audit.exportError"),
+        description: t("audit.exportErrorDesc"),
         variant: "error",
       });
     }
@@ -137,7 +140,12 @@ export function AuditPage() {
   };
 
   const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString("pt-BR");
+    return new Date(timestamp).toLocaleString(dateLocale);
+  };
+
+  const eventLabel = (type: string) => {
+    const key = EVENT_TYPE_I18N[type];
+    return key ? t(key) : type;
   };
 
   return (
@@ -151,9 +159,9 @@ export function AuditPage() {
                 <Shield className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Auditoria</h1>
+                <h1 className="text-base font-bold leading-tight">{t("audit.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Logs de operações do sistema
+                  {t("audit.subtitle")}
                 </p>
               </div>
             </div>
@@ -163,7 +171,7 @@ export function AuditPage() {
               </Button>
               <Button variant="outline" size="sm" className="bg-white text-brain-primary hover:bg-white/90 border-0" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-2" />
-                Exportar
+                {t("common.export")}
               </Button>
             </div>
           </div>
@@ -174,25 +182,25 @@ export function AuditPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <StatCard
-            title="Total de Eventos"
+            title={t("audit.totalEvents")}
             value={stats?.totalEvents || 0}
             icon={<Activity className="h-5 w-5" />}
             loading={!stats}
           />
           <StatCard
-            title="Últimas 24h"
+            title={t("audit.last24h")}
             value={stats?.recentActivity || 0}
             icon={<Clock className="h-5 w-5" />}
             loading={!stats}
           />
           <StatCard
-            title="Usuários Ativos"
+            title={t("audit.activeUsers")}
             value={Object.keys(stats?.eventsByUser || {}).length}
             icon={<User className="h-5 w-5" />}
             loading={!stats}
           />
           <StatCard
-            title="Tipos de Eventos"
+            title={t("audit.eventTypes")}
             value={Object.keys(stats?.eventsByType || {}).length}
             icon={<Filter className="h-5 w-5" />}
             loading={!stats}
@@ -207,14 +215,14 @@ export function AuditPage() {
             filters={[
               {
                 key: "eventType",
-                label: "Tipo",
+                label: t("audit.columns.type"),
                 options: [
-                  { value: "", label: "Todos" },
-                  { value: "context_injection", label: "Injeção" },
-                  { value: "memory_created", label: "Criação" },
-                  { value: "memory_updated", label: "Atualização" },
-                  { value: "memory_deleted", label: "Exclusão" },
-                  { value: "relationship_created", label: "Relacionamento" },
+                  { value: "", label: t("audit.filterAll") },
+                  { value: "context_injection", label: t("audit.filterInjection") },
+                  { value: "memory_created", label: t("audit.filterCreation") },
+                  { value: "memory_updated", label: t("audit.filterUpdate") },
+                  { value: "memory_deleted", label: t("audit.filterDeletion") },
+                  { value: "relationship_created", label: t("audit.filterRelationship") },
                 ],
                 value: eventType,
                 onChange: setEventType,
@@ -226,7 +234,7 @@ export function AuditPage() {
         {/* Logs Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Histórico de Eventos</CardTitle>
+            <CardTitle>{t("audit.history")}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -242,7 +250,7 @@ export function AuditPage() {
             ) : logs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhum evento de auditoria encontrado</p>
+                <p>{t("audit.empty")}</p>
               </div>
             ) : (
               <>
@@ -250,12 +258,12 @@ export function AuditPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b text-left text-sm text-muted-foreground">
-                        <th className="p-3">Tipo</th>
-                        <th className="p-3">Usuário</th>
-                        <th className="p-3">Sessão</th>
-                        <th className="p-3">Resultado</th>
-                        <th className="p-3">Dados</th>
-                        <th className="p-3">Horário</th>
+                        <th className="p-3">{t("audit.columns.type")}</th>
+                        <th className="p-3">{t("audit.columns.user")}</th>
+                        <th className="p-3">{t("audit.columns.session")}</th>
+                        <th className="p-3">{t("audit.columns.outcome")}</th>
+                        <th className="p-3">{t("audit.columns.data")}</th>
+                        <th className="p-3">{t("audit.columns.time")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -268,7 +276,7 @@ export function AuditPage() {
                                 return <Icon className="h-4 w-4" />;
                               })()}
                               <span className="text-sm">
-                                {EVENT_TYPE_LABELS[log.eventType] || log.eventType}
+                                {eventLabel(log.eventType)}
                               </span>
                             </div>
                           </td>
@@ -283,11 +291,11 @@ export function AuditPage() {
                             {log.errorMessage ? (
                               <span className="text-destructive">{log.errorMessage}</span>
                             ) : log.memoriesAccessed && log.memoriesAccessed.length > 0 ? (
-                              <span>{log.memoriesAccessed.length} acessos</span>
+                              <span>{t("audit.accesses", { count: log.memoriesAccessed.length })}</span>
                             ) : log.memoriesCreated && log.memoriesCreated.length > 0 ? (
-                              <span>{log.memoriesCreated.length} criadas</span>
+                              <span>{t("audit.created", { count: log.memoriesCreated.length })}</span>
                             ) : log.memoriesModified && log.memoriesModified.length > 0 ? (
-                              <span>{log.memoriesModified.length} modificadas</span>
+                              <span>{t("audit.modified", { count: log.memoriesModified.length })}</span>
                             ) : (
                               <span className="text-muted-foreground">-</span>
                             )}
@@ -320,7 +328,7 @@ export function AuditPage() {
         {stats?.eventsByType && (
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Eventos por Tipo</CardTitle>
+              <CardTitle>{t("audit.eventsByType")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -328,7 +336,7 @@ export function AuditPage() {
                   .sort(([, a], [, b]) => b - a)
                   .map(([type, count]) => (
                     <div key={type} className="flex items-center gap-3">
-                      <span className="flex-1 text-sm">{EVENT_TYPE_LABELS[type] || type}</span>
+                      <span className="flex-1 text-sm">{eventLabel(type)}</span>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-primary h-2 rounded-full"

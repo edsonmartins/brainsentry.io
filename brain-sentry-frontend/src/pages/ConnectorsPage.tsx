@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Plug, RefreshCw, Play, CheckCircle, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ interface SyncResult {
 }
 
 export default function ConnectorsPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [connectors, setConnectors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +29,7 @@ export default function ConnectorsPage() {
       const resp = await api.axiosInstance.get<{ connectors: string[] }>("/v1/connectors");
       setConnectors(resp.data.connectors || []);
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "error" });
+      toast({ title: t("connectors.error"), description: err.message, variant: "error" });
     } finally {
       setLoading(false);
     }
@@ -43,12 +45,12 @@ export default function ConnectorsPage() {
       const resp = await api.axiosInstance.post<SyncResult>(`/v1/connectors/${name}/sync`);
       setResults((prev) => ({ ...prev, [name]: resp.data }));
       toast({
-        title: "Sync concluído",
-        description: `${name}: ${resp.data.documentsFound} documentos encontrados`,
+        title: t("connectors.syncOk"),
+        description: t("connectors.syncOkDesc", { name, count: resp.data.documentsFound }),
         variant: "success",
       });
     } catch (err: any) {
-      toast({ title: "Erro no sync", description: err.message, variant: "error" });
+      toast({ title: t("connectors.syncError"), description: err.message, variant: "error" });
     } finally {
       setSyncing((prev) => ({ ...prev, [name]: false }));
     }
@@ -60,9 +62,9 @@ export default function ConnectorsPage() {
     try {
       const resp = await api.axiosInstance.post<Record<string, SyncResult>>("/v1/connectors/sync-all");
       setResults(resp.data);
-      toast({ title: "Sync completo", description: "Todos os conectores sincronizados", variant: "success" });
+      toast({ title: t("connectors.syncAllOk"), description: t("connectors.syncAllOkDesc"), variant: "success" });
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "error" });
+      toast({ title: t("connectors.error"), description: err.message, variant: "error" });
     } finally {
       setSyncing({});
     }
@@ -85,9 +87,9 @@ export default function ConnectorsPage() {
                 <Plug className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Conectores</h1>
+                <h1 className="text-base font-bold leading-tight">{t("connectors.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Fontes de dados externas
+                  {t("connectors.subtitle")}
                 </p>
               </div>
             </div>
@@ -98,7 +100,7 @@ export default function ConnectorsPage() {
               {connectors.length > 0 && (
                 <Button variant="outline" size="sm" className="bg-white text-brain-primary hover:bg-white/90 border-0" onClick={handleSyncAll}>
                   <Play className="h-4 w-4 mr-2" />
-                  Sync Todos
+                  {t("connectors.syncAll")}
                 </Button>
               )}
             </div>
@@ -117,9 +119,9 @@ export default function ConnectorsPage() {
           <Card>
             <CardContent className="p-12 text-center">
               <Plug className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum conector configurado</h3>
+              <h3 className="text-lg font-semibold mb-2">{t("connectors.empty")}</h3>
               <p className="text-muted-foreground">
-                Configure conectores no backend para importar dados de fontes externas.
+                {t("connectors.emptyDesc")}
               </p>
             </CardContent>
           </Card>
@@ -144,15 +146,15 @@ export default function ConnectorsPage() {
                     {result && (
                       <div className="text-sm space-y-1">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Documentos</span>
+                          <span className="text-muted-foreground">{t("connectors.documents")}</span>
                           <span className="font-medium">{result.documentsFound}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Chunks</span>
+                          <span className="text-muted-foreground">{t("connectors.chunks")}</span>
                           <span className="font-medium">{result.chunksCreated}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Tasks</span>
+                          <span className="text-muted-foreground">{t("connectors.tasks")}</span>
                           <span className="font-medium">{result.tasksSubmitted}</span>
                         </div>
                         {result.error && (
@@ -168,7 +170,7 @@ export default function ConnectorsPage() {
                       disabled={isSyncing}
                     >
                       {isSyncing ? <Spinner size="sm" /> : <Play className="h-4 w-4 mr-2" />}
-                      Sincronizar
+                      {t("connectors.sync")}
                     </Button>
                   </CardContent>
                 </Card>

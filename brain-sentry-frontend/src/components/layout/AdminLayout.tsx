@@ -17,109 +17,53 @@ import {
   StickyNote,
   ListTodo,
   Clock,
+  MessageSquare,
+  Zap,
+  FlaskConical,
+  BookOpen,
+  Database,
+  CheckSquare,
+  Share2,
+  Layers3,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { ThemeSelector } from "@/components/ui/theme-selector";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function AdminLayout() {
+  const { t, i18n } = useTranslation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
   const navigation = [
-    {
-      title: "Dashboard",
-      href: "/app/dashboard",
-      icon: LayoutDashboard,
-      id: "dashboard",
-    },
-    {
-      title: "Memórias",
-      href: "/app/memories",
-      icon: FileText,
-      id: "memories",
-    },
-    {
-      title: "Busca",
-      href: "/app/search",
-      icon: Search,
-      id: "search",
-    },
-    {
-      title: "Relacionamentos",
-      href: "/app/relationships",
-      icon: Network,
-      id: "relationships",
-    },
-    {
-      title: "Timeline",
-      href: "/app/timeline",
-      icon: Clock,
-      id: "timeline",
-    },
-    {
-      title: "Auditoria",
-      href: "/app/audit",
-      icon: Shield,
-      id: "audit",
-    },
-    {
-      title: "Usuários",
-      href: "/app/users",
-      icon: Users,
-      id: "users",
-    },
-    {
-      title: "Tenants",
-      href: "/app/tenants",
-      icon: Building2,
-      id: "tenants",
-    },
-    {
-      title: "Configurações",
-      href: "/app/configuration",
-      icon: Settings,
-      id: "configuration",
-    },
-    {
-      title: "Analytics",
-      href: "/app/analytics",
-      icon: Activity,
-      id: "analytics",
-    },
-    {
-      title: "Perfil",
-      href: "/app/profile",
-      icon: User,
-      id: "profile",
-    },
-    {
-      title: "Playground",
-      href: "/app/playground",
-      icon: Wand2,
-      id: "playground",
-    },
-    {
-      title: "Conectores",
-      href: "/app/connectors",
-      icon: Plug,
-      id: "connectors",
-    },
-    {
-      title: "Notas",
-      href: "/app/notes",
-      icon: StickyNote,
-      id: "notes",
-    },
-    {
-      title: "Tarefas",
-      href: "/app/tasks",
-      icon: ListTodo,
-      id: "tasks",
-    },
+    { title: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard, id: "dashboard" },
+    { title: t("nav.memories"), href: "/app/memories", icon: FileText, id: "memories" },
+    { title: t("nav.search"), href: "/app/search", icon: Search, id: "search" },
+    { title: t("nav.relationships"), href: "/app/relationships", icon: Network, id: "relationships" },
+    { title: t("nav.console"), href: "/app/console", icon: MessageSquare, id: "console" },
+    { title: t("nav.traces"), href: "/app/traces", icon: Zap, id: "traces" },
+    { title: t("nav.extraction"), href: "/app/extraction", icon: FlaskConical, id: "extraction" },
+    { title: t("nav.ontology"), href: "/app/ontology", icon: BookOpen, id: "ontology" },
+    { title: t("nav.sessionCache"), href: "/app/session-cache", icon: Database, id: "session-cache" },
+    { title: t("nav.actionsLeases"), href: "/app/actions", icon: CheckSquare, id: "actions" },
+    { title: t("nav.meshSync"), href: "/app/mesh", icon: Share2, id: "mesh" },
+    { title: t("nav.batchSearch"), href: "/app/batch-search", icon: Layers3, id: "batch-search" },
+    { title: t("nav.timeline"), href: "/app/timeline", icon: Clock, id: "timeline" },
+    { title: t("nav.audit"), href: "/app/audit", icon: Shield, id: "audit" },
+    { title: t("nav.users"), href: "/app/users", icon: Users, id: "users" },
+    { title: t("nav.tenants"), href: "/app/tenants", icon: Building2, id: "tenants" },
+    { title: t("nav.configuration"), href: "/app/configuration", icon: Settings, id: "configuration" },
+    { title: t("nav.analytics"), href: "/app/analytics", icon: Activity, id: "analytics" },
+    { title: t("nav.profile"), href: "/app/profile", icon: User, id: "profile" },
+    { title: t("nav.playground"), href: "/app/playground", icon: Wand2, id: "playground" },
+    { title: t("nav.connectors"), href: "/app/connectors", icon: Plug, id: "connectors" },
+    { title: t("nav.notes"), href: "/app/notes", icon: StickyNote, id: "notes" },
+    { title: t("nav.tasks"), href: "/app/tasks", icon: ListTodo, id: "tasks" },
   ];
 
   const handleNavigation = (href: string) => {
@@ -185,10 +129,13 @@ export function AdminLayout() {
             <div className="text-xs text-muted-foreground">
               v1.0.0
             </div>
-            <ThemeSelector />
+            <div className="flex items-center gap-1">
+              <LanguageSwitcher />
+              <ThemeSelector />
+            </div>
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            {new Date().toLocaleDateString('pt-BR')}
+            {new Date().toLocaleDateString(i18n.language)}
           </div>
           {user && (
             <div className="text-xs text-muted-foreground mt-1 truncate">
@@ -203,7 +150,7 @@ export function AdminLayout() {
         <div className="md:hidden fixed inset-0 z-50 bg-background">
         <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-bold">Menu</h2>
+              <h2 className="text-lg font-bold">{t("nav.menu", "Menu")}</h2>
               <button
                 onClick={() => setMobileMenuOpen(false)}
                 className="p-2 rounded-md hover:bg-muted"

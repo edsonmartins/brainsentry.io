@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Users,
   UserPlus,
@@ -51,11 +52,7 @@ interface UpdateUserRequest {
   roles?: string[];
 }
 
-const ROLE_OPTIONS = [
-  { value: "USER", label: "Usuário" },
-  { value: "ADMIN", label: "Administrador" },
-  { value: "MODERATOR", label: "Moderador" },
-];
+const ROLE_KEYS = ["USER", "ADMIN", "MODERATOR"] as const;
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
@@ -64,9 +61,12 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export function UsersPage() {
+  const { t, i18n } = useTranslation();
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const tenantId = currentUser?.tenantId || "a9f814d2-4dae-41f3-851b-8aa3d4706561";
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
+  const ROLE_OPTIONS = ROLE_KEYS.map((k) => ({ value: k, label: t(`users.roleOptions.${k}`) }));
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -122,8 +122,8 @@ export function UsersPage() {
       }
 
       toast({
-        title: "Usuário criado",
-        description: `O usuário "${formData.email}" foi criado com sucesso.`,
+        title: t("users.userCreated"),
+        description: t("users.userCreatedDesc", { email: formData.email }),
         variant: "success",
       });
 
@@ -132,8 +132,8 @@ export function UsersPage() {
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: (err as Error).message || "Não foi possível criar o usuário.",
+        title: t("common.error"),
+        description: (err as Error).message || t("users.createUserError"),
         variant: "error",
       });
     }
@@ -163,8 +163,8 @@ export function UsersPage() {
       }
 
       toast({
-        title: "Usuário atualizado",
-        description: `O usuário "${selectedUser.email}" foi atualizado.`,
+        title: t("users.userUpdated"),
+        description: t("users.userUpdatedDesc", { email: selectedUser.email }),
         variant: "success",
       });
 
@@ -173,8 +173,8 @@ export function UsersPage() {
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: (err as Error).message || "Não foi possível atualizar o usuário.",
+        title: t("common.error"),
+        description: (err as Error).message || t("users.updateUserError"),
         variant: "error",
       });
     }
@@ -182,7 +182,7 @@ export function UsersPage() {
 
   // Delete user
   const handleDeleteUser = async (userId: string, email: string) => {
-    if (!confirm(`Tem certeza que deseja excluir o usuário "${email}"?`)) {
+    if (!confirm(t("users.deleteConfirm", { email }))) {
       return;
     }
 
@@ -200,16 +200,16 @@ export function UsersPage() {
       }
 
       toast({
-        title: "Usuário excluído",
-        description: `O usuário "${email}" foi excluído.`,
+        title: t("users.userDeleted"),
+        description: t("users.userDeletedDesc", { email }),
         variant: "success",
       });
 
       refetch?.();
     } catch (err) {
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir o usuário.",
+        title: t("common.error"),
+        description: t("users.deleteUserError"),
         variant: "error",
       });
     }
@@ -248,7 +248,7 @@ export function UsersPage() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
-    return new Date(dateString).toLocaleString("pt-BR");
+    return new Date(dateString).toLocaleString(dateLocale);
   };
 
   return (
@@ -262,9 +262,9 @@ export function UsersPage() {
                 <Users className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Usuários</h1>
+                <h1 className="text-base font-bold leading-tight">{t("users.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Gerencie os usuários do sistema
+                  {t("users.subtitle")}
                 </p>
               </div>
             </div>
@@ -274,7 +274,7 @@ export function UsersPage() {
               </Button>
               <Button className="bg-white text-brain-primary hover:bg-white/90" onClick={() => setShowCreateDialog(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Novo Usuário
+                {t("users.newUser")}
               </Button>
             </div>
           </div>
@@ -287,7 +287,7 @@ export function UsersPage() {
           <SearchInput
             value={searchQuery}
             onChange={setSearchQuery}
-            placeholder="Buscar usuários por email ou nome..."
+            placeholder={t("users.searchPlaceholder")}
           />
         </div>
 
@@ -295,7 +295,7 @@ export function UsersPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              Usuários ({totalElements} {totalElements === 1 ? "usuário" : "usuários"})
+              {totalElements === 1 ? t("users.countSingular", { count: totalElements }) : t("users.count", { count: totalElements })}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -313,17 +313,17 @@ export function UsersPage() {
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-semibold mb-2">
-                  {searchQuery ? "Nenhum usuário encontrado" : "Nenhum usuário cadastrado"}
+                  {searchQuery ? t("users.notFound") : t("users.noneRegistered")}
                 </h3>
                 <p className="mb-4">
                   {searchQuery
-                    ? "Tente buscar com outro termo."
-                    : "Comece adicionando um novo usuário ao sistema."}
+                    ? t("users.tryOther")
+                    : t("users.startAdding")}
                 </p>
                 {!searchQuery && (
                   <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={() => setShowCreateDialog(true)}>
                     <UserPlus className="h-4 w-4 mr-2" />
-                    Adicionar Usuário
+                    {t("users.addUser")}
                   </Button>
                 )}
               </div>
@@ -333,12 +333,12 @@ export function UsersPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b text-left text-sm text-muted-foreground">
-                        <th className="p-4">Usuário</th>
-                        <th className="p-4">Roles</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Último Acesso</th>
-                        <th className="p-4">Criado em</th>
-                        <th className="p-4 text-right">Ações</th>
+                        <th className="p-4">{t("users.columns.user")}</th>
+                        <th className="p-4">{t("users.columns.roles")}</th>
+                        <th className="p-4">{t("users.columns.status")}</th>
+                        <th className="p-4">{t("users.columns.lastAccess")}</th>
+                        <th className="p-4">{t("users.columns.createdAt")}</th>
+                        <th className="p-4 text-right">{t("users.columns.actions")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -371,12 +371,12 @@ export function UsersPage() {
                             {user.active ? (
                               <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
                                 <Check className="h-3 w-3" />
-                                Ativo
+                                {t("common.active")}
                               </span>
                             ) : (
                               <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-sm">
                                 <X className="h-3 w-3" />
-                                Inativo
+                                {t("common.inactive")}
                               </span>
                             )}
                           </td>
@@ -431,29 +431,29 @@ export function UsersPage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Novo Usuário</DialogTitle>
+            <DialogTitle>{t("users.newUser")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="text-sm font-medium mb-2">Email</label>
+              <label className="text-sm font-medium mb-2">{t("common.email")}</label>
               <Input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="usuario@exemplo.com"
+                placeholder={t("users.emailPlaceholder")}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Nome</label>
+              <label className="text-sm font-medium mb-2">{t("users.name")}</label>
               <Input
                 type="text"
                 value={formData.name || ""}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome do usuário"
+                placeholder={t("users.namePlaceholder")}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Senha</label>
+              <label className="text-sm font-medium mb-2">{t("users.password")}</label>
               <Input
                 type="password"
                 value={formData.password}
@@ -462,7 +462,7 @@ export function UsersPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Roles</label>
+              <label className="text-sm font-medium mb-2">{t("users.roles")}</label>
               <div className="flex gap-2 flex-wrap">
                 {ROLE_OPTIONS.map((role) => (
                   <button
@@ -483,10 +483,10 @@ export function UsersPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleCreateUser} disabled={!formData.email || !formData.password}>
-              Criar Usuário
+              {t("users.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -496,24 +496,24 @@ export function UsersPage() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Editar Usuário</DialogTitle>
+            <DialogTitle>{t("users.editUser")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="text-sm font-medium mb-2">Email</label>
+              <label className="text-sm font-medium mb-2">{t("common.email")}</label>
               <Input type="email" value={formData.email} disabled />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Nome</label>
+              <label className="text-sm font-medium mb-2">{t("users.name")}</label>
               <Input
                 type="text"
                 value={formData.name || ""}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome do usuário"
+                placeholder={t("users.namePlaceholder")}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Status</label>
+              <label className="text-sm font-medium mb-2">{t("users.columns.status")}</label>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -524,7 +524,7 @@ export function UsersPage() {
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
-                  Ativo
+                  {t("common.active")}
                 </button>
                 <button
                   type="button"
@@ -535,12 +535,12 @@ export function UsersPage() {
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
-                  Inativo
+                  {t("common.inactive")}
                 </button>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium mb-2">Roles</label>
+              <label className="text-sm font-medium mb-2">{t("users.roles")}</label>
               <div className="flex gap-2 flex-wrap">
                 {ROLE_OPTIONS.map((role) => (
                   <button
@@ -561,9 +561,9 @@ export function UsersPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
-            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleUpdateUser}>Salvar Alterações</Button>
+            <Button className="bg-gradient-to-r from-brain-primary to-brain-accent hover:from-brain-primary-dark hover:to-brain-accent-dark text-white" onClick={handleUpdateUser}>{t("users.saveChanges")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

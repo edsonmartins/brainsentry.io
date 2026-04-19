@@ -12,6 +12,15 @@ export class Sidebar {
     "Memórias",
     "Busca",
     "Relacionamentos",
+    "Console",
+    "Traços de Agente",
+    "Lab de Extração",
+    "Ontologia",
+    "Cache de Sessão",
+    "Ações & Leases",
+    "Sincronização Mesh",
+    "Busca em Lote",
+    "Linha do Tempo",
     "Auditoria",
     "Usuários",
     "Tenants",
@@ -34,11 +43,11 @@ export class Sidebar {
   }
 
   getNavItem(name: string): Locator {
-    return this.sidebar.locator("nav button").filter({ hasText: name });
+    return this.sidebar.getByRole("button", { name, exact: true });
   }
 
   getMobileNavItem(name: string): Locator {
-    return this.mobileOverlay.locator("nav button").filter({ hasText: name });
+    return this.mobileOverlay.getByRole("button", { name, exact: true });
   }
 
   getActiveNavItem(): Locator {

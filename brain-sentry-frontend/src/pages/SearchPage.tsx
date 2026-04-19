@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Brain, ChevronDown, ChevronUp, Info } from "lucide-react";
 import { useDebounce } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
@@ -46,27 +47,22 @@ interface PlanSearchResult {
   searchTimeMs: number;
 }
 
-const CATEGORY_OPTIONS = [
-  { value: "", label: "Todas" },
-  { value: "INSIGHT", label: "Insights" },
-  { value: "WARNING", label: "Alertas" },
-  { value: "KNOWLEDGE", label: "Conhecimento" },
-  { value: "ACTION", label: "Ações" },
-  { value: "CONTEXT", label: "Contexto" },
-  { value: "REFERENCE", label: "Referências" },
-  { value: "GENERAL", label: "Geral" },
-];
-
-const IMPORTANCE_OPTIONS = [
-  { value: "", label: "Todas" },
-  { value: "CRITICAL", label: "Crítico" },
-  { value: "IMPORTANT", label: "Importante" },
-  { value: "MINOR", label: "Menor" },
-];
+const CATEGORY_KEYS = ["", "INSIGHT", "WARNING", "KNOWLEDGE", "ACTION", "CONTEXT", "REFERENCE", "GENERAL"] as const;
+const IMPORTANCE_KEYS = ["", "CRITICAL", "IMPORTANT", "MINOR"] as const;
 
 export function SearchPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  const CATEGORY_OPTIONS = CATEGORY_KEYS.map((k) => ({
+    value: k,
+    label: k === "" ? t("search.categoryOptions.all") : t(`search.categoryOptions.${k}`),
+  }));
+  const IMPORTANCE_OPTIONS = IMPORTANCE_KEYS.map((k) => ({
+    value: k,
+    label: k === "" ? t("search.importanceOptions.all") : t(`search.importanceOptions.${k}`),
+  }));
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,11 +124,11 @@ export function SearchPage() {
       }
     } catch (err) {
       setError(err as Error);
-      toast({ title: "Erro na busca", description: (err as Error).message, variant: "error" });
+      toast({ title: t("search.searchError"), description: (err as Error).message, variant: "error" });
     } finally {
       setIsLoading(false);
     }
-  }, [shouldSearch, debouncedQuery, category, importance, pageSize, page, toast]);
+  }, [shouldSearch, debouncedQuery, category, importance, pageSize, page, toast, t]);
 
   // Auto-search when params change
   useEffect(() => {
@@ -157,7 +153,7 @@ export function SearchPage() {
         setTotalResults(data.finalResults.length);
       }
     } catch (err) {
-      toast({ title: "Erro na busca avançada", description: (err as Error).message, variant: "error" });
+      toast({ title: t("search.advancedError"), description: (err as Error).message, variant: "error" });
     } finally {
       setPlanLoading(false);
     }
@@ -165,7 +161,7 @@ export function SearchPage() {
 
   const handleSearch = () => {
     if (searchQuery.length < 2 && !category && !importance) {
-      toast({ title: "Busca muito curta", description: "Digite pelo menos 2 caracteres.", variant: "warning" });
+      toast({ title: t("search.shortSearch"), description: t("search.shortSearchDesc"), variant: "warning" });
       return;
     }
     if (advancedMode) {
@@ -203,8 +199,8 @@ export function SearchPage() {
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Busca Semântica</h1>
-                <p className="text-xs text-white/80">Encontre memórias usando IA</p>
+                <h1 className="text-base font-bold leading-tight">{t("search.semanticTitle")}</h1>
+                <p className="text-xs text-white/80">{t("search.subtitle")}</p>
               </div>
             </div>
           </div>
@@ -221,19 +217,19 @@ export function SearchPage() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Digite sua dúvida ou contexto técnico..."
+                    placeholder={t("search.semanticPlaceholder")}
                     className="pl-10 h-12"
                     onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }} />
                 </div>
                 <Button size="lg" className="bg-gradient-to-r from-brain-primary to-brain-accent text-white" onClick={handleSearch}>
-                  <Search className="h-5 w-5 mr-2" /> Buscar
+                  <Search className="h-5 w-5 mr-2" /> {t("search.runSearch")}
                 </Button>
               </div>
 
               {/* Filters + Advanced Toggle */}
               <div className="flex flex-wrap gap-4 items-end">
-                <FilterSelect label="Categoria" options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
-                <FilterSelect label="Importância" options={IMPORTANCE_OPTIONS} value={importance} onChange={setImportance} />
+                <FilterSelect label={t("search.categoryFilter")} options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
+                <FilterSelect label={t("search.importanceFilter")} options={IMPORTANCE_OPTIONS} value={importance} onChange={setImportance} />
 
                 <Button
                   variant={advancedMode ? "default" : "outline"}
@@ -242,11 +238,11 @@ export function SearchPage() {
                   className={advancedMode ? "bg-brain-accent hover:bg-brain-accent/90" : ""}
                 >
                   <Brain className="h-4 w-4 mr-1" />
-                  Busca Avançada
+                  {t("search.advanced")}
                 </Button>
 
                 {(searchQuery || category || importance) && (
-                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>Limpar filtros</Button>
+                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>{t("search.clearFilters")}</Button>
                 )}
               </div>
 
@@ -254,8 +250,7 @@ export function SearchPage() {
                 <div className="p-3 bg-brain-accent/10 rounded-md text-sm text-muted-foreground flex items-center gap-2">
                   <Info className="h-4 w-4 shrink-0" />
                   <span>
-                    Modo avançado usa o Retrieval Planner para busca multi-round com cobertura progressiva.
-                    O sistema gera sub-queries e combina resultados de múltiplas perspectivas.
+                    {t("search.advancedInfo")}
                   </span>
                 </div>
               )}
@@ -269,7 +264,7 @@ export function SearchPage() {
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
                 <Brain className="h-4 w-4 text-brain-accent" />
-                Plano de Busca — {planResult.rounds.length} rounds, cobertura {((planResult.totalCoverage || 0) * 100).toFixed(0)}%
+                {t("search.planTitle", { rounds: planResult.rounds.length, coverage: ((planResult.totalCoverage || 0) * 100).toFixed(0) })}
                 {planResult.searchTimeMs > 0 && <span className="text-xs text-muted-foreground">({planResult.searchTimeMs}ms)</span>}
               </CardTitle>
             </CardHeader>
@@ -278,10 +273,10 @@ export function SearchPage() {
                 {planResult.rounds.map((round) => (
                   <div key={round.round} className="flex items-center gap-3 p-2 bg-accent rounded-md">
                     <span className="text-xs font-bold text-brain-primary bg-brain-primary/10 px-2 py-1 rounded">
-                      Round {round.round}
+                      {t("search.round", { n: round.round })}
                     </span>
                     <span className="text-sm flex-1">"{round.subQuery}"</span>
-                    <span className="text-xs text-muted-foreground">{round.results?.length || 0} resultados</span>
+                    <span className="text-xs text-muted-foreground">{t("search.resultsCount", { count: round.results?.length || 0 })}</span>
                     <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div className="h-full bg-brain-accent rounded-full" style={{ width: `${(round.coverage || 0) * 100}%` }} />
                     </div>
@@ -311,8 +306,8 @@ export function SearchPage() {
         {error && (
           <Card className="mb-6">
             <CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">Erro na busca: {error.message}</p>
-              <Button className="mt-4" onClick={handleSearch}>Tentar novamente</Button>
+              <p className="text-muted-foreground">{t("search.errorMessage", { message: error.message })}</p>
+              <Button className="mt-4" onClick={handleSearch}>{t("search.tryAgain")}</Button>
             </CardContent>
           </Card>
         )}
@@ -322,9 +317,9 @@ export function SearchPage() {
           <Card className="mb-6">
             <CardContent className="p-12 text-center">
               <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum resultado encontrado</h3>
-              <p className="text-muted-foreground mb-4">Tente ajustar sua busca ou filtros</p>
-              <Button variant="outline" onClick={handleClearFilters}>Limpar filtros</Button>
+              <h3 className="text-lg font-semibold mb-2">{t("search.noResults")}</h3>
+              <p className="text-muted-foreground mb-4">{t("search.noResultsDesc")}</p>
+              <Button variant="outline" onClick={handleClearFilters}>{t("search.clearFilters")}</Button>
             </CardContent>
           </Card>
         )}
@@ -334,11 +329,11 @@ export function SearchPage() {
           <>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span>{totalResults} resultados encontrados</span>
-                {searchTimeMs > 0 && <span>em {searchTimeMs}ms</span>}
+                <span>{t("search.resultsFound", { total: totalResults })}</span>
+                {searchTimeMs > 0 && <span>{t("search.in", { time: searchTimeMs })}</span>}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Por página:</span>
+                <span className="text-xs text-muted-foreground">{t("search.perPage")}</span>
                 <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
                   className="h-8 rounded-md border border-input bg-background px-2 text-xs">
                   {[6, 12, 24, 48].map(s => <option key={s} value={s}>{s}</option>)}
@@ -411,14 +406,14 @@ export function SearchPage() {
               <div className="flex items-center justify-center gap-4">
                 <Button size="sm" variant="outline" disabled={page === 0}
                   onClick={() => setPage(p => Math.max(0, p - 1))}>
-                  Anterior
+                  {t("search.pagePrev")}
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Página {page + 1} de {totalPages}
+                  {t("memory.page", { current: page + 1, total: totalPages })}
                 </span>
                 <Button size="sm" variant="outline" disabled={page >= totalPages - 1}
                   onClick={() => setPage(p => p + 1)}>
-                  Próxima
+                  {t("search.pageNext")}
                 </Button>
               </div>
             )}
@@ -433,9 +428,9 @@ export function SearchPage() {
                 <div className="p-4 bg-gradient-to-br from-brain-primary/20 to-brain-accent/20 rounded-full w-16 h-16 mx-auto mb-4">
                   <Search className="h-8 w-8 text-brain-primary mx-auto mt-4" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Busque em suas memórias</h3>
+                <h3 className="text-lg font-semibold mb-2">{t("search.searchInMemories")}</h3>
                 <p className="text-muted-foreground mb-6">
-                  Digite uma pergunta ou contexto para encontrar memórias relevantes usando busca semântica.
+                  {t("search.searchTip")}
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {["Spring Boot configuration", "React hooks patterns", "API REST best practices", "Docker optimization"].map((s) => (

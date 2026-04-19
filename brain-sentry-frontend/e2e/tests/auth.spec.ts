@@ -25,7 +25,7 @@ test.describe("Authentication", () => {
     await loginPage.login(DEMO_EMAIL, "demo123");
 
     await expect(page).toHaveURL(/\/app\/dashboard/);
-    await expect(page.getByText("Total Memories")).toBeVisible();
+    await expect(page.getByText("Total de Memórias")).toBeVisible();
     await expect(page.locator("body")).toContainText(DEMO_EMAIL);
   });
 
@@ -35,7 +35,7 @@ test.describe("Authentication", () => {
     await loginPage.loginWithDemo();
 
     await expect(page).toHaveURL(/\/app\/dashboard/);
-    await expect(page.getByText("Recent Memories")).toBeVisible();
+    await expect(page.getByText("Memórias Recentes")).toBeVisible();
   });
 
   test("shows error for invalid credentials", async ({ page }) => {
@@ -70,6 +70,6 @@ test.describe("Authentication", () => {
 
     await page.reload();
     await expect(page).toHaveURL(/\/app\/dashboard/);
-    await expect(page.getByText("Recent Memories")).toBeVisible();
+    await expect(page.getByText("Memórias Recentes")).toBeVisible();
   });
 });

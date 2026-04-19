@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -33,7 +34,9 @@ interface ConflictResult {
 }
 
 export default function MemoryAdminPage() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
   const [memories, setMemories] = useState<Memory[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -106,9 +109,9 @@ export default function MemoryAdminPage() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast({ title: "Exportação concluída", variant: "success" });
+      toast({ title: t("memory.exportOk"), variant: "success" });
     } catch (err) {
-      toast({ title: "Erro na exportação", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.exportError"), description: getErrorMessage(err), variant: "error" });
     }
   };
 
@@ -123,23 +126,23 @@ export default function MemoryAdminPage() {
         const text = await file.text();
         const data = JSON.parse(text);
         await api.axiosInstance.post("/v1/batch/import", data);
-        toast({ title: "Importação concluída", variant: "success" });
+        toast({ title: t("memory.importOk"), variant: "success" });
         fetchMemories();
       } catch (err) {
-        toast({ title: "Erro na importação", description: getErrorMessage(err), variant: "error" });
+        toast({ title: t("memory.importError"), description: getErrorMessage(err), variant: "error" });
       }
     };
     input.click();
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta memória?")) return;
+    if (!confirm(t("memory.deleteConfirmLong"))) return;
     try {
       await api.deleteMemory(id);
       setMemories(memories.filter(m => m.id !== id));
-      toast({ title: "Memória excluída", variant: "success" });
+      toast({ title: t("memory.deleted"), variant: "success" });
     } catch (err) {
-      toast({ title: "Erro ao excluir", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.deleteError"), description: getErrorMessage(err), variant: "error" });
     }
   };
 
@@ -178,7 +181,7 @@ export default function MemoryAdminPage() {
       const data = await api.getMemoryVersions(id);
       setVersions(Array.isArray(data) ? data : data?.versions || []);
     } catch (err) {
-      toast({ title: "Erro ao carregar versões", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.versionsLoadError"), description: getErrorMessage(err), variant: "error" });
       setVersions([]);
     } finally {
       setVersionsLoading(false);
@@ -187,14 +190,14 @@ export default function MemoryAdminPage() {
 
   const handleRollback = async (version: number) => {
     if (!versionsMemoryId) return;
-    if (!confirm(`Reverter para versão ${version}?`)) return;
+    if (!confirm(t("memory.rollbackConfirm", { n: version }))) return;
     try {
       await api.rollbackMemory(versionsMemoryId, version);
-      toast({ title: "Rollback realizado", description: `Memória revertida para versão ${version}`, variant: "success" });
+      toast({ title: t("memory.rollbackOk"), description: t("memory.rollbackDesc", { n: version }), variant: "success" });
       setVersionsDialogOpen(false);
       fetchMemories();
     } catch (err) {
-      toast({ title: "Erro no rollback", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.rollbackError"), description: getErrorMessage(err), variant: "error" });
     }
   };
 
@@ -210,10 +213,10 @@ export default function MemoryAdminPage() {
     setFlagLoading(true);
     try {
       await api.flagMemory(flagMemoryId, flagReason);
-      toast({ title: "Memória sinalizada", description: "A memória foi marcada para revisão.", variant: "success" });
+      toast({ title: t("memory.flagged"), description: t("memory.flaggedDesc"), variant: "success" });
       setFlagDialogOpen(false);
     } catch (err) {
-      toast({ title: "Erro ao sinalizar", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.flagError"), description: getErrorMessage(err), variant: "error" });
     } finally {
       setFlagLoading(false);
     }
@@ -222,10 +225,10 @@ export default function MemoryAdminPage() {
   const handleReviewMemory = async (id: string, action: "approve" | "reject") => {
     try {
       await api.reviewCorrection(id, action);
-      toast({ title: action === "approve" ? "Correção aprovada" : "Correção rejeitada", variant: "success" });
+      toast({ title: action === "approve" ? t("memory.reviewApproved") : t("memory.reviewRejected"), variant: "success" });
       fetchMemories();
     } catch (err) {
-      toast({ title: "Erro na revisão", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.reviewError"), description: getErrorMessage(err), variant: "error" });
     }
   };
 
@@ -238,7 +241,7 @@ export default function MemoryAdminPage() {
       const data = await api.detectConflicts(id);
       setConflicts(data);
     } catch (err) {
-      toast({ title: "Erro ao detectar conflitos", description: getErrorMessage(err), variant: "error" });
+      toast({ title: t("memory.conflictsError"), description: getErrorMessage(err), variant: "error" });
       setConflicts(null);
     } finally {
       setConflictsLoading(false);
@@ -256,9 +259,9 @@ export default function MemoryAdminPage() {
                 <FileText className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">Memórias</h1>
+                <h1 className="text-base font-bold leading-tight">{t("memory.title")}</h1>
                 <p className="text-xs text-white/80">
-                  Gerencie as memórias do sistema
+                  {t("memory.subtitle")}
                 </p>
               </div>
             </div>
@@ -274,7 +277,7 @@ export default function MemoryAdminPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Buscar memórias..."
+                placeholder={t("memory.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-brain-primary/50 focus:border-brain-primary transition-colors"
@@ -284,15 +287,15 @@ export default function MemoryAdminPage() {
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={handleImport}>
               <Upload className="h-4 w-4 mr-2" />
-              Importar
+              {t("common.import")}
             </Button>
             <Button size="sm" variant="outline" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
-              Exportar
+              {t("common.export")}
             </Button>
             <Button size="sm" className="bg-white text-brain-primary hover:bg-white/90" onClick={handleCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Memória
+              {t("memory.new")}
             </Button>
           </div>
         </div>
@@ -301,14 +304,14 @@ export default function MemoryAdminPage() {
       {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Carregando...</span>
+          <span className="ml-2 text-muted-foreground">{t("common.loading")}</span>
         </div>
       )}
 
       {/* Error State */}
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md">
-          <p className="font-medium">Erro ao carregar memórias</p>
+          <p className="font-medium">{t("memory.loadError")}</p>
           <p className="text-sm">{error}</p>
           <Button
             size="sm"
@@ -316,7 +319,7 @@ export default function MemoryAdminPage() {
             className="mt-2"
             onClick={fetchMemories}
           >
-            Tentar novamente
+            {t("common.try_again")}
           </Button>
         </div>
       )}
@@ -325,7 +328,7 @@ export default function MemoryAdminPage() {
       {!loading && !error && (
         <>
           <div className="text-sm text-muted-foreground mb-3">
-            {totalItems} memória{totalItems !== 1 ? "s" : ""} encontrada{totalItems !== 1 ? "s" : ""}
+            {t("memory.count", { count: totalItems })}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -342,21 +345,21 @@ export default function MemoryAdminPage() {
                   <button
                     onClick={() => handleViewVersions(memory.id)}
                     className="p-1.5 bg-background/90 rounded-md border shadow-sm hover:bg-accent"
-                    title="Histórico de versões"
+                    title={t("memory.history")}
                   >
                     <History className="h-3.5 w-3.5 text-blue-600" />
                   </button>
                   <button
                     onClick={() => handleOpenFlag(memory.id)}
                     className="p-1.5 bg-background/90 rounded-md border shadow-sm hover:bg-accent"
-                    title="Sinalizar problema"
+                    title={t("memory.flag")}
                   >
                     <Flag className="h-3.5 w-3.5 text-orange-500" />
                   </button>
                   <button
                     onClick={() => handleDetectConflicts(memory.id)}
                     className="p-1.5 bg-background/90 rounded-md border shadow-sm hover:bg-accent"
-                    title="Detectar conflitos"
+                    title={t("memory.detectConflicts")}
                   >
                     <AlertTriangle className="h-3.5 w-3.5 text-yellow-600" />
                   </button>
@@ -367,16 +370,16 @@ export default function MemoryAdminPage() {
 
           {memories.length === 0 && !searchQuery && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">Nenhuma memória cadastrada.</p>
+              <p className="text-muted-foreground">{t("memory.noneRegistered")}</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Clique em "Nova Memória" para criar a primeira.
+                {t("memory.createFirst")}
               </p>
             </div>
           )}
 
           {memories.length === 0 && searchQuery && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">Nenhuma memória encontrada para "{searchQuery}"</p>
+              <p className="text-muted-foreground">{t("memory.noResultsFor", { query: searchQuery })}</p>
             </div>
           )}
 
@@ -390,10 +393,10 @@ export default function MemoryAdminPage() {
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
               >
                 <ChevronLeft className="h-4 w-4" />
-                Anterior
+                {t("common.previous")}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Página {page + 1} de {totalPages}
+                {t("memory.page", { current: page + 1, total: totalPages })}
               </span>
               <Button
                 size="sm"
@@ -401,7 +404,7 @@ export default function MemoryAdminPage() {
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Próxima
+                {t("common.next")}
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -423,17 +426,17 @@ export default function MemoryAdminPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-blue-600" />
-              Histórico de Versões
+              {t("memory.versionsTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4">
             {versionsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Carregando versões...</span>
+                <span className="ml-2 text-muted-foreground">{t("memory.versionsLoading")}</span>
               </div>
             ) : versions.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Nenhuma versão anterior encontrada.</p>
+              <p className="text-center text-muted-foreground py-8">{t("memory.versionsNone")}</p>
             ) : (
               <div className="space-y-4">
                 {versions.map((v, idx) => (
@@ -442,19 +445,19 @@ export default function MemoryAdminPage() {
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          Versão {v.version}
+                          {t("memory.versionLabel", { n: v.version })}
                           {idx === 0 && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Atual</span>
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{t("memory.current")}</span>
                           )}
                         </CardTitle>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">
-                            {v.changedAt ? new Date(v.changedAt).toLocaleString("pt-BR") : "-"}
+                            {v.changedAt ? new Date(v.changedAt).toLocaleString(dateLocale) : "-"}
                           </span>
                           {idx > 0 && (
                             <Button size="sm" variant="outline" onClick={() => handleRollback(v.version)}>
                               <RotateCcw className="h-3 w-3 mr-1" />
-                              Reverter
+                              {t("memory.rollback")}
                             </Button>
                           )}
                         </div>
@@ -485,33 +488,33 @@ export default function MemoryAdminPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Flag className="h-5 w-5 text-orange-500" />
-              Sinalizar Memória
+              {t("memory.flagTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Descreva o problema encontrado nesta memória. Ela será enviada para revisão.
+              {t("memory.flagDesc")}
             </p>
             <textarea
               value={flagReason}
               onChange={(e) => setFlagReason(e.target.value)}
-              placeholder="Ex: Informação desatualizada, contradiz memória X, contém dado incorreto..."
+              placeholder={t("memory.flagPlaceholder")}
               className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brain-primary/50"
             />
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Após sinalizar, um administrador poderá aprovar ou rejeitar a correção.
+              {t("memory.flagHint")}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFlagDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setFlagDialogOpen(false)}>{t("common.cancel")}</Button>
             <Button
               onClick={handleSubmitFlag}
               disabled={!flagReason.trim() || flagLoading}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
               {flagLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Flag className="h-4 w-4 mr-2" />}
-              Sinalizar
+              {t("memory.flag")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -523,25 +526,25 @@ export default function MemoryAdminPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              Detecção de Conflitos
+              {t("memory.conflictsTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4">
             {conflictsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Analisando conflitos...</span>
+                <span className="ml-2 text-muted-foreground">{t("memory.conflictsAnalyzing")}</span>
               </div>
             ) : !conflicts || !conflicts.conflicts || conflicts.conflicts.length === 0 ? (
               <div className="text-center py-8">
                 <CheckCircle className="h-12 w-12 mx-auto text-green-500 mb-3" />
-                <p className="font-medium text-green-700">Nenhum conflito detectado</p>
-                <p className="text-sm text-muted-foreground mt-1">Esta memória não contradiz nenhuma outra.</p>
+                <p className="font-medium text-green-700">{t("memory.noConflicts")}</p>
+                <p className="text-sm text-muted-foreground mt-1">{t("memory.noConflictsDesc")}</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {conflicts.conflicts.length} conflito{conflicts.conflicts.length > 1 ? "s" : ""} encontrado{conflicts.conflicts.length > 1 ? "s" : ""}:
+                  {t("memory.conflictsCount", { count: conflicts.conflicts.length })}
                 </p>
                 {conflicts.conflicts.map((c, idx) => (
                   <Card key={idx} className="border-yellow-200 bg-yellow-50/50">
@@ -569,7 +572,7 @@ export default function MemoryAdminPage() {
                               }}
                             >
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Aprovar
+                              {t("memory.approve")}
                             </Button>
                             <Button
                               size="sm"
@@ -581,7 +584,7 @@ export default function MemoryAdminPage() {
                               }}
                             >
                               <XCircle className="h-3 w-3 mr-1" />
-                              Rejeitar
+                              {t("memory.reject")}
                             </Button>
                           </div>
                         </div>

@@ -1,5 +1,5 @@
 import { type Page, type Route } from "@playwright/test";
-import { DEFAULT_TENANT_ID, DEMO_EMAIL, STORAGE_KEYS } from "./constants";
+import { DEFAULT_TENANT_ID, DEMO_EMAIL, E2E_LANGUAGE, STORAGE_KEYS } from "./constants";
 
 type Memory = {
   id: string;
@@ -159,12 +159,23 @@ function normalizePath(pathname: string) {
 
 export async function seedAuthenticatedSession(page: Page) {
   await page.addInitScript(
-    ({ auth, keys }) => {
+    ({ auth, keys, lang }) => {
       localStorage.setItem(keys.token, auth.token);
       localStorage.setItem(keys.user, JSON.stringify(auth.user));
       localStorage.setItem(keys.tenantId, auth.tenantId);
+      localStorage.setItem(keys.language, lang);
     },
-    { auth: MOCK_AUTH, keys: STORAGE_KEYS }
+    { auth: MOCK_AUTH, keys: STORAGE_KEYS, lang: E2E_LANGUAGE }
+  );
+}
+
+/** Force pt-BR locale even before login (e.g. LoginPage tests). */
+export async function forceE2ELanguage(page: Page) {
+  await page.addInitScript(
+    ({ key, lang }) => {
+      localStorage.setItem(key, lang);
+    },
+    { key: STORAGE_KEYS.language, lang: E2E_LANGUAGE }
   );
 }
 
@@ -747,6 +758,411 @@ export async function mockAdminApis(page: Page) {
 
     if (path === "/v1/memories/extract-all-entities" && method === "POST") {
       return text(route, "Entidades reprocessadas");
+    }
+
+    // ============================================================
+    // Cognee P1-P3 routes
+    // ============================================================
+
+    // Semantic API
+    if (path === "/v1/remember" && method === "POST") {
+      const payload = route.request().postDataJSON() as { text?: string; title?: string; sets?: string[] };
+      return json(route, {
+        memoryId: `mem-remember-${Date.now()}`,
+        title: payload.title || "",
+        sets: payload.sets || [],
+        createdAt: new Date().toISOString(),
+      }, 201);
+    }
+
+    if (path === "/v1/recall" && method === "POST") {
+      const payload = route.request().postDataJSON() as { query?: string; limit?: number };
+      return json(route, {
+        query: payload.query || "",
+        strategy: "SEMANTIC",
+        results: [
+          {
+            memoryId: "mem-auth",
+            content: "Fluxo de autenticacao com JWT, refresh token e tenant header.",
+            summary: "Autenticacao com refresh token",
+            relevance: 0.92,
+            category: "INSIGHT",
+            feedbackWeight: 0.83,
+            createdAt: "2026-04-09T10:00:00.000Z",
+            sets: ["auth"],
+          },
+          {
+            memoryId: "mem-search",
+            content: "Planejamento multi-round para recuperar memorias com score trace.",
+            summary: "Busca semantica no admin",
+            relevance: 0.71,
+            category: "KNOWLEDGE",
+            feedbackWeight: 0.6,
+            createdAt: "2026-04-08T15:30:00.000Z",
+          },
+        ],
+        total: 2,
+      });
+    }
+
+    if (path === "/v1/improve" && method === "POST") {
+      return json(route, {
+        autoForgetResult: {
+          ttl_expired: 0,
+          contradictions: 1,
+          low_value: 2,
+          total_deleted: 3,
+          dry_run: false,
+        },
+        message: "improvement cycle completed",
+      });
+    }
+
+    if (path === "/v1/forget" && method === "POST") {
+      return json(route, { deletedIds: ["mem-stale"], count: 1, message: "deleted 1 memory" });
+    }
+
+    // Query Router
+    if (path === "/v1/router/classify" && method === "POST") {
+      const payload = route.request().postDataJSON() as { query?: string };
+      const q = (payload.query || "").toLowerCase();
+      let strategy = "HYBRID";
+      if (q.includes("yesterday") || q.includes("last week")) strategy = "TEMPORAL";
+      else if (q.includes("function") || q.includes("endpoint") || q.includes("bug")) strategy = "CODING";
+      else if (q.includes("match (") || q.includes("return n")) strategy = "CYPHER";
+      else if (q.includes("related") || q.includes("depends")) strategy = "GRAPH";
+      else if (q.includes("similar to") || q.includes("like")) strategy = "SEMANTIC";
+      return json(route, {
+        strategy,
+        confidence: strategy === "HYBRID" ? 0.1 : 0.75,
+        scores: { [strategy]: 0.75 },
+        matchedPatterns: [],
+        fallback: strategy === "HYBRID",
+      });
+    }
+
+    // Agent Traces
+    if (path === "/v1/traces/stats" && method === "GET") {
+      return json(route, {
+        total: 12,
+        success: 10,
+        errors: 2,
+        withMemory: 7,
+        avgDurationMs: 183,
+        errorRate: 0.17,
+      });
+    }
+    if (path === "/v1/traces" && method === "GET") {
+      return json(route, {
+        count: 3,
+        traces: [
+          {
+            id: "trace-1",
+            tenantId: DEFAULT_TENANT_ID,
+            sessionId: "session-abc",
+            agentId: "agent-web-ui",
+            originFunction: "POST /v1/recall",
+            withMemory: true,
+            memoryQuery: "autenticação",
+            methodParams: { query: "autenticação" },
+            methodReturn: { total: 2 },
+            memoryContext: "# Relevant memories\n- Autenticacao com refresh token",
+            status: "success",
+            text: "POST /v1/recall used memory query",
+            durationMs: 210,
+            createdAt: "2026-04-18T10:00:00Z",
+            memoryIds: ["mem-auth"],
+          },
+          {
+            id: "trace-2",
+            tenantId: DEFAULT_TENANT_ID,
+            sessionId: "session-abc",
+            agentId: "agent-web-ui",
+            originFunction: "POST /v1/remember",
+            withMemory: false,
+            status: "success",
+            text: "POST /v1/remember completed successfully",
+            durationMs: 95,
+            createdAt: "2026-04-18T09:55:00Z",
+          },
+          {
+            id: "trace-3",
+            tenantId: DEFAULT_TENANT_ID,
+            agentId: "agent-worker",
+            originFunction: "POST /v1/recall",
+            withMemory: true,
+            memoryQuery: "broken query",
+            status: "error",
+            errorMessage: "upstream timeout",
+            text: "POST /v1/recall failed",
+            durationMs: 30000,
+            createdAt: "2026-04-18T08:00:00Z",
+          },
+        ],
+      });
+    }
+    if (path === "/v1/traces" && method === "POST") {
+      return json(route, { id: "trace-new", status: "success" }, 201);
+    }
+
+    // Triplets & Cascade
+    if (path === "/v1/triplets/extract" && method === "POST") {
+      return json(route, {
+        memoryId: "inline",
+        count: 2,
+        triplets: [
+          {
+            id: "t-1",
+            memoryId: "inline",
+            subject: "PostgreSQL",
+            predicate: "supports",
+            object: "JSON",
+            text: "PostgreSQL→supports→JSON",
+            confidence: 0.95,
+            feedbackWeight: 0.5,
+            createdAt: "2026-04-18T10:00:00Z",
+          },
+          {
+            id: "t-2",
+            memoryId: "inline",
+            subject: "pgvector",
+            predicate: "enables",
+            object: "vector search",
+            text: "pgvector→enables→vector search",
+            confidence: 0.88,
+            feedbackWeight: 0.5,
+            createdAt: "2026-04-18T10:00:00Z",
+          },
+        ],
+      });
+    }
+
+    if (path === "/v1/cascade-extract" && method === "POST") {
+      return json(route, {
+        entities: [
+          { name: "PostgreSQL", type: "TECHNOLOGY" },
+          { name: "Go", type: "LANGUAGE" },
+          { name: "pgvector", type: "LIBRARY" },
+        ],
+        relationships: [
+          { source: "Go", target: "PostgreSQL", type: "connects_to" },
+          { source: "PostgreSQL", target: "pgvector", type: "uses" },
+        ],
+        passCount: 3,
+      });
+    }
+
+    // Feedback Weight
+    const feedbackMatch = path.match(/^\/v1\/memories\/([^/]+)\/feedback-weight$/);
+    if (feedbackMatch && method === "GET") {
+      return json(route, {
+        memoryId: feedbackMatch[1],
+        helpfulCount: 8,
+        notHelpfulCount: 2,
+        feedbackWeight: 0.75,
+        alpha: 0.3,
+      });
+    }
+
+    // NodeSets
+    const setsMatch = path.match(/^\/v1\/memories\/([^/]+)\/sets$/);
+    if (setsMatch) {
+      const memoryId = setsMatch[1];
+      if (method === "GET") {
+        return json(route, { memoryId, sets: ["auth", "core"] });
+      }
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as { sets?: string[] };
+        return json(route, { memoryId, sets: ["auth", "core", ...(body.sets || [])] });
+      }
+      if (method === "DELETE") {
+        return json(route, { memoryId, sets: ["auth"] });
+      }
+    }
+
+    // Ontology
+    if (path === "/v1/ontology" && method === "GET") {
+      return json(route, {
+        name: "brainsentry-test",
+        version: "1.0",
+        entityTypes: [
+          { name: "TECHNOLOGY", description: "Technologies and tools" },
+          { name: "LANGUAGE" },
+        ],
+        entities: [
+          { name: "PostgreSQL", type: "TECHNOLOGY", aliases: ["postgres"] },
+        ],
+        relationships: [
+          { name: "uses", sourceType: "*", targetType: "TECHNOLOGY" },
+        ],
+      });
+    }
+    if (path === "/v1/ontology" && method === "PUT") {
+      return json(route, { status: "loaded" });
+    }
+    if (path === "/v1/ontology/resolve" && method === "POST") {
+      const payload = route.request().postDataJSON() as { name?: string };
+      const n = (payload.name || "").toLowerCase();
+      if (n === "postgres" || n === "postgresql") {
+        return json(route, { input: payload.name, matched: true, canonical: "PostgreSQL", type: "TECHNOLOGY" });
+      }
+      return json(route, { input: payload.name, matched: false, canonical: "", type: "" });
+    }
+
+    // Session Cache
+    if (path === "/v1/session-cache" && method === "GET") {
+      return json(route, { count: 2, sessions: ["session-abc", "session-xyz"] });
+    }
+    const sessionCacheMatch = path.match(/^\/v1\/session-cache\/([^/]+)(\/cognify)?$/);
+    if (sessionCacheMatch) {
+      const sessionId = sessionCacheMatch[1];
+      const isCognify = !!sessionCacheMatch[2];
+      if (isCognify && method === "POST") {
+        return json(route, {
+          sessionId,
+          interactions: 3,
+          memoriesCreated: ["mem-new-1", "mem-new-2", "mem-new-3"],
+        });
+      }
+      if (method === "GET") {
+        return json(route, {
+          sessionId,
+          count: 2,
+          interactions: [
+            {
+              id: "int-1",
+              query: "What is JWT?",
+              response: "JSON Web Token for stateless auth.",
+              createdAt: "2026-04-18T10:00:00Z",
+              memoryIds: ["mem-auth"],
+            },
+            {
+              id: "int-2",
+              query: "How to refresh tokens?",
+              response: "Use refresh endpoint before access token expires.",
+              createdAt: "2026-04-18T09:30:00Z",
+            },
+          ],
+        });
+      }
+      if (method === "POST") return json(route, { ok: true }, 201);
+      if (method === "DELETE") return json(route, null, 204);
+    }
+
+    // Actions & Leases
+    if (path === "/v1/actions" && method === "GET") {
+      return json(route, [
+        {
+          id: "act-1",
+          title: "Ship Cognee UI",
+          description: "All P1-P3 pages live and tested",
+          status: "in_progress",
+          priority: 8,
+          createdAt: "2026-04-18T09:00:00Z",
+          updatedAt: "2026-04-18T10:00:00Z",
+          createdBy: "agent-web-ui",
+          assignedTo: "agent-web-ui",
+          tags: ["cognee", "ui"],
+        },
+        {
+          id: "act-2",
+          title: "Fix router false positives",
+          description: "",
+          status: "pending",
+          priority: 5,
+          createdAt: "2026-04-18T08:00:00Z",
+          updatedAt: "2026-04-18T08:00:00Z",
+          createdBy: "agent-qa",
+          tags: ["bug"],
+        },
+      ]);
+    }
+    if (path === "/v1/actions" && method === "POST") {
+      const payload = route.request().postDataJSON() as { title?: string; description?: string; priority?: number; tags?: string[]; createdBy?: string };
+      return json(route, {
+        id: "act-new",
+        title: payload.title || "",
+        description: payload.description || "",
+        status: "pending",
+        priority: payload.priority || 5,
+        tags: payload.tags || [],
+        createdBy: payload.createdBy || "agent",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, 201);
+    }
+    const actionStatusMatch = path.match(/^\/v1\/actions\/([^/]+)\/status$/);
+    if (actionStatusMatch && method === "PUT") {
+      const payload = route.request().postDataJSON() as { status?: string };
+      return json(route, { id: actionStatusMatch[1], status: payload.status, updatedAt: new Date().toISOString() });
+    }
+    const actionLeaseMatch = path.match(/^\/v1\/actions\/([^/]+)\/lease$/);
+    if (actionLeaseMatch) {
+      const actionId = actionLeaseMatch[1];
+      if (method === "POST") {
+        const payload = route.request().postDataJSON() as { agentId?: string; ttlMinutes?: number };
+        const now = new Date();
+        const expires = new Date(now.getTime() + (payload.ttlMinutes || 10) * 60_000);
+        return json(route, {
+          actionId,
+          heldBy: payload.agentId || "agent",
+          acquiredAt: now.toISOString(),
+          expiresAt: expires.toISOString(),
+        });
+      }
+      if (method === "DELETE") return json(route, null, 204);
+    }
+
+    // Mesh
+    if (path === "/v1/mesh/peers" && method === "GET") {
+      return json(route, [
+        {
+          id: "peer-eu-1",
+          url: "https://brainsentry-eu.example.com",
+          sharedScopes: ["memories", "actions"],
+          status: "active",
+          lastSyncAt: "2026-04-18T09:30:00Z",
+        },
+      ]);
+    }
+    if (path === "/v1/mesh/peers" && method === "POST") {
+      return json(route, { status: "registered" }, 201);
+    }
+    if (path === "/v1/mesh/sync" && method === "POST") {
+      const payload = route.request().postDataJSON() as { scope?: string };
+      return json(route, [
+        { peerId: "peer-eu-1", scope: payload.scope || "memories", sent: 5, received: 3, merged: 2 },
+      ]);
+    }
+
+    // Batch Search
+    if (path === "/v1/memories/batch-search" && method === "POST") {
+      const payload = route.request().postDataJSON() as { queries?: string[] };
+      const queries = payload.queries || [];
+      return json(route, {
+        queries,
+        searchTimeMs: 120,
+        results: [
+          {
+            memoryId: "mem-auth",
+            summary: "Autenticacao com refresh token",
+            category: "INSIGHT",
+            perQuery: queries.map((_, i) => (i === 0 ? 0.92 : 0.15)),
+            matchedQueries: [0],
+            mean: queries.length ? 0.92 / queries.length : 0,
+            max: 0.92,
+          },
+          {
+            memoryId: "mem-search",
+            summary: "Busca semantica no admin",
+            category: "KNOWLEDGE",
+            perQuery: queries.map(() => 0.6),
+            matchedQueries: queries.map((_, i) => i),
+            mean: 0.6,
+            max: 0.6,
+          },
+        ],
+      });
     }
 
     return route.fallback();

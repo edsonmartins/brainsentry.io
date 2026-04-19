@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, ZoomIn, ZoomOut, Maximize2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,6 +41,7 @@ interface KnowledgeGraphProps {
 }
 
 export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }: KnowledgeGraphProps) {
+  const { t } = useTranslation();
   const cyRef = useRef<Cytoscape.Core | null>(null);
   const [elements, setElements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,7 +220,7 @@ export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }
       <div className={`flex flex-col items-center justify-center gap-4 ${className}`} style={{ height }}>
         <p className="text-sm text-destructive">{error}</p>
         <Button variant="outline" size="sm" onClick={fetchGraph}>
-          <RefreshCw className="h-4 w-4 mr-2" /> Retry
+          <RefreshCw className="h-4 w-4 mr-2" /> {t("graph.retry")}
         </Button>
       </div>
     );
@@ -227,8 +229,8 @@ export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }
   if (elements.length === 0) {
     return (
       <div className={`flex flex-col items-center justify-center gap-2 text-muted-foreground ${className}`} style={{ height }}>
-        <p className="text-sm">No graph data available</p>
-        <p className="text-xs">Create memories to build the knowledge graph</p>
+        <p className="text-sm">{t("graph.noData")}</p>
+        <p className="text-xs">{t("graph.noDataDesc")}</p>
       </div>
     );
   }
@@ -241,7 +243,7 @@ export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search nodes..."
+            placeholder={t("graph.searchNodes")}
             className="bg-transparent text-sm border-none outline-none w-36"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -266,7 +268,7 @@ export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }
 
       {/* Stats */}
       <div className="absolute top-3 right-3 z-10 bg-background/90 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-xs text-muted-foreground">
-        {stats.nodes} nodes / {stats.edges} edges
+        {t("graph.nodesEdges", { nodes: stats.nodes, edges: stats.edges })}
       </div>
 
       {/* Legend */}
@@ -292,7 +294,7 @@ export function KnowledgeGraph({ limit = 100, height = "600px", className = "" }
             >
               {selectedNode.type}
             </span>
-            <span className="text-[10px] text-muted-foreground">{selectedNode.degree} connections</span>
+            <span className="text-[10px] text-muted-foreground">{selectedNode.degree} {t("graph.connections")}</span>
           </div>
           {Object.keys(selectedNode.properties || {}).length > 0 && (
             <div className="mt-2 space-y-0.5">

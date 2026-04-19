@@ -19,7 +19,7 @@ test.describe("Responsive", () => {
 
     await sidebar.openMobileMenu();
     await expect(sidebar.getMobileNavItem("Dashboard")).toBeVisible();
-    await expect(sidebar.getMobileNavItem("Timeline")).toBeVisible();
+    await expect(sidebar.getMobileNavItem("Linha do Tempo")).toBeVisible();
 
     await sidebar.getMobileNavItem("Memórias").click();
     await expect(authenticatedPage).toHaveURL(/\/app\/memories/);

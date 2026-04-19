@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MemoryForm, type MemoryFormData } from "./MemoryForm";
+import { MemoryInsights } from "./MemoryInsights";
 import { api, type Memory, type MemoryCategory, type ImportanceLevel, type CreateMemoryRequest, type UpdateMemoryRequest } from "@/lib/api";
 
 interface MemoryDialogProps {
@@ -11,11 +13,12 @@ interface MemoryDialogProps {
 }
 
 export function MemoryDialog({ open, onOpenChange, memory, onSuccess }: MemoryDialogProps) {
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!memory;
-  const title = isEditing ? "Editar Memória" : "Nova Memória";
+  const title = isEditing ? t("memory.edit") : t("memory.new");
 
   const initialData: Partial<MemoryFormData> = memory
     ? {
@@ -51,7 +54,7 @@ export function MemoryDialog({ open, onOpenChange, memory, onSuccess }: MemoryDi
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Erro ao salvar memória";
+      const errorMessage = err instanceof Error ? err.message : t("memory.saveError");
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -85,6 +88,16 @@ export function MemoryDialog({ open, onOpenChange, memory, onSuccess }: MemoryDi
             isSubmitting={isSubmitting}
             inline
           />
+
+          {/* Insights panel (only when editing — we need an existing ID) */}
+          {isEditing && memory && (
+            <div className="mt-6 pt-4 border-t">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                {t("memory.insights")}
+              </h4>
+              <MemoryInsights memoryId={memory.id} />
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

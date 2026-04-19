@@ -275,12 +275,17 @@ func main() {
 		"meshSync", meshSyncService != nil,
 	)
 
-	// Suppress unused warnings
-	_ = memoryCompressionService
-	_ = queryExpansionService
+	// Wire internal pipeline enhancers into MemoryService.
+	// Each service is optional — MemoryService falls back to previous behavior if nil.
+	memoryService.
+		WithCompressor(memoryCompressionService).
+		WithQueryExpander(queryExpansionService).
+		WithPrivacyStripper(privacyStrippingService).
+		WithCascadingStaleness(cascadingStalenessService)
+
+	// Suppress remaining unused warnings for services that are not yet wired
+	// (sliding window and self-correcting LLM are available for future integration).
 	_ = selfCorrectingLLM
-	_ = cascadingStalenessService
-	_ = privacyStrippingService
 	_ = slidingWindowService
 
 	// ---- P1 Cognee: Triplet Extraction, Query Router, Cascade Extraction, Feedback Learning ----
@@ -310,6 +315,11 @@ func main() {
 		"cascadeExtraction", cascadeExtractionService != nil,
 	)
 
+	// Wire P1-Cognee enhancers into MemoryService pipeline
+	memoryService.
+		WithTripletExtractor(tripletExtractionService).
+		WithFeedbackLearning(feedbackLearningService)
+
 	// ---- P2 Cognee: AgentTrace, NodeSet, Semantic API, Middleware ----
 
 	// AgentTrace (procedural memory — in-memory for now)
@@ -334,6 +344,49 @@ func main() {
 		"nodeSet", nodeSetService != nil,
 		"semanticAPI", semanticAPIService != nil,
 	)
+
+	// ---- P3 Cognee: Ontology, Session Cache, Native LLM Providers, Graph Backend ----
+
+	// Ontology Service (optional — loads from ONTOLOGY_PATH env var if set)
+	ontologyService := service.NewOntologyService()
+	if ontPath := os.Getenv("ONTOLOGY_PATH"); ontPath != "" {
+		if err := ontologyService.LoadFromFile(ontPath); err != nil {
+			logger.Warn("failed to load ontology", "path", ontPath, "error", err)
+		} else {
+			logger.Info("ontology loaded", "path", ontPath,
+				"types", len(ontologyService.AllowedTypes()),
+				"relationships", len(ontologyService.AllowedRelationships()))
+		}
+	}
+
+	// Session Memory Cache (Redis if available, in-memory fallback)
+	var sessionBackend service.SessionCacheBackend
+	if redisCache != nil {
+		sessionBackend = service.NewRedisSessionBackend(redisCache.Client(), "session_cache:", 100)
+		logger.Info("session cache using Redis backend")
+	} else {
+		sessionBackend = service.NewInMemorySessionBackend(100)
+		logger.Info("session cache using in-memory backend (Redis unavailable)")
+	}
+	sessionCacheService := service.NewSessionMemoryCache(sessionBackend, service.DefaultSessionCacheConfig(), memoryService)
+
+	// Native LLM providers — configure via env vars
+	if anthropicKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicKey != "" {
+		_ = service.NewAnthropicProvider(service.DefaultAnthropicConfig(anthropicKey))
+		logger.Info("Anthropic native provider available")
+	}
+	if geminiKey := os.Getenv("GEMINI_API_KEY"); geminiKey != "" {
+		_ = service.NewGeminiProvider(service.DefaultGeminiConfig(geminiKey))
+		logger.Info("Gemini native provider available")
+	}
+
+	logger.Info("P3-Cognee services initialized",
+		"ontology", ontologyService.IsEnabled(),
+		"sessionCache", sessionCacheService != nil,
+	)
+
+	// Batch Search (multi-query parallel ranking)
+	batchSearchService := service.NewBatchSearchService(memoryService)
 
 	// Session Service
 	sessionRepo := postgres.NewSessionRepository(pool)
@@ -458,6 +511,11 @@ func main() {
 	agentTraceHandler := handler.NewAgentTraceHandler(agentTraceService)
 	nodeSetHandler := handler.NewNodeSetHandler(nodeSetService, memoryRepo)
 	semanticAPIHandler := handler.NewSemanticAPIHandler(semanticAPIService)
+
+	// P3-Cognee handlers
+	ontologyHandler := handler.NewOntologyHandler(ontologyService)
+	sessionCacheHandler := handler.NewSessionCacheHandler(sessionCacheService)
+	batchSearchHandler := handler.NewBatchSearchHandler(batchSearchService)
 
 	// Router
 	r := chi.NewRouter()
@@ -773,6 +831,25 @@ func main() {
 			r.Post("/", nodeSetHandler.AddToSet)
 			r.Delete("/", nodeSetHandler.RemoveFromSet)
 		})
+
+		// P3-Cognee: Ontology
+		r.Route("/v1/ontology", func(r chi.Router) {
+			r.Get("/", ontologyHandler.Get)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Put("/", ontologyHandler.Set)
+			r.Post("/resolve", ontologyHandler.Resolve)
+		})
+
+		// P3-Cognee: Session Cache
+		r.Route("/v1/session-cache", func(r chi.Router) {
+			r.Get("/", sessionCacheHandler.ListSessions)
+			r.Post("/{sessionId}", sessionCacheHandler.Push)
+			r.Get("/{sessionId}", sessionCacheHandler.List)
+			r.Delete("/{sessionId}", sessionCacheHandler.Clear)
+			r.Post("/{sessionId}/cognify", sessionCacheHandler.Cognify)
+		})
+
+		// P3-Cognee: Batch Search (multi-query parallel)
+		r.Post("/v1/memories/batch-search", batchSearchHandler.Search)
 	})
 
 	// Integration endpoints (service-to-service auth)

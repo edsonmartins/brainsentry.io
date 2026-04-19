@@ -18,7 +18,6 @@ test.describe("Navigation", () => {
       await expect(sidebar.getNavItem(item)).toBeVisible();
     }
 
-    await expect(sidebar.getNavItem("Timeline")).toBeVisible();
     await expect(sidebar.userEmail).toContainText("demo@example.com");
   });
 
@@ -36,5 +35,25 @@ test.describe("Navigation", () => {
 
     await sidebar.navigateTo("Dashboard");
     await expect(authenticatedPage).toHaveURL(/\/app\/dashboard/);
+  });
+
+  test("navigates to new Cognee pages", async ({ authenticatedPage }) => {
+    const sidebar = new Sidebar(authenticatedPage);
+
+    const checks: Array<[string, RegExp]> = [
+      ["Console", /\/app\/console/],
+      ["Traços de Agente", /\/app\/traces/],
+      ["Lab de Extração", /\/app\/extraction/],
+      ["Ontologia", /\/app\/ontology/],
+      ["Cache de Sessão", /\/app\/session-cache/],
+      ["Ações & Leases", /\/app\/actions/],
+      ["Sincronização Mesh", /\/app\/mesh/],
+      ["Busca em Lote", /\/app\/batch-search/],
+    ];
+
+    for (const [item, urlRegex] of checks) {
+      await sidebar.navigateTo(item);
+      await expect(authenticatedPage).toHaveURL(urlRegex);
+    }
   });
 });

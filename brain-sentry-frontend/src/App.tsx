@@ -20,6 +20,14 @@ import ConnectorsPage from "./pages/ConnectorsPage";
 import NotesPage from "./pages/NotesPage";
 import TasksPage from "./pages/TasksPage";
 import TimelinePage from "./pages/TimelinePage";
+import ConsolePage from "./pages/ConsolePage";
+import AgentTracesPage from "./pages/AgentTracesPage";
+import ExtractionLabPage from "./pages/ExtractionLabPage";
+import OntologyPage from "./pages/OntologyPage";
+import SessionCachePage from "./pages/SessionCachePage";
+import ActionsPage from "./pages/ActionsPage";
+import MeshPage from "./pages/MeshPage";
+import BatchSearchPage from "./pages/BatchSearchPage";
 import { LandingPage } from "./landing/pages/LandingPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -77,6 +85,14 @@ function App() {
                 <Route path="notes" element={<NotesPage />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="timeline" element={<TimelinePage />} />
+                <Route path="console" element={<ConsolePage />} />
+                <Route path="traces" element={<AgentTracesPage />} />
+                <Route path="extraction" element={<ExtractionLabPage />} />
+                <Route path="ontology" element={<OntologyPage />} />
+                <Route path="session-cache" element={<SessionCachePage />} />
+                <Route path="actions" element={<ActionsPage />} />
+                <Route path="mesh" element={<MeshPage />} />
+                <Route path="batch-search" element={<BatchSearchPage />} />
               </Route>
 
               {/* Legacy redirect - /dashboard -> /app/dashboard */}

@@ -114,6 +114,290 @@ function normalizeMemoryListResponse(data: RawMemoryListResponse): MemoryListRes
   };
 }
 
+// ===== Cognee P1-P3 types =====
+
+// Semantic API
+export interface RememberRequest {
+  text: string;
+  title?: string;
+  sessionId?: string;
+  sets?: string[];
+  tags?: string[];
+  category?: MemoryCategory;
+  importance?: ImportanceLevel;
+}
+
+export interface RememberResponse {
+  memoryId: string;
+  sets?: string[];
+  title?: string;
+  createdAt: string;
+}
+
+export interface RecallRequest {
+  query: string;
+  set?: string;
+  limit?: number;
+  tags?: string[];
+}
+
+export interface RecallResult {
+  memoryId: string;
+  content: string;
+  summary?: string;
+  relevance: number;
+  category?: string;
+  feedbackWeight: number;
+  createdAt: string;
+  sets?: string[];
+}
+
+export interface RecallResponse {
+  query: string;
+  strategy: string;
+  results: RecallResult[];
+  total: number;
+}
+
+export interface ImproveRequest {
+  sessionId?: string;
+  dryRun?: boolean;
+}
+
+export interface ImproveResponse {
+  autoForgetResult?: {
+    ttl_expired: number;
+    contradictions: number;
+    low_value: number;
+    total_deleted: number;
+    dry_run: boolean;
+    deleted_ids?: string[];
+  };
+  message: string;
+}
+
+export interface ForgetRequest {
+  memoryId?: string;
+  set?: string;
+  query?: string;
+}
+
+export interface ForgetResponse {
+  deletedIds: string[];
+  count: number;
+  message: string;
+}
+
+// Query Router
+export type SearchStrategy =
+  | "LEXICAL" | "SEMANTIC" | "GRAPH" | "TEMPORAL"
+  | "ENTITY" | "CODING" | "CYPHER" | "HYBRID";
+
+export interface RouterDecision {
+  strategy: SearchStrategy;
+  confidence: number;
+  scores?: Record<SearchStrategy, number>;
+  matchedPatterns?: string[];
+  fallback: boolean;
+}
+
+// Agent Traces
+export interface AgentTrace {
+  id: string;
+  tenantId: string;
+  sessionId?: string;
+  agentId?: string;
+  originFunction: string;
+  withMemory: boolean;
+  memoryQuery?: string;
+  methodParams?: Record<string, any>;
+  methodReturn?: any;
+  memoryContext?: string;
+  status: "success" | "error";
+  errorMessage?: string;
+  text: string;
+  durationMs: number;
+  createdAt: string;
+  memoryIds?: string[];
+  belongsToSets?: string[];
+}
+
+export interface AgentTraceFilter {
+  sessionId?: string;
+  agentId?: string;
+  status?: "success" | "error";
+  set?: string;
+  limit?: number;
+}
+
+export interface AgentTraceListResponse {
+  count: number;
+  traces: AgentTrace[];
+}
+
+export interface AgentTraceStats {
+  total: number;
+  success: number;
+  errors: number;
+  withMemory: number;
+  avgDurationMs: number;
+  errorRate: number;
+}
+
+// Triplets
+export interface Triplet {
+  id: string;
+  memoryId: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  text: string;
+  confidence: number;
+  createdAt: string;
+  feedbackWeight: number;
+}
+
+export interface TripletExtractResponse {
+  memoryId: string;
+  count: number;
+  triplets: Triplet[];
+}
+
+// Cascade Extraction
+export interface ExtractedEntity {
+  name: string;
+  type: string;
+  properties?: Record<string, string>;
+}
+
+export interface ExtractedRelationship {
+  source: string;
+  target: string;
+  type: string;
+  properties?: Record<string, string>;
+}
+
+export interface CascadeExtractResponse {
+  entities: ExtractedEntity[];
+  relationships: ExtractedRelationship[];
+  passCount: number;
+}
+
+// Feedback Learning
+export interface FeedbackWeightResponse {
+  memoryId: string;
+  helpfulCount: number;
+  notHelpfulCount: number;
+  feedbackWeight: number;
+  alpha: number;
+}
+
+// Ontology
+export interface OntologyResolveResponse {
+  input: string;
+  matched: boolean;
+  canonical: string;
+  type: string;
+}
+
+// Batch Search
+export interface BatchSearchRequest {
+  queries: string[];
+  limit?: number;
+  tags?: string[];
+}
+
+export interface BatchScore {
+  memoryId: string;
+  summary?: string;
+  category?: string;
+  perQuery: number[];
+  matchedQueries: number[];
+  mean: number;
+  max: number;
+}
+
+export interface BatchSearchResponse {
+  queries: string[];
+  results: BatchScore[];
+  searchTimeMs: number;
+}
+
+// Session Cache
+export interface SessionInteraction {
+  id: string;
+  query: string;
+  response: string;
+  memoryIds?: string[];
+  createdAt: string;
+  metadata?: Record<string, string>;
+}
+
+export interface SessionCacheListResponse {
+  sessionId: string;
+  count: number;
+  interactions: SessionInteraction[];
+}
+
+export interface CognifyResult {
+  sessionId: string;
+  interactions: number;
+  memoriesCreated: string[];
+}
+
+// Actions & Leases
+export type ActionStatus = "pending" | "in_progress" | "blocked" | "completed" | "cancelled";
+
+export interface Action {
+  id: string;
+  title: string;
+  description: string;
+  status: ActionStatus;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  assignedTo?: string;
+  parentId?: string;
+  tags?: string[];
+  dependsOn?: string[];
+}
+
+export interface CreateActionRequest {
+  title: string;
+  description: string;
+  createdBy: string;
+  priority: number;
+  tags?: string[];
+  parentId?: string;
+  dependsOn?: string[];
+}
+
+export interface Lease {
+  actionId: string;
+  heldBy: string;
+  acquiredAt: string;
+  expiresAt: string;
+}
+
+// Mesh Sync
+export interface MeshPeer {
+  id: string;
+  url: string;
+  sharedScopes: string[];
+  lastSyncAt?: string;
+  status?: string;
+}
+
+export interface MeshSyncResult {
+  peerId: string;
+  scope: string;
+  sent?: number;
+  received?: number;
+  merged?: number;
+  error?: string;
+}
+
 // Interceptador para adicionar headers de autenticação
 const authRequestInterceptor = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   // Adicionar tenant ID se disponível
@@ -440,6 +724,194 @@ class ApiClient {
     const response = await this.client.get("/v1/audit-logs", {
       params: { limit },
     });
+    return response.data;
+  }
+
+  // ===== Cognee P1-P3 endpoints =====
+
+  // Semantic API
+  async remember(req: RememberRequest): Promise<RememberResponse> {
+    const response = await this.client.post<RememberResponse>("/v1/remember", req);
+    return response.data;
+  }
+
+  async recall(req: RecallRequest): Promise<RecallResponse> {
+    const response = await this.client.post<RecallResponse>("/v1/recall", req);
+    return response.data;
+  }
+
+  async improve(req: ImproveRequest = {}): Promise<ImproveResponse> {
+    const response = await this.client.post<ImproveResponse>("/v1/improve", req);
+    return response.data;
+  }
+
+  async forget(req: ForgetRequest): Promise<ForgetResponse> {
+    const response = await this.client.post<ForgetResponse>("/v1/forget", req);
+    return response.data;
+  }
+
+  // Query Router (rule-based, LLM-free)
+  async classifyQuery(query: string): Promise<RouterDecision> {
+    const response = await this.client.post<RouterDecision>("/v1/router/classify", { query });
+    return response.data;
+  }
+
+  // Agent Traces
+  async listAgentTraces(params: AgentTraceFilter = {}): Promise<AgentTraceListResponse> {
+    const response = await this.client.get<AgentTraceListResponse>("/v1/traces", { params });
+    return response.data;
+  }
+
+  async getAgentTraceStats(): Promise<AgentTraceStats> {
+    const response = await this.client.get<AgentTraceStats>("/v1/traces/stats");
+    return response.data;
+  }
+
+  async recordAgentTrace(req: Record<string, any>): Promise<AgentTrace> {
+    const response = await this.client.post<AgentTrace>("/v1/traces", req);
+    return response.data;
+  }
+
+  // Batch search (multi-query parallel)
+  async batchSearch(req: BatchSearchRequest): Promise<BatchSearchResponse> {
+    const response = await this.client.post<BatchSearchResponse>("/v1/memories/batch-search", req);
+    return response.data;
+  }
+
+  // Session Cache
+  async listSessionCaches(): Promise<{ count: number; sessions: string[] }> {
+    const response = await this.client.get("/v1/session-cache");
+    return response.data;
+  }
+
+  async getSessionCache(sessionId: string, limit: number = 20): Promise<SessionCacheListResponse> {
+    const response = await this.client.get<SessionCacheListResponse>(`/v1/session-cache/${sessionId}`, {
+      params: { limit },
+    });
+    return response.data;
+  }
+
+  async pushSessionCache(sessionId: string, interaction: Record<string, any>): Promise<void> {
+    await this.client.post(`/v1/session-cache/${sessionId}`, interaction);
+  }
+
+  async clearSessionCache(sessionId: string): Promise<void> {
+    await this.client.delete(`/v1/session-cache/${sessionId}`);
+  }
+
+  async cognifySessionCache(sessionId: string, clearAfter: boolean = false): Promise<CognifyResult> {
+    const response = await this.client.post<CognifyResult>(
+      `/v1/session-cache/${sessionId}/cognify`,
+      null,
+      { params: { clear: clearAfter ? "true" : "false" } }
+    );
+    return response.data;
+  }
+
+  async setOntology(ontology: Record<string, any>): Promise<any> {
+    const response = await this.client.put("/v1/ontology", ontology);
+    return response.data;
+  }
+
+  // Actions (multi-agent coordination)
+  async listActions(status?: string): Promise<Action[]> {
+    const response = await this.client.get<Action[]>("/v1/actions", {
+      params: status ? { status } : {},
+    });
+    return response.data || [];
+  }
+
+  async createAction(req: CreateActionRequest): Promise<Action> {
+    const response = await this.client.post<Action>("/v1/actions", req);
+    return response.data;
+  }
+
+  async getAction(id: string): Promise<Action> {
+    const response = await this.client.get<Action>(`/v1/actions/${id}`);
+    return response.data;
+  }
+
+  async updateActionStatus(id: string, status: string): Promise<Action> {
+    const response = await this.client.put<Action>(`/v1/actions/${id}/status`, { status });
+    return response.data;
+  }
+
+  async acquireLease(id: string, agentId: string, ttlMinutes: number = 10): Promise<Lease> {
+    const response = await this.client.post<Lease>(`/v1/actions/${id}/lease`, {
+      agentId,
+      ttlMinutes,
+    });
+    return response.data;
+  }
+
+  async releaseLease(id: string, agentId: string, completed: boolean = false): Promise<void> {
+    await this.client.delete(`/v1/actions/${id}/lease`, {
+      data: { agentId, completed },
+    });
+  }
+
+  // Mesh (P2P sync)
+  async listMeshPeers(): Promise<MeshPeer[]> {
+    const response = await this.client.get<MeshPeer[]>("/v1/mesh/peers");
+    return response.data || [];
+  }
+
+  async registerMeshPeer(peer: MeshPeer): Promise<void> {
+    await this.client.post("/v1/mesh/peers", peer);
+  }
+
+  async meshSync(scope: string, items: any): Promise<MeshSyncResult[]> {
+    const response = await this.client.post<MeshSyncResult[]>("/v1/mesh/sync", { scope, items });
+    return response.data || [];
+  }
+
+  // Triplets
+  async extractTriplets(content: string, memoryId?: string): Promise<TripletExtractResponse> {
+    const response = await this.client.post<TripletExtractResponse>("/v1/triplets/extract", {
+      content,
+      memoryId,
+    });
+    return response.data;
+  }
+
+  // Cascade entity extraction
+  async cascadeExtract(content: string): Promise<CascadeExtractResponse> {
+    const response = await this.client.post<CascadeExtractResponse>("/v1/cascade-extract", { content });
+    return response.data;
+  }
+
+  // Feedback Learning
+  async getFeedbackWeight(memoryId: string): Promise<FeedbackWeightResponse> {
+    const response = await this.client.get<FeedbackWeightResponse>(
+      `/v1/memories/${memoryId}/feedback-weight`
+    );
+    return response.data;
+  }
+
+  // NodeSets
+  async getMemorySets(memoryId: string): Promise<{ memoryId: string; sets: string[] }> {
+    const response = await this.client.get(`/v1/memories/${memoryId}/sets`);
+    return response.data;
+  }
+
+  async addMemorySets(memoryId: string, sets: string[]): Promise<{ memoryId: string; sets: string[] }> {
+    const response = await this.client.post(`/v1/memories/${memoryId}/sets`, { sets });
+    return response.data;
+  }
+
+  async removeMemorySets(memoryId: string, sets: string[]): Promise<{ memoryId: string; sets: string[] }> {
+    const response = await this.client.delete(`/v1/memories/${memoryId}/sets`, { data: { sets } });
+    return response.data;
+  }
+
+  // Ontology
+  async getOntology(): Promise<any> {
+    const response = await this.client.get("/v1/ontology");
+    return response.data;
+  }
+
+  async resolveOntologyEntity(name: string): Promise<OntologyResolveResponse> {
+    const response = await this.client.post<OntologyResolveResponse>("/v1/ontology/resolve", { name });
     return response.data;
   }
 

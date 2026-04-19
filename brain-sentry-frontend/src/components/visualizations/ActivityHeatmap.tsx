@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { HeatmapChart } from "echarts/charts";
@@ -40,6 +41,7 @@ function formatDate(date: Date): string {
 }
 
 export function ActivityHeatmap({ className = "" }: ActivityHeatmapProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [activityData, setActivityData] = useState<[string, number][]>([]);
   const [totalEvents, setTotalEvents] = useState(0);
@@ -101,7 +103,8 @@ export function ActivityHeatmap({ className = "" }: ActivityHeatmapProps) {
         formatter: (params: any) => {
           const date = params.value[0];
           const count = params.value[1];
-          return `<strong>${date}</strong><br/>${count} event${count !== 1 ? "s" : ""}`;
+          const label = count === 1 ? t("activity.eventSingular") : t("activity.eventPlural");
+          return `<strong>${date}</strong><br/>${count} ${label}`;
         },
         backgroundColor: "#1f2937",
         borderColor: "#374151",
@@ -156,7 +159,7 @@ export function ActivityHeatmap({ className = "" }: ActivityHeatmapProps) {
         },
       ],
     }),
-    [activityData, rangeStart, rangeEnd, maxValue]
+    [activityData, rangeStart, rangeEnd, maxValue, t]
   );
 
   if (loading) {
@@ -171,7 +174,7 @@ export function ActivityHeatmap({ className = "" }: ActivityHeatmapProps) {
     <div className={className}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-medium text-muted-foreground">
-          Activity ({totalEvents} events this year)
+          {t("activity.header", { count: totalEvents })}
         </h3>
       </div>
       <ReactEChartsCore

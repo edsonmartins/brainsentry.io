@@ -21,10 +21,21 @@ export const ROUTES = {
   connectors: "/app/connectors",
   notes: "/app/notes",
   tasks: "/app/tasks",
+  console: "/app/console",
+  traces: "/app/traces",
+  extraction: "/app/extraction",
+  ontology: "/app/ontology",
+  sessionCache: "/app/session-cache",
+  actions: "/app/actions",
+  mesh: "/app/mesh",
+  batchSearch: "/app/batch-search",
 } as const;
 
 export const STORAGE_KEYS = {
   token: "brain_sentry_token",
   user: "brain_sentry_user",
   tenantId: "tenant_id",
+  language: "brainsentry.lang",
 } as const;
+
+export const E2E_LANGUAGE = "pt-BR";

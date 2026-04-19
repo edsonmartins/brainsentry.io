@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { WebSocketStatus } from "@/hooks/useWebSocket";
 
 interface LiveIndicatorProps {
@@ -5,14 +6,15 @@ interface LiveIndicatorProps {
   className?: string;
 }
 
-const statusConfig: Record<WebSocketStatus, { color: string; label: string; animate: boolean }> = {
-  connected: { color: "bg-green-500", label: "Live", animate: true },
-  connecting: { color: "bg-yellow-500", label: "Connecting", animate: true },
-  disconnected: { color: "bg-gray-500", label: "Offline", animate: false },
-  error: { color: "bg-red-500", label: "Error", animate: false },
+const statusConfig: Record<WebSocketStatus, { color: string; animate: boolean; labelKey: string }> = {
+  connected: { color: "bg-green-500", animate: true, labelKey: "indicator.connected" },
+  connecting: { color: "bg-yellow-500", animate: true, labelKey: "indicator.connecting" },
+  disconnected: { color: "bg-gray-500", animate: false, labelKey: "indicator.disconnected" },
+  error: { color: "bg-red-500", animate: false, labelKey: "indicator.errorStatus" },
 };
 
 export function LiveIndicator({ status, className = "" }: LiveIndicatorProps) {
+  const { t } = useTranslation();
   const config = statusConfig[status];
 
   return (
@@ -23,7 +25,7 @@ export function LiveIndicator({ status, className = "" }: LiveIndicatorProps) {
         )}
         <span className={`relative inline-flex rounded-full h-2 w-2 ${config.color}`} />
       </span>
-      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{config.label}</span>
+      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t(config.labelKey)}</span>
     </div>
   );
 }

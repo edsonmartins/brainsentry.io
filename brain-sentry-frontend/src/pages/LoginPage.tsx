@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Brain, LogIn, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Input } from "@/components/ui/filter";
 import { Spinner } from "@/components/ui/spinner";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -28,16 +31,16 @@ export function LoginPage() {
     try {
       await login(email, password);
       toast({
-        title: "Login realizado",
-        description: "Bem-vindo de volta!",
+        title: t("auth.loginSuccess"),
+        description: t("auth.welcomeBack"),
         variant: "success",
       });
       navigate("/app/dashboard");
     } catch (err) {
-      const errorMessage = (err as Error).message || "Credenciais inválidas";
+      const errorMessage = (err as Error).message || t("auth.invalidCredentials");
       setError(errorMessage);
       toast({
-        title: "Erro no login",
+        title: t("auth.loginError"),
         description: errorMessage,
         variant: "error",
       });
@@ -53,23 +56,21 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Ensure demo user exists by calling demo endpoint
       await fetch(`${API_URL}/v1/auth/demo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
 
-      // Login through AuthContext to properly update state
       await login("demo@example.com", "demo123");
 
       toast({
-        title: "Demo login realizado",
-        description: "Você está usando a conta de demonstração.",
+        title: t("auth.demoSuccess"),
+        description: t("auth.demoDesc"),
         variant: "success",
       });
       navigate("/app/dashboard");
-    } catch (err) {
-      setError("Modo demo não disponível");
+    } catch {
+      setError(t("auth.demoUnavailable"));
     } finally {
       setIsLoading(false);
     }
@@ -77,26 +78,26 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-md">
-        {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center p-3 bg-primary/10 rounded-full mb-4">
             <Brain className="h-10 w-10 text-primary" />
           </div>
           <h1 className="text-3xl font-bold">Brain Sentry</h1>
           <p className="text-muted-foreground">
-            Sistema de Memória para Desenvolvedores
+            {t("auth.subtitle")}
           </p>
         </div>
 
-        {/* Login Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Entrar</CardTitle>
+            <CardTitle>{t("auth.login")}</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Error Message */}
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-md">
                   <AlertCircle className="h-4 w-4" />
@@ -104,15 +105,14 @@ export function LoginPage() {
                 </div>
               )}
 
-              {/* Email */}
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium">
-                  Email
+                  {t("auth.email")}
                 </label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="seu@email.com"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -120,15 +120,14 @@ export function LoginPage() {
                 />
               </div>
 
-              {/* Password */}
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium">
-                  Senha
+                  {t("auth.password")}
                 </label>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="•••••••••"
+                  placeholder={t("auth.passwordPlaceholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -136,7 +135,6 @@ export function LoginPage() {
                 />
               </div>
 
-              {/* Forgot Password */}
               <div className="text-right">
                 <a
                   href="#"
@@ -144,43 +142,40 @@ export function LoginPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     toast({
-                      title: "Recuperação de senha",
-                      description: "Entre em contato com o administrador.",
+                      title: t("auth.forgotTitle"),
+                      description: t("auth.forgotDesc"),
                       variant: "info",
                     });
                   }}
                 >
-                  Esqueceu sua senha?
+                  {t("auth.forgot")}
                 </a>
               </div>
 
-              {/* Submit Button */}
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>
-                    <Spinner size="sm" label="Entrando..." />
+                    <Spinner size="sm" label={t("auth.signingIn")} />
                   </>
                 ) : (
                   <>
                     <LogIn className="h-4 w-4 mr-2" />
-                    Entrar
+                    {t("auth.login")}
                   </>
                 )}
               </Button>
 
-              {/* Divider */}
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-background px-2 text-muted-foreground">
-                    Ou
+                    {t("auth.or")}
                   </span>
                 </div>
               </div>
 
-              {/* Demo Login */}
               <Button
                 type="button"
                 variant="outline"
@@ -188,35 +183,33 @@ export function LoginPage() {
                 onClick={handleDemoLogin}
                 disabled={isLoading}
               >
-                Entrar com conta demo
+                {t("auth.demoLogin")}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <p className="text-center text-sm text-muted-foreground mt-6">
-          Não tem uma conta?{" "}
+          {t("auth.noAccount")}{" "}
           <a
             href="#"
             className="text-primary hover:underline"
             onClick={(e) => {
               e.preventDefault();
               toast({
-                title: "Registro",
-                description: "Entre em contato com o administrador para criar uma conta.",
+                title: t("auth.registerTitle"),
+                description: t("auth.registerDesc"),
                 variant: "info",
               });
             }}
           >
-            Solicite acesso
+            {t("auth.requestAccess")}
           </a>
         </p>
 
-        {/* Tenant Info */}
         <div className="mt-8 p-4 bg-muted/20 rounded-lg">
           <p className="text-xs text-muted-foreground text-center">
-            Para ambientes de desenvolvimento, use: demo@example.com / demo123
+            {t("auth.devHint")}
           </p>
         </div>
       </div>

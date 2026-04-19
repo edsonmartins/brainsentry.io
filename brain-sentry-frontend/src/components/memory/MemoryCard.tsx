@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Eye, Edit, Trash } from "lucide-react";
@@ -36,8 +37,10 @@ const categoryStyles: Record<string, string> = {
 };
 
 export function MemoryCard({ memory, onView, onEdit, onDelete }: MemoryCardProps) {
+  const { t, i18n } = useTranslation();
   const importanceClass = importanceStyles[memory.importance] || importanceStyles.MINOR;
   const categoryClass = categoryStyles[memory.category] || "bg-gray-500 text-white";
+  const dateLocale = i18n.language === "en" ? "en-US" : "pt-BR";
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -88,7 +91,7 @@ export function MemoryCard({ memory, onView, onEdit, onDelete }: MemoryCardProps
           </div>
 
           <div className="text-xs text-muted-foreground">
-            {memory.createdAt ? new Date(memory.createdAt).toLocaleDateString("pt-BR") : "-"}
+            {memory.createdAt ? new Date(memory.createdAt).toLocaleDateString(dateLocale) : "-"}
           </div>
 
           {/* Actions */}
@@ -101,7 +104,7 @@ export function MemoryCard({ memory, onView, onEdit, onDelete }: MemoryCardProps
                 onClick={() => onView(memory.id)}
               >
                 <Eye className="h-3 w-3 mr-1" />
-                Ver
+                {t("common.view")}
               </Button>
             )}
             {onEdit && (
@@ -112,7 +115,7 @@ export function MemoryCard({ memory, onView, onEdit, onDelete }: MemoryCardProps
                 onClick={() => onEdit(memory.id)}
               >
                 <Edit className="h-3 w-3 mr-1" />
-                Editar
+                {t("common.edit")}
               </Button>
             )}
             {onDelete && (
@@ -123,7 +126,7 @@ export function MemoryCard({ memory, onView, onEdit, onDelete }: MemoryCardProps
                 onClick={() => onDelete(memory.id)}
               >
                 <Trash className="h-3 w-3 mr-1" />
-                Excluir
+                {t("common.delete")}
               </Button>
             )}
           </div>
