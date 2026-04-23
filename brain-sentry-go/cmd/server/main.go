@@ -404,6 +404,8 @@ func main() {
 
 	provenanceExporter := service.NewProvenanceExporter(auditRepo, decisionRepo, os.Getenv("PROV_BASE_URI"))
 
+	coreferenceService := service.NewCoreferenceService(llmProvider)
+
 	logger.Info("Semantica-inspired services initialized",
 		"decisions", decisionService != nil,
 		"policies", policyEngine != nil,
@@ -551,6 +553,7 @@ func main() {
 	reasoningHandler := handler.NewReasoningHandler(abductiveReasoner)
 	provenanceHandler := handler.NewProvenanceHandler(provenanceExporter)
 	biTemporalHandler := handler.NewBiTemporalHandler(memoryRepo)
+	coreferenceHandler := handler.NewCoreferenceHandler(coreferenceService)
 
 	// Router
 	r := chi.NewRouter()
@@ -926,6 +929,9 @@ func main() {
 
 		// Semantica: Bi-temporal memory query
 		r.Get("/v1/memories/as-of", biTemporalHandler.AsOf)
+
+		// Semantica: Coreference resolution (used before extraction)
+		r.Post("/v1/extract/resolve-coreferences", coreferenceHandler.Resolve)
 	})
 
 	// Integration endpoints (service-to-service auth)
