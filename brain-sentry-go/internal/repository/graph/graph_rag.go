@@ -9,12 +9,30 @@ import (
 
 // GraphRAGRepository provides advanced graph-based retrieval augmented generation.
 type GraphRAGRepository struct {
-	client *Client
+	client       *Client
+	indexInit    func(ctx context.Context) error
 }
 
 // NewGraphRAGRepository creates a new GraphRAGRepository.
 func NewGraphRAGRepository(client *Client) *GraphRAGRepository {
 	return &GraphRAGRepository{client: client}
+}
+
+// SetIndexInitializer registers a callback that ensures the vector index is
+// present. The callback is invoked automatically on the first graph traversal
+// (MultiHopSearch / EnrichContext). Typically wired via pkg/lazy so the cost
+// is paid once on demand instead of at boot.
+func (r *GraphRAGRepository) SetIndexInitializer(fn func(ctx context.Context) error) {
+	r.indexInit = fn
+}
+
+func (r *GraphRAGRepository) ensureIndex(ctx context.Context) {
+	if r.indexInit == nil {
+		return
+	}
+	if err := r.indexInit(ctx); err != nil {
+		slog.Warn("vector index initialization failed", "error", err)
+	}
 }
 
 // EnsureVectorIndex creates a vector index on Memory nodes if it doesn't exist.
@@ -51,6 +69,7 @@ type MultiHopResult struct {
 
 // MultiHopSearch performs multi-hop graph traversal from seed memories.
 func (r *GraphRAGRepository) MultiHopSearch(ctx context.Context, seedIDs []string, maxHops, limit int, tenantID string) ([]MultiHopResult, error) {
+	r.ensureIndex(ctx)
 	if len(seedIDs) == 0 {
 		return nil, nil
 	}

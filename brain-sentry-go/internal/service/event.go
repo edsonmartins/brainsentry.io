@@ -20,11 +20,18 @@ type EventService struct {
 	embedder *EmbeddingService
 	llm      LLMProvider
 	audit    *AuditService
+	tracker  ProvenanceTracker
 }
 
 // NewEventService wires dependencies; llm and embedder are optional.
 func NewEventService(repo *postgres.EventRepository, embedder *EmbeddingService, llm LLMProvider, audit *AuditService) *EventService {
-	return &EventService{repo: repo, embedder: embedder, llm: llm, audit: audit}
+	return &EventService{
+		repo:     repo,
+		embedder: embedder,
+		llm:      llm,
+		audit:    audit,
+		tracker:  NewProvenanceTracker("event", audit),
+	}
 }
 
 // RecordEventRequest is the input for Record.
@@ -59,7 +66,9 @@ func (s *EventService) Record(ctx context.Context, req RecordEventRequest) (*dom
 	if s.embedder != nil {
 		e.Embedding = s.embedder.Embed(buildEventText(e))
 	}
-	if err := s.repo.Create(ctx, e); err != nil {
+	if err := s.tracker.Track(ctx, "record", e.ID, func(ctx context.Context) error {
+		return s.repo.Create(ctx, e)
+	}); err != nil {
 		return nil, err
 	}
 	if s.audit != nil {

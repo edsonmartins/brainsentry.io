@@ -16,15 +16,21 @@ import (
 // DecisionService orchestrates recording decisions, looking up precedents,
 // building causal chains, and enforcing policies.
 type DecisionService struct {
-	repo       *postgres.DecisionRepository
-	embedder   *EmbeddingService
-	audit      *AuditService
-	policies   *PolicyEngine
+	repo     *postgres.DecisionRepository
+	embedder *EmbeddingService
+	audit    *AuditService
+	policies *PolicyEngine
+	tracker  ProvenanceTracker
 }
 
 // NewDecisionService wires dependencies.
 func NewDecisionService(repo *postgres.DecisionRepository, embedder *EmbeddingService, audit *AuditService) *DecisionService {
-	return &DecisionService{repo: repo, embedder: embedder, audit: audit}
+	return &DecisionService{
+		repo:     repo,
+		embedder: embedder,
+		audit:    audit,
+		tracker:  NewProvenanceTracker("decision", audit),
+	}
 }
 
 // WithPolicyEngine attaches a policy engine; enforced on Record.
@@ -95,7 +101,9 @@ func (s *DecisionService) Record(ctx context.Context, req RecordDecisionRequest)
 		d.PolicyViolations = violations
 	}
 
-	if err := s.repo.Create(ctx, d); err != nil {
+	if err := s.tracker.Track(ctx, "record", d.ID, func(ctx context.Context) error {
+		return s.repo.Create(ctx, d)
+	}); err != nil {
 		return nil, err
 	}
 

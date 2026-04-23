@@ -21,6 +21,7 @@ import (
 	graphrepo "github.com/integraltech/brainsentry/internal/repository/graph"
 	"github.com/integraltech/brainsentry/internal/repository/postgres"
 	"github.com/integraltech/brainsentry/internal/service"
+	"github.com/integraltech/brainsentry/pkg/lazy"
 )
 
 func main() {
@@ -68,10 +69,18 @@ func main() {
 		entityGraphRepo = graphrepo.NewEntityGraphRepository(graphClient)
 		graphRAGRepo = graphrepo.NewGraphRAGRepository(graphClient)
 
-		// Ensure vector index exists
-		if err := graphRAGRepo.EnsureVectorIndex(ctx, cfg.Embedding.Dimensions); err != nil {
-			logger.Warn("failed to create vector index", "error", err)
-		}
+		// Ensure vector index exists — lazily so boot is fast. The index is
+		// created on first semantic search instead of during startup.
+		vectorIndexReady := lazy.New(func() (bool, error) {
+			if err := graphRAGRepo.EnsureVectorIndex(context.Background(), cfg.Embedding.Dimensions); err != nil {
+				return false, err
+			}
+			return true, nil
+		})
+		graphRAGRepo.SetIndexInitializer(func(ctx context.Context) error {
+			_, err := vectorIndexReady.Get()
+			return err
+		})
 
 		logger.Info("connected to FalkorDB", "graph", cfg.FalkorDB.GraphName)
 	}
@@ -323,6 +332,10 @@ func main() {
 		WithTripletExtractor(tripletExtractionService).
 		WithFeedbackLearning(feedbackLearningService)
 
+	// Wire coreference resolution into cascade extraction (defined below next to
+	// Semantica services, so we attach it in a deferred pass). Handled further
+	// in the boot sequence after coreferenceService is constructed.
+
 	// ---- P2 Cognee: AgentTrace, NodeSet, Semantic API, Middleware ----
 
 	// AgentTrace (procedural memory — in-memory for now)
@@ -405,6 +418,14 @@ func main() {
 	provenanceExporter := service.NewProvenanceExporter(auditRepo, decisionRepo, os.Getenv("PROV_BASE_URI"))
 
 	coreferenceService := service.NewCoreferenceService(llmProvider)
+
+	// Attach coreference to cascade extraction pipeline.
+	if cascadeExtractionService != nil {
+		cascadeExtractionService.WithCoreference(coreferenceService)
+	}
+
+	// Fire event extraction asynchronously after each memory create.
+	memoryService.WithEventExtractor(eventService)
 
 	logger.Info("Semantica-inspired services initialized",
 		"decisions", decisionService != nil,
@@ -719,6 +740,7 @@ func main() {
 		r.Route("/v1/conflicts", func(r chi.Router) {
 			r.Post("/detect/{memoryId}", conflictHandler.DetectForMemory)
 			r.Post("/scan", conflictHandler.ScanAll)
+			r.Get("/near-duplicates", conflictHandler.NearDuplicates)
 		})
 
 		// Webhooks

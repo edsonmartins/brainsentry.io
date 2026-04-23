@@ -33,6 +33,7 @@ type MemoryService struct {
 	tripletSvc     *TripletExtractionService     // extracts S-P-O triplets
 	stalenessSvc   *CascadingStalenessService    // propagates staleness on supersede
 	feedbackSvc    *FeedbackLearningService      // blends feedback into scoring
+	eventSvc       *EventService                 // async event extraction on create
 }
 
 // WithCompressor enables LLM-driven content compression during CreateMemory.
@@ -68,6 +69,13 @@ func (s *MemoryService) WithCascadingStaleness(c *CascadingStalenessService) *Me
 // WithFeedbackLearning enables feedback-weighted scoring during SearchMemories.
 func (s *MemoryService) WithFeedbackLearning(f *FeedbackLearningService) *MemoryService {
 	s.feedbackSvc = f
+	return s
+}
+
+// WithEventExtractor enables async LLM-driven event extraction after CreateMemory.
+// The extraction runs in a detached goroutine so it never blocks the create path.
+func (s *MemoryService) WithEventExtractor(e *EventService) *MemoryService {
+	s.eventSvc = e
 	return s
 }
 
@@ -341,6 +349,17 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 			if raw, err := json.Marshal(meta); err == nil {
 				m.Metadata = raw
 				_ = s.memoryRepo.Update(bgCtx, m)
+			}
+		}()
+	}
+
+	// 4. Event extraction — async, non-blocking. The LLM looks for structured
+	// occurrences inside the content and persists them with source_memory_id.
+	if s.eventSvc != nil {
+		go func() {
+			bgCtx := tenant.WithTenant(context.Background(), m.TenantID)
+			if _, err := s.eventSvc.ExtractFromText(bgCtx, m.Content, m.ID); err != nil {
+				slog.Warn("event extraction failed", "memoryId", m.ID, "error", err)
 			}
 		}()
 	}

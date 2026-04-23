@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -44,4 +45,37 @@ func (h *ConflictHandler) ScanAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, conflicts)
+}
+
+// NearDuplicates handles GET /v1/conflicts/near-duplicates
+// Query params: strategy=jaro_winkler|blocking_jw|semantic, threshold=0..1, limit=N
+func (h *ConflictHandler) NearDuplicates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	strategy := service.DedupStrategy(q.Get("strategy"))
+	if strategy == "" {
+		strategy = service.DedupBlockingJW
+	}
+	threshold := 0.85
+	if v := q.Get("threshold"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			threshold = f
+		}
+	}
+	limit := 100
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	pairs, err := h.conflictService.FindNearDuplicates(r.Context(), strategy, threshold, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"strategy":  strategy,
+		"threshold": threshold,
+		"count":     len(pairs),
+		"pairs":     pairs,
+	})
 }

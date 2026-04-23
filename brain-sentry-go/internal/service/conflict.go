@@ -15,6 +15,7 @@ type ConflictService struct {
 	memoryRepo       *postgres.MemoryRepository
 	openRouter       *OpenRouterService
 	embeddingService *EmbeddingService
+	hybridDedup      *HybridDeduplicator
 }
 
 // NewConflictService creates a new ConflictService.
@@ -27,7 +28,32 @@ func NewConflictService(
 		memoryRepo:       memoryRepo,
 		openRouter:       openRouter,
 		embeddingService: embeddingService,
+		hybridDedup:      NewHybridDeduplicator(),
 	}
+}
+
+// FindNearDuplicates runs the chosen HybridDeduplicator strategy over all
+// memories in the tenant and returns candidate pairs above threshold. This
+// complements the SimHash-based pipeline (which deduplicates ON INSERT) by
+// giving operators an offline/pair-wise inspection tool.
+func (s *ConflictService) FindNearDuplicates(ctx context.Context, strategy DedupStrategy, threshold float64, limit int) ([]DedupPair, error) {
+	memories, err := s.memoryRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing memories: %w", err)
+	}
+	items := make([]DedupItem, 0, len(memories))
+	for _, m := range memories {
+		text := m.Summary
+		if text == "" {
+			text = m.Content
+		}
+		items = append(items, DedupItem{ID: m.ID, Text: text, Embedding: m.Embedding})
+	}
+	pairs := s.hybridDedup.FindDuplicates(items, strategy, threshold)
+	if limit > 0 && len(pairs) > limit {
+		pairs = pairs[:limit]
+	}
+	return pairs, nil
 }
 
 // DetectConflicts scans memories for contradictions.

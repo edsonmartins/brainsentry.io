@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/integraltech/brainsentry/pkg/pipeline"
 )
 
 // CascadeEntityExtractionService performs entity extraction in three sequential
@@ -17,12 +19,20 @@ import (
 //
 // Smaller, focused prompts reduce hallucination at the cost of ~3x LLM calls.
 type CascadeEntityExtractionService struct {
-	llm LLMProvider
+	llm       LLMProvider
+	coref     *CoreferenceService // optional; runs before Pass 1 to normalise aliases
 }
 
 // NewCascadeEntityExtractionService creates a new CascadeEntityExtractionService.
 func NewCascadeEntityExtractionService(llm LLMProvider) *CascadeEntityExtractionService {
 	return &CascadeEntityExtractionService{llm: llm}
+}
+
+// WithCoreference attaches a CoreferenceService so the cascade rewrites the
+// text (resolving pronouns/aliases) before Pass 1. Nil disables it.
+func (s *CascadeEntityExtractionService) WithCoreference(c *CoreferenceService) *CascadeEntityExtractionService {
+	s.coref = c
+	return s
 }
 
 // CascadeExtractionResult holds the output of the 3-pass pipeline.
@@ -93,7 +103,10 @@ type passRelationshipResponse struct {
 	Relationship string `json:"relationship"`
 }
 
-// Extract runs the 3-pass cascade. Returns entities and relationships with canonical names.
+// Extract runs the 3-pass cascade as an explicit DAG using pkg/pipeline. Each
+// pass is a named step; downstream steps depend on upstream outputs.
+// Errors inside a single pass downgrade (return partial result) instead of
+// aborting the whole extraction — we always prefer partial data to none.
 func (s *CascadeEntityExtractionService) Extract(ctx context.Context, content string) (*CascadeExtractionResult, error) {
 	if s.llm == nil {
 		return &CascadeExtractionResult{}, nil
@@ -101,50 +114,80 @@ func (s *CascadeEntityExtractionService) Extract(ctx context.Context, content st
 
 	result := &CascadeExtractionResult{}
 
-	// Pass 1: nodes
-	entities, err := s.extractNodes(ctx, content)
-	if err != nil {
-		return nil, fmt.Errorf("cascade pass 1 (nodes): %w", err)
-	}
-	result.Entities = entities
-	result.PassCount = 1
-
-	if len(entities) < 2 {
-		return result, nil
-	}
-
-	// Pass 2: candidate edges
-	edges, err := s.extractEdges(ctx, content, entities)
-	if err != nil {
-		slog.Warn("cascade pass 2 failed, returning nodes only", "error", err)
-		return result, nil
-	}
-	result.PassCount = 2
-
-	if len(edges) == 0 {
-		return result, nil
-	}
-
-	// Pass 3: relationship names per edge
-	relationships := make([]ExtractedRelationship, 0, len(edges))
-	for _, e := range edges {
-		relType, err := s.extractRelationshipName(ctx, content, e.Source, e.Target)
-		if err != nil {
-			slog.Warn("cascade pass 3 failed for edge",
-				"source", e.Source, "target", e.Target, "error", err)
-			continue
+	// Pass 0 (optional, outside the DAG to keep content mutation explicit):
+	// coreference resolution.
+	if s.coref != nil {
+		if cr, err := s.coref.Resolve(ctx, content); err == nil && cr != nil && cr.Resolved != "" {
+			content = cr.Resolved
+		} else if err != nil {
+			slog.Warn("coreference resolution failed, using original text", "error", err)
 		}
-		if relType == "" {
-			continue
-		}
-		relationships = append(relationships, ExtractedRelationship{
-			Source: e.Source,
-			Target: e.Target,
-			Type:   relType,
-		})
 	}
-	result.Relationships = relationships
-	result.PassCount = 3
+
+	p, err := pipeline.NewBuilder().
+		Add("nodes", func(ctx context.Context, in map[string]any) (any, error) {
+			entities, err := s.extractNodes(ctx, content)
+			if err != nil {
+				return nil, fmt.Errorf("cascade pass 1 (nodes): %w", err)
+			}
+			return entities, nil
+		}).
+		Add("edges", func(ctx context.Context, in map[string]any) (any, error) {
+			entities, _ := in["nodes"].([]ExtractedEntity)
+			if len(entities) < 2 {
+				return []edgeCandidate{}, nil
+			}
+			edges, err := s.extractEdges(ctx, content, entities)
+			if err != nil {
+				slog.Warn("cascade pass 2 failed, returning nodes only", "error", err)
+				return []edgeCandidate{}, nil
+			}
+			return edges, nil
+		}, "nodes").
+		Add("relationships", func(ctx context.Context, in map[string]any) (any, error) {
+			edges, _ := in["edges"].([]edgeCandidate)
+			rels := make([]ExtractedRelationship, 0, len(edges))
+			for _, e := range edges {
+				relType, err := s.extractRelationshipName(ctx, content, e.Source, e.Target)
+				if err != nil {
+					slog.Warn("cascade pass 3 failed for edge",
+						"source", e.Source, "target", e.Target, "error", err)
+					continue
+				}
+				if relType == "" {
+					continue
+				}
+				rels = append(rels, ExtractedRelationship{
+					Source: e.Source,
+					Target: e.Target,
+					Type:   relType,
+				})
+			}
+			return rels, nil
+		}, "edges").
+		Build()
+	if err != nil {
+		return nil, err
+	}
+
+	run, err := p.Run(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if entities, ok := run.Outputs["nodes"].([]ExtractedEntity); ok {
+		result.Entities = entities
+		result.PassCount = 1
+	}
+	if edges, ok := run.Outputs["edges"].([]edgeCandidate); ok && len(edges) > 0 {
+		result.PassCount = 2
+	}
+	if rels, ok := run.Outputs["relationships"].([]ExtractedRelationship); ok {
+		result.Relationships = rels
+		if len(rels) > 0 {
+			result.PassCount = 3
+		}
+	}
 
 	return result, nil
 }
