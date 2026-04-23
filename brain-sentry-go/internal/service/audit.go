@@ -132,6 +132,23 @@ func (s *AuditService) LogError(ctx context.Context, eventType, errorMessage str
 	}
 }
 
+// LogEvent logs a structured event with arbitrary payload.
+func (s *AuditService) LogEvent(ctx context.Context, eventType string, payload map[string]any) error {
+	outputData, _ := json.Marshal(payload)
+	log := &domain.AuditLog{
+		EventType:  eventType,
+		OutputData: outputData,
+		Outcome:    "success",
+		TenantID:   tenant.FromContext(ctx),
+		Timestamp:  time.Now(),
+	}
+	if err := s.auditRepo.Create(ctx, log); err != nil {
+		slog.Warn("failed to create audit log", "error", err, "event", eventType)
+		return err
+	}
+	return nil
+}
+
 // ListByTenant returns audit logs for the current tenant.
 func (s *AuditService) ListByTenant(ctx context.Context, limit int) ([]domain.AuditLog, error) {
 	if limit <= 0 {

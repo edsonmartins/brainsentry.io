@@ -91,6 +91,9 @@ func main() {
 	versionRepo := postgres.NewVersionRepository(pool)
 	relRepo := postgres.NewRelationshipRepository(pool)
 	noteRepo := postgres.NewNoteRepository(pool)
+	decisionRepo := postgres.NewDecisionRepository(pool)
+	policyRepo := postgres.NewPolicyRepository(pool)
+	eventRepo := postgres.NewEventRepository(pool)
 
 	// Services
 	jwtService := service.NewJWTService(cfg.Security.JWTSecret, cfg.Security.JWTExpiration)
@@ -385,6 +388,30 @@ func main() {
 		"sessionCache", sessionCacheService != nil,
 	)
 
+	// ---- Semantica-inspired services: Decisions, Policies, Events, Reasoning, Provenance ----
+
+	policyEngine := service.NewPolicyEngine(policyRepo, auditService)
+
+	decisionService := service.NewDecisionService(decisionRepo, embeddingService, auditService).
+		WithPolicyEngine(policyEngine)
+
+	eventService := service.NewEventService(eventRepo, embeddingService, llmProvider, auditService)
+
+	var abductiveReasoner *service.AbductiveReasoner
+	if llmProvider != nil {
+		abductiveReasoner = service.NewAbductiveReasoner(llmProvider, decisionRepo, memoryRepo, decisionService)
+	}
+
+	provenanceExporter := service.NewProvenanceExporter(auditRepo, decisionRepo, os.Getenv("PROV_BASE_URI"))
+
+	logger.Info("Semantica-inspired services initialized",
+		"decisions", decisionService != nil,
+		"policies", policyEngine != nil,
+		"events", eventService != nil,
+		"abductiveReasoner", abductiveReasoner != nil,
+		"provenanceExporter", provenanceExporter != nil,
+	)
+
 	// Batch Search (multi-query parallel ranking)
 	batchSearchService := service.NewBatchSearchService(memoryService)
 
@@ -516,6 +543,14 @@ func main() {
 	ontologyHandler := handler.NewOntologyHandler(ontologyService)
 	sessionCacheHandler := handler.NewSessionCacheHandler(sessionCacheService)
 	batchSearchHandler := handler.NewBatchSearchHandler(batchSearchService)
+
+	// Semantica-inspired handlers
+	decisionHandler := handler.NewDecisionHandler(decisionService)
+	policyHandler := handler.NewPolicyHandler(policyEngine, decisionService)
+	eventHandler := handler.NewEventHandler(eventService)
+	reasoningHandler := handler.NewReasoningHandler(abductiveReasoner)
+	provenanceHandler := handler.NewProvenanceHandler(provenanceExporter)
+	biTemporalHandler := handler.NewBiTemporalHandler(memoryRepo)
 
 	// Router
 	r := chi.NewRouter()
@@ -850,6 +885,47 @@ func main() {
 
 		// P3-Cognee: Batch Search (multi-query parallel)
 		r.Post("/v1/memories/batch-search", batchSearchHandler.Search)
+
+		// Semantica: Decisions
+		r.Route("/v1/decisions", func(r chi.Router) {
+			r.Post("/", decisionHandler.Record)
+			r.Get("/", decisionHandler.List)
+			r.Post("/precedents", decisionHandler.SearchPrecedents)
+			r.Get("/{id}", decisionHandler.Get)
+			r.Get("/{id}/precedents", decisionHandler.Precedents)
+			r.Get("/{id}/causal-chain", decisionHandler.CausalChain)
+			r.Get("/{id}/influence", decisionHandler.Influence)
+			r.Post("/{id}/supersede", decisionHandler.Supersede)
+		})
+
+		// Semantica: Policies
+		r.Route("/v1/policies", func(r chi.Router) {
+			r.Get("/", policyHandler.List)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Post("/", policyHandler.Create)
+			r.Post("/enforce", policyHandler.EnforceOnDecision)
+			r.Get("/{id}", policyHandler.Get)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Put("/{id}", policyHandler.Update)
+			r.With(middleware.RequireRole(middleware.RoleAdmin)).Delete("/{id}", policyHandler.Delete)
+		})
+
+		// Semantica: Events
+		r.Route("/v1/events", func(r chi.Router) {
+			r.Post("/", eventHandler.Record)
+			r.Get("/", eventHandler.List)
+			r.Get("/stats", eventHandler.Stats)
+			r.Post("/extract", eventHandler.Extract)
+			r.Get("/{id}", eventHandler.Get)
+			r.Delete("/{id}", eventHandler.Delete)
+		})
+
+		// Semantica: Reasoning (abductive + future engines)
+		r.Post("/v1/reasoning/abduce", reasoningHandler.Abduce)
+
+		// Semantica: W3C PROV-O export
+		r.Get("/v1/export/provenance", provenanceHandler.Export)
+
+		// Semantica: Bi-temporal memory query
+		r.Get("/v1/memories/as-of", biTemporalHandler.AsOf)
 	})
 
 	// Integration endpoints (service-to-service auth)

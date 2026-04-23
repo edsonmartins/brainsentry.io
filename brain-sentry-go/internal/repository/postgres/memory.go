@@ -29,7 +29,7 @@ const memoryColumns = `id, content, summary, category, importance, validation_st
 	embedding, metadata, source_type, source_reference, created_by, tenant_id,
 	created_at, updated_at, last_accessed_at, version, access_count, injection_count,
 	helpful_count, not_helpful_count, code_example, programming_language, memory_type, deleted_at,
-	emotional_weight, sim_hash, valid_from, valid_to, decay_rate, superseded_by`
+	emotional_weight, sim_hash, valid_from, valid_to, decay_rate, superseded_by, recorded_at`
 
 func scanMemory(row pgx.Row) (*domain.Memory, error) {
 	var m domain.Memory
@@ -38,7 +38,7 @@ func scanMemory(row pgx.Row) (*domain.Memory, error) {
 		&m.Embedding, &m.Metadata, &m.SourceType, &m.SourceReference, &m.CreatedBy, &m.TenantID,
 		&m.CreatedAt, &m.UpdatedAt, &m.LastAccessedAt, &m.Version, &m.AccessCount, &m.InjectionCount,
 		&m.HelpfulCount, &m.NotHelpfulCount, &m.CodeExample, &m.ProgrammingLanguage, &m.MemoryType, &m.DeletedAt,
-		&m.EmotionalWeight, &m.SimHash, &m.ValidFrom, &m.ValidTo, &m.DecayRate, &m.SupersededBy,
+		&m.EmotionalWeight, &m.SimHash, &m.ValidFrom, &m.ValidTo, &m.DecayRate, &m.SupersededBy, &m.RecordedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func scanMemories(rows pgx.Rows) ([]domain.Memory, error) {
 			&m.Embedding, &m.Metadata, &m.SourceType, &m.SourceReference, &m.CreatedBy, &m.TenantID,
 			&m.CreatedAt, &m.UpdatedAt, &m.LastAccessedAt, &m.Version, &m.AccessCount, &m.InjectionCount,
 			&m.HelpfulCount, &m.NotHelpfulCount, &m.CodeExample, &m.ProgrammingLanguage, &m.MemoryType, &m.DeletedAt,
-			&m.EmotionalWeight, &m.SimHash, &m.ValidFrom, &m.ValidTo, &m.DecayRate, &m.SupersededBy,
+			&m.EmotionalWeight, &m.SimHash, &m.ValidFrom, &m.ValidTo, &m.DecayRate, &m.SupersededBy, &m.RecordedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scanning memory: %w", err)
@@ -88,14 +88,17 @@ func (r *MemoryRepository) Create(ctx context.Context, m *domain.Memory) error {
 	}
 	defer tx.Rollback(ctx)
 
-	query := fmt.Sprintf(`INSERT INTO memories (%s) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`, memoryColumns)
+	if m.RecordedAt.IsZero() {
+		m.RecordedAt = now
+	}
+	query := fmt.Sprintf(`INSERT INTO memories (%s) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)`, memoryColumns)
 
 	_, err = tx.Exec(ctx, query,
 		m.ID, m.Content, m.Summary, m.Category, m.Importance, m.ValidationStatus,
 		m.Embedding, m.Metadata, m.SourceType, m.SourceReference, m.CreatedBy, m.TenantID,
 		m.CreatedAt, m.UpdatedAt, m.LastAccessedAt, m.Version, m.AccessCount, m.InjectionCount,
 		m.HelpfulCount, m.NotHelpfulCount, m.CodeExample, m.ProgrammingLanguage, m.MemoryType, m.DeletedAt,
-		m.EmotionalWeight, m.SimHash, m.ValidFrom, m.ValidTo, m.DecayRate, m.SupersededBy,
+		m.EmotionalWeight, m.SimHash, m.ValidFrom, m.ValidTo, m.DecayRate, m.SupersededBy, m.RecordedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting memory: %w", err)
@@ -541,6 +544,30 @@ func (r *MemoryRepository) FindActiveMemories(ctx context.Context, limit int) ([
 	rows, err := r.pool.Query(ctx, query, tenantID, now, limit)
 	if err != nil {
 		return nil, fmt.Errorf("finding active memories: %w", err)
+	}
+	defer rows.Close()
+	return scanMemories(rows)
+}
+
+// FindAsOf returns memories valid at a specific point in time and recorded
+// in the system no later than that point. Implements bi-temporal "time travel"
+// queries — how the system saw the world at instant `asOf`.
+func (r *MemoryRepository) FindAsOf(ctx context.Context, asOf time.Time, limit int) ([]domain.Memory, error) {
+	tenantID := tenant.FromContext(ctx)
+	if limit <= 0 {
+		limit = 100
+	}
+	query := fmt.Sprintf(`SELECT %s FROM memories
+		WHERE tenant_id = $1
+		  AND deleted_at IS NULL
+		  AND recorded_at <= $2
+		  AND (valid_from IS NULL OR valid_from <= $2)
+		  AND (valid_to IS NULL OR valid_to > $2)
+		ORDER BY recorded_at DESC
+		LIMIT $3`, memoryColumns)
+	rows, err := r.pool.Query(ctx, query, tenantID, asOf, limit)
+	if err != nil {
+		return nil, fmt.Errorf("finding as_of memories: %w", err)
 	}
 	defer rows.Close()
 	return scanMemories(rows)

@@ -38,6 +38,7 @@ type Memory struct {
 	ValidTo             *time.Time       `json:"validTo,omitempty" db:"valid_to"`
 	DecayRate           float64          `json:"decayRate" db:"decay_rate"`
 	SupersededBy        string           `json:"supersededBy,omitempty" db:"superseded_by"`
+	RecordedAt          time.Time        `json:"recordedAt" db:"recorded_at"`
 }
 
 // HelpfulnessRate returns the ratio of helpful feedback.
