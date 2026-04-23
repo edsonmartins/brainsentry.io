@@ -1,0 +1,24 @@
+{
+  "name": "brainsentry",
+  "version": "0.1.0",
+  "description": "BrainSentry cognitive memory + decision intelligence for Claude Code.",
+  "author": "BrainSentry",
+  "homepage": "https://github.com/integraltech/brainsentry",
+  "mcpServers": {
+    "brainsentry": {
+      "transport": "sse",
+      "url": "${BRAINSENTRY_URL:-http://localhost:8082}/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer ${BRAINSENTRY_TOKEN}"
+      }
+    }
+  },
+  "skills": [
+    "recall",
+    "remember",
+    "decide",
+    "explain-decision",
+    "find-precedents",
+    "as-of"
+  ]
+}

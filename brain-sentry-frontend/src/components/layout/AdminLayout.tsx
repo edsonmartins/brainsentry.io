@@ -25,6 +25,11 @@ import {
   CheckSquare,
   Share2,
   Layers3,
+  Scale,
+  ShieldCheck,
+  CalendarClock,
+  Brain,
+  FileCode2,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,6 +59,11 @@ export function AdminLayout() {
     { title: t("nav.meshSync"), href: "/app/mesh", icon: Share2, id: "mesh" },
     { title: t("nav.batchSearch"), href: "/app/batch-search", icon: Layers3, id: "batch-search" },
     { title: t("nav.timeline"), href: "/app/timeline", icon: Clock, id: "timeline" },
+    { title: t("nav.decisions"), href: "/app/decisions", icon: Scale, id: "decisions" },
+    { title: t("nav.policies"), href: "/app/policies", icon: ShieldCheck, id: "policies" },
+    { title: t("nav.events"), href: "/app/events", icon: CalendarClock, id: "events" },
+    { title: t("nav.reasoning"), href: "/app/reasoning", icon: Brain, id: "reasoning" },
+    { title: t("nav.provenance"), href: "/app/provenance", icon: FileCode2, id: "provenance" },
     { title: t("nav.audit"), href: "/app/audit", icon: Shield, id: "audit" },
     { title: t("nav.users"), href: "/app/users", icon: Users, id: "users" },
     { title: t("nav.tenants"), href: "/app/tenants", icon: Building2, id: "tenants" },

@@ -28,6 +28,11 @@ import SessionCachePage from "./pages/SessionCachePage";
 import ActionsPage from "./pages/ActionsPage";
 import MeshPage from "./pages/MeshPage";
 import BatchSearchPage from "./pages/BatchSearchPage";
+import DecisionsPage from "./pages/DecisionsPage";
+import PoliciesPage from "./pages/PoliciesPage";
+import EventsPage from "./pages/EventsPage";
+import ReasoningPage from "./pages/ReasoningPage";
+import ProvenancePage from "./pages/ProvenancePage";
 import { LandingPage } from "./landing/pages/LandingPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -93,6 +98,11 @@ function App() {
                 <Route path="actions" element={<ActionsPage />} />
                 <Route path="mesh" element={<MeshPage />} />
                 <Route path="batch-search" element={<BatchSearchPage />} />
+                <Route path="decisions" element={<DecisionsPage />} />
+                <Route path="policies" element={<PoliciesPage />} />
+                <Route path="events" element={<EventsPage />} />
+                <Route path="reasoning" element={<ReasoningPage />} />
+                <Route path="provenance" element={<ProvenancePage />} />
               </Route>
 
               {/* Legacy redirect - /dashboard -> /app/dashboard */}

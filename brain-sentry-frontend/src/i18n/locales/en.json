@@ -78,7 +78,12 @@
     "actionsLeases": "Actions & Leases",
     "meshSync": "Mesh Sync",
     "batchSearch": "Batch Search",
-    "timeline": "Timeline"
+    "timeline": "Timeline",
+    "decisions": "Decisions",
+    "policies": "Policies",
+    "events": "Events",
+    "reasoning": "Reasoning",
+    "provenance": "Provenance"
   },
   "auth": {
     "login": "Sign in",

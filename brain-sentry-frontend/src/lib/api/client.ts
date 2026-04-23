@@ -915,10 +915,294 @@ class ApiClient {
     return response.data;
   }
 
+  // -------- Semantica-inspired: Decisions --------
+  async recordDecision(req: RecordDecisionRequest): Promise<Decision> {
+    const { data } = await this.client.post<Decision>("/v1/decisions", req);
+    return data;
+  }
+
+  async listDecisions(params: {
+    category?: string;
+    agentId?: string;
+    sessionId?: string;
+    outcome?: string;
+    as_of?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ count: number; decisions: Decision[] }> {
+    const { data } = await this.client.get("/v1/decisions", { params });
+    return data;
+  }
+
+  async getDecision(id: string): Promise<Decision> {
+    const { data } = await this.client.get<Decision>(`/v1/decisions/${id}`);
+    return data;
+  }
+
+  async findDecisionPrecedents(id: string, limit = 5): Promise<{ count: number; precedents: DecisionPrecedent[] }> {
+    const { data } = await this.client.get(`/v1/decisions/${id}/precedents`, { params: { limit } });
+    return data;
+  }
+
+  async searchDecisionPrecedents(req: { category: string; scenario?: string; limit?: number }): Promise<{ count: number; precedents: DecisionPrecedent[] }> {
+    const { data } = await this.client.post("/v1/decisions/precedents", req);
+    return data;
+  }
+
+  async getDecisionCausalChain(id: string, maxDepth = 5): Promise<{ count: number; chain: CausalNode[] }> {
+    const { data } = await this.client.get(`/v1/decisions/${id}/causal-chain`, { params: { maxDepth } });
+    return data;
+  }
+
+  async getDecisionInfluence(id: string): Promise<InfluenceReport> {
+    const { data } = await this.client.get<InfluenceReport>(`/v1/decisions/${id}/influence`);
+    return data;
+  }
+
+  async supersedeDecision(id: string, newId: string): Promise<void> {
+    await this.client.post(`/v1/decisions/${id}/supersede`, { newId });
+  }
+
+  // -------- Policies --------
+  async listPolicies(): Promise<{ count: number; policies: Policy[] }> {
+    const { data } = await this.client.get("/v1/policies");
+    return data;
+  }
+
+  async getPolicy(id: string): Promise<Policy> {
+    const { data } = await this.client.get<Policy>(`/v1/policies/${id}`);
+    return data;
+  }
+
+  async createPolicy(req: CreatePolicyRequest): Promise<Policy> {
+    const { data } = await this.client.post<Policy>("/v1/policies", req);
+    return data;
+  }
+
+  async updatePolicy(id: string, req: CreatePolicyRequest): Promise<Policy> {
+    const { data } = await this.client.put<Policy>(`/v1/policies/${id}`, req);
+    return data;
+  }
+
+  async deletePolicy(id: string): Promise<void> {
+    await this.client.delete(`/v1/policies/${id}`);
+  }
+
+  async enforcePolicy(decisionId: string): Promise<{ decision: Decision; violations: PolicyViolation[]; compliant: boolean }> {
+    const { data } = await this.client.post("/v1/policies/enforce", { decisionId });
+    return data;
+  }
+
+  // -------- Events --------
+  async recordEvent(req: RecordEventRequest): Promise<EventRecord> {
+    const { data } = await this.client.post<EventRecord>("/v1/events", req);
+    return data;
+  }
+
+  async listEvents(params: {
+    eventType?: string;
+    entityId?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  } = {}): Promise<{ count: number; events: EventRecord[] }> {
+    const { data } = await this.client.get("/v1/events", { params });
+    return data;
+  }
+
+  async getEventStats(): Promise<Record<string, number>> {
+    const { data } = await this.client.get("/v1/events/stats");
+    return data;
+  }
+
+  async extractEvents(content: string, sourceMemoryId?: string): Promise<{ count: number; events: EventRecord[] }> {
+    const { data } = await this.client.post("/v1/events/extract", { content, sourceMemoryId });
+    return data;
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    await this.client.delete(`/v1/events/${id}`);
+  }
+
+  // -------- Reasoning --------
+  async abduceReasoning(req: { decisionId: string; question?: string; maxHypotheses?: number }): Promise<AbductionResult> {
+    const { data } = await this.client.post<AbductionResult>("/v1/reasoning/abduce", req);
+    return data;
+  }
+
+  // -------- Bi-temporal --------
+  async getMemoriesAsOf(at: string, limit = 100): Promise<{ count: number; asOf: string; memories: Memory[] }> {
+    const { data } = await this.client.get("/v1/memories/as-of", { params: { at, limit } });
+    return data;
+  }
+
+  // -------- PROV-O export --------
+  async exportProvenance(format: "turtle" | "jsonld" = "turtle"): Promise<string | Record<string, unknown>> {
+    const { data } = await this.client.get("/v1/export/provenance", {
+      params: { format },
+      responseType: format === "jsonld" ? "json" : "text",
+      transformResponse: [(v) => v],
+    });
+    return data;
+  }
+
+  // -------- Coreference --------
+  async resolveCoreferences(content: string): Promise<{ original: string; resolved: string; resolutions?: Record<string, string> }> {
+    const { data } = await this.client.post("/v1/extract/resolve-coreferences", { content });
+    return data;
+  }
+
   // Getter para o cliente axios bruto (para casos específicos)
   get axiosInstance(): AxiosInstance {
     return this.client;
   }
+}
+
+// -------- Semantica DTOs --------
+
+export type DecisionOutcome = "approved" | "rejected" | "deferred" | "pending";
+
+export interface Decision {
+  id: string;
+  tenantId: string;
+  category: string;
+  scenario: string;
+  reasoning: string;
+  outcome: DecisionOutcome;
+  confidence: number;
+  agentId?: string;
+  sessionId?: string;
+  parentDecisionId?: string;
+  entityIds?: string[];
+  memoryIds?: string[];
+  policyViolations?: string[];
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  validFrom?: string;
+  validUntil?: string;
+  recordedAt: string;
+  supersededBy?: string;
+}
+
+export interface DecisionPrecedent {
+  decision: Decision;
+  similarity: number;
+}
+
+export interface CausalNode {
+  decision: Decision;
+  depth: number;
+  relation: "target" | "ancestor" | "descendant";
+}
+
+export interface InfluenceReport {
+  descendants: number;
+  maxDepth: number;
+  supersedeCount: number;
+  agreementRate: number;
+  categoryEchoes: number;
+}
+
+export interface RecordDecisionRequest {
+  category: string;
+  scenario: string;
+  reasoning: string;
+  outcome?: DecisionOutcome;
+  confidence?: number;
+  agentId?: string;
+  sessionId?: string;
+  parentDecisionId?: string;
+  entityIds?: string[];
+  memoryIds?: string[];
+  validFrom?: string;
+  validUntil?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type PolicySeverity = "info" | "warning" | "error" | "critical";
+export type PolicyRuleType =
+  | "min_confidence"
+  | "requires_memory"
+  | "requires_entity"
+  | "forbidden_outcome"
+  | "requires_reasoning"
+  | "category_blocked";
+
+export interface Policy {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string;
+  category: string;
+  severity: PolicySeverity;
+  ruleType: PolicyRuleType;
+  ruleConfig: Record<string, unknown>;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface PolicyViolation {
+  policyId: string;
+  policyName: string;
+  severity: PolicySeverity;
+  message: string;
+}
+
+export interface CreatePolicyRequest {
+  name: string;
+  description?: string;
+  category: string;
+  severity?: PolicySeverity;
+  ruleType: PolicyRuleType;
+  ruleConfig?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface EventParticipant {
+  entityId: string;
+  role?: string;
+  label?: string;
+}
+
+export interface EventRecord {
+  id: string;
+  tenantId: string;
+  eventType: string;
+  title: string;
+  description: string;
+  occurredAt: string;
+  participants: EventParticipant[];
+  attributes?: Record<string, unknown>;
+  sourceMemoryId?: string;
+  createdAt: string;
+}
+
+export interface RecordEventRequest {
+  eventType: string;
+  title?: string;
+  description?: string;
+  occurredAt?: string;
+  participants?: EventParticipant[];
+  attributes?: Record<string, unknown>;
+  sourceMemoryId?: string;
+}
+
+export interface AbductionHypothesis {
+  cause: string;
+  confidence: number;
+  evidence?: string[];
+  memoryIds?: string[];
+  entityIds?: string[];
+}
+
+export interface AbductionResult {
+  decision: Decision;
+  question: string;
+  hypotheses: AbductionHypothesis[];
+  evidenceUsed: number;
+  model?: string;
 }
 
 // Instância singleton
