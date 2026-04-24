@@ -29,6 +29,9 @@ export const ROUTES = {
   actions: "/app/actions",
   mesh: "/app/mesh",
   batchSearch: "/app/batch-search",
+  graphGlobal: "/app/graph/global",
+  graphEgo: "/app/graph/ego",
+  graphTimeline: "/app/graph/timeline",
 } as const;
 
 export const STORAGE_KEYS = {

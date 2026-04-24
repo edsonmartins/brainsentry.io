@@ -196,7 +196,12 @@ export default function GraphTimelinePage() {
                 />
               </div>
             ) : (
-              <svg width={width} height={height} className="block">
+              <svg
+                width={width}
+                height={height}
+                className="block"
+                data-testid="timeline-svg"
+              >
                 <defs>
                   <marker
                     id="sup-arrow"

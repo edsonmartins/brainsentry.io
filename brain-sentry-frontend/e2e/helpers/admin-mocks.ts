@@ -1135,6 +1135,133 @@ export async function mockAdminApis(page: Page) {
       ]);
     }
 
+    // Graph Views (global map / ego / bi-temporal timeline)
+    if (path === "/v1/graph/global" && method === "GET") {
+      const nodes = [
+        {
+          id: "mem-auth",
+          label: "Autenticacao com refresh token",
+          category: "INSIGHT",
+          importance: "CRITICAL",
+          communityId: 0,
+          accessCount: 12,
+          helpfulCount: 4,
+          notHelpfulCount: 1,
+          emotionalWeight: 0.3,
+          createdAt: "2026-04-09T10:00:00.000Z",
+          recordedAt: "2026-04-09T10:00:00.000Z",
+          tags: ["auth", "jwt"],
+        },
+        {
+          id: "mem-search",
+          label: "Busca semantica no admin",
+          category: "KNOWLEDGE",
+          importance: "IMPORTANT",
+          communityId: 0,
+          accessCount: 9,
+          helpfulCount: 2,
+          notHelpfulCount: 0,
+          createdAt: "2026-04-08T15:30:00.000Z",
+          recordedAt: "2026-04-08T15:30:00.000Z",
+          tags: ["search"],
+        },
+        {
+          id: "mem-ops",
+          label: "Rollback seguro em deploy canary",
+          category: "DECISION",
+          importance: "IMPORTANT",
+          communityId: 1,
+          accessCount: 5,
+          helpfulCount: 3,
+          notHelpfulCount: 0,
+          createdAt: "2026-04-07T12:00:00.000Z",
+          recordedAt: "2026-04-07T12:00:00.000Z",
+          tags: ["ops"],
+        },
+      ];
+      return json(route, {
+        nodes,
+        edges: [
+          { source: "mem-auth", target: "mem-search", type: "RELATED_TO", strength: 0.8 },
+          { source: "mem-search", target: "mem-ops", type: "RELATED_TO", strength: 0.6 },
+        ],
+        communities: [
+          { id: 0, memberIds: ["mem-auth", "mem-search"], size: 2, density: 0.5 },
+          { id: 1, memberIds: ["mem-ops"], size: 1, density: 0 },
+        ],
+        modularity: 0.42,
+        total: nodes.length,
+        tenantId: DEFAULT_TENANT_ID,
+      });
+    }
+
+    if (path === "/v1/graph/ego" && method === "GET") {
+      const memoryId = url.searchParams.get("memoryId") ?? "mem-auth";
+      const nodes = [
+        {
+          id: memoryId,
+          label: "Seed memory",
+          category: "INSIGHT",
+          importance: "CRITICAL",
+          communityId: -1,
+          hopDistance: 0,
+          score: 1.0,
+          createdAt: "2026-04-09T10:00:00.000Z",
+          recordedAt: "2026-04-09T10:00:00.000Z",
+        },
+        {
+          id: "mem-search",
+          label: "Busca semantica",
+          category: "KNOWLEDGE",
+          importance: "IMPORTANT",
+          communityId: -1,
+          hopDistance: 1,
+          score: 0.7,
+          createdAt: "2026-04-08T15:30:00.000Z",
+          recordedAt: "2026-04-08T15:30:00.000Z",
+        },
+      ];
+      return json(route, {
+        nodes,
+        edges: [{ source: memoryId, target: "mem-search", type: "RELATED_TO", strength: 0.8 }],
+        total: nodes.length,
+        tenantId: DEFAULT_TENANT_ID,
+      });
+    }
+
+    if (path === "/v1/graph/timeline" && method === "GET") {
+      const nodes = [
+        {
+          id: "mem-auth",
+          label: "Autenticacao com refresh token",
+          category: "INSIGHT",
+          importance: "CRITICAL",
+          communityId: -1,
+          createdAt: "2026-04-09T10:00:00.000Z",
+          recordedAt: "2026-04-09T10:00:00.000Z",
+          validFrom: "2026-04-09T10:00:00.000Z",
+        },
+        {
+          id: "mem-old-auth",
+          label: "Auth antigo",
+          category: "INSIGHT",
+          importance: "MINOR",
+          communityId: -1,
+          createdAt: "2026-04-01T12:00:00.000Z",
+          recordedAt: "2026-04-01T12:00:00.000Z",
+          validFrom: "2026-04-01T12:00:00.000Z",
+          validTo: "2026-04-09T10:00:00.000Z",
+          supersededBy: "mem-auth",
+        },
+      ];
+      return json(route, {
+        nodes,
+        edges: [{ source: "mem-old-auth", target: "mem-auth", type: "SUPERSEDES", strength: 1.0 }],
+        total: nodes.length,
+        tenantId: DEFAULT_TENANT_ID,
+      });
+    }
+
     // Batch Search
     if (path === "/v1/memories/batch-search" && method === "POST") {
       const payload = route.request().postDataJSON() as { queries?: string[] };

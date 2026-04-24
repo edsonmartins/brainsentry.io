@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams, useNavigate } from "react-router-dom";
+// d3-transition extends d3-selection with .interrupt() — required by react-force-graph-2d.
+import "d3-transition";
 import ForceGraph2D from "react-force-graph-2d";
 import {
   GitBranch, RefreshCw, X, Search, ArrowLeft, Target, Network as NetworkIcon,
@@ -189,7 +191,11 @@ export default function GraphEgoPage() {
         </div>
 
         <div className="flex-1 flex min-h-0">
-          <div ref={containerRef} className="flex-1 relative bg-background min-h-[500px]">
+          <div
+            ref={containerRef}
+            data-testid="graph-ego-canvas"
+            className="flex-1 relative bg-background min-h-[500px]"
+          >
             {loading ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Spinner size="lg" />
