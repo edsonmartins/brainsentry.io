@@ -521,6 +521,11 @@ func main() {
 		communitiesHandler = handler.NewCommunitiesHandler(louvainService)
 	}
 
+	var graphViewHandler *handler.GraphViewHandler
+	if memoryRepo != nil {
+		graphViewHandler = handler.NewGraphViewHandler(memoryRepo, graphClient, graphRAGRepo, louvainService)
+	}
+
 	var activationHandler *handler.ActivationHandler
 	if spreadingActivationService != nil {
 		activationHandler = handler.NewActivationHandler(spreadingActivationService)
@@ -774,6 +779,13 @@ func main() {
 		// Graph Communities (Louvain)
 		if communitiesHandler != nil {
 			r.Get("/v1/graph/communities", communitiesHandler.DetectCommunities)
+		}
+
+		// Graph Views (global map, ego graph, bi-temporal timeline)
+		if graphViewHandler != nil {
+			r.Get("/v1/graph/global", graphViewHandler.Global)
+			r.Get("/v1/graph/ego", graphViewHandler.Ego)
+			r.Get("/v1/graph/timeline", graphViewHandler.Timeline)
 		}
 
 		// Reflection

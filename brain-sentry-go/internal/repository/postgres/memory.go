@@ -549,6 +549,35 @@ func (r *MemoryRepository) FindActiveMemories(ctx context.Context, limit int) ([
 	return scanMemories(rows)
 }
 
+// FindByRecordedRange returns memories recorded in the system between from
+// (inclusive) and to (inclusive). Used by the bi-temporal timeline view.
+func (r *MemoryRepository) FindByRecordedRange(ctx context.Context, from, to time.Time, limit int) ([]domain.Memory, error) {
+	tenantID := tenant.FromContext(ctx)
+	if limit <= 0 {
+		limit = 200
+	}
+	if to.IsZero() {
+		to = time.Now()
+	}
+	query := fmt.Sprintf(`SELECT %s FROM memories
+		WHERE tenant_id = $1
+		  AND deleted_at IS NULL
+		  AND recorded_at <= $2
+		  AND ($3::timestamptz IS NULL OR recorded_at >= $3)
+		ORDER BY recorded_at DESC
+		LIMIT $4`, memoryColumns)
+	var fromArg any = nil
+	if !from.IsZero() {
+		fromArg = from
+	}
+	rows, err := r.pool.Query(ctx, query, tenantID, to, fromArg, limit)
+	if err != nil {
+		return nil, fmt.Errorf("finding memories by recorded range: %w", err)
+	}
+	defer rows.Close()
+	return scanMemories(rows)
+}
+
 // FindAsOf returns memories valid at a specific point in time and recorded
 // in the system no later than that point. Implements bi-temporal "time travel"
 // queries — how the system saw the world at instant `asOf`.

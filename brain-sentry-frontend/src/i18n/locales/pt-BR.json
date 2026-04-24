@@ -83,7 +83,83 @@
     "policies": "Políticas",
     "events": "Eventos",
     "reasoning": "Raciocínio",
-    "provenance": "Proveniência"
+    "provenance": "Proveniência",
+    "graphGlobal": "Grafo Global",
+    "graphEgo": "Ego-grafo",
+    "graphTimeline": "Grafo Temporal"
+  },
+  "graphGlobal": {
+    "title": "Grafo Global",
+    "subtitle": "Mapa completo das memórias, agrupadas por comunidade",
+    "category": "Categoria",
+    "importance": "Importância",
+    "all": "Tudo",
+    "overlayFeedback": "Opacidade por feedback",
+    "nodes": "nós",
+    "edges": "arestas",
+    "communities": "comunidades",
+    "modularity": "modularidade",
+    "detail": "Detalhe",
+    "label": "Rótulo",
+    "loadError": "Falha ao carregar grafo global",
+    "superseded": "Substituída por",
+    "openEgo": "Abrir Ego-grafo",
+    "openMemory": "Ver memória",
+    "empty": {
+      "title": "Nenhum nó no grafo",
+      "desc": "Crie memórias e relacionamentos para visualizar o grafo."
+    },
+    "stat": {
+      "access": "Acessos",
+      "helpful": "Útil",
+      "notHelpful": "Não útil",
+      "emotional": "Emoção",
+      "recorded": "Registrada em"
+    }
+  },
+  "graphEgo": {
+    "title": "Ego-grafo",
+    "subtitle": "Memórias relacionadas a um nó-semente (multi-hop)",
+    "idPlaceholder": "UUID da memória-semente",
+    "hops": "Saltos",
+    "limit": "Limite",
+    "explore": "Explorar",
+    "detail": "Detalhe do nó",
+    "label": "Rótulo",
+    "recenter": "Recentrar aqui",
+    "hopLabel": "hop {{n}}",
+    "loadError": "Falha ao carregar ego-grafo",
+    "goMemories": "Ir para memórias",
+    "empty": {
+      "title": "Sem dados",
+      "desc": "Informe um UUID de memória e clique em Explorar."
+    }
+  },
+  "graphTimeline": {
+    "title": "Grafo Temporal",
+    "subtitle": "Visão bi-temporal com setas de substituição",
+    "range": "Janela",
+    "range24h": "24h",
+    "range7d": "7d",
+    "range30d": "30d",
+    "rangeAll": "Tudo",
+    "memories": "memórias",
+    "supersedes": "substituições",
+    "legendSupersedes": "SUPERSEDES",
+    "detail": "Detalhe",
+    "openEgo": "Abrir Ego-grafo",
+    "openMemory": "Ver memória",
+    "loadError": "Falha ao carregar timeline",
+    "empty": {
+      "title": "Sem memórias no intervalo",
+      "desc": "Amplie a janela ou crie novas memórias."
+    },
+    "stat": {
+      "recorded": "Registrada em",
+      "validFrom": "Válida a partir de",
+      "validTo": "Válida até",
+      "label": "Rótulo"
+    }
   },
   "auth": {
     "login": "Entrar",

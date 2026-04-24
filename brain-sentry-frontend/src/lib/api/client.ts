@@ -1052,6 +1052,40 @@ class ApiClient {
     return data;
   }
 
+  // -------- Graph Views --------
+  async getGraphGlobal(params: {
+    limit?: number;
+    category?: string;
+    importance?: string;
+    communities?: boolean;
+  } = {}): Promise<GraphResponse> {
+    const { data } = await this.client.get("/v1/graph/global", {
+      params: {
+        limit: params.limit,
+        category: params.category,
+        importance: params.importance,
+        communities: params.communities === false ? "false" : undefined,
+      },
+    });
+    return data;
+  }
+
+  async getGraphEgo(memoryId: string, hops = 2, limit = 30): Promise<GraphResponse> {
+    const { data } = await this.client.get("/v1/graph/ego", {
+      params: { memoryId, hops, limit },
+    });
+    return data;
+  }
+
+  async getGraphTimeline(params: {
+    from?: string;
+    to?: string;
+    limit?: number;
+  } = {}): Promise<GraphResponse> {
+    const { data } = await this.client.get("/v1/graph/timeline", { params });
+    return data;
+  }
+
   // Getter para o cliente axios bruto (para casos específicos)
   get axiosInstance(): AxiosInstance {
     return this.client;
@@ -1203,6 +1237,51 @@ export interface AbductionResult {
   hypotheses: AbductionHypothesis[];
   evidenceUsed: number;
   model?: string;
+}
+
+// -------- Graph Views DTOs --------
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  category?: string;
+  importance?: string;
+  communityId: number;
+  accessCount?: number;
+  helpfulCount?: number;
+  notHelpfulCount?: number;
+  emotionalWeight?: number;
+  createdAt: string;
+  validFrom?: string;
+  validTo?: string;
+  recordedAt: string;
+  supersededBy?: string;
+  tags?: string[];
+  hopDistance?: number;
+  score?: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type?: string;
+  strength?: number;
+}
+
+export interface GraphCommunity {
+  id: number;
+  memberIds: string[];
+  size: number;
+  density: number;
+}
+
+export interface GraphResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  communities?: GraphCommunity[];
+  modularity?: number;
+  tenantId?: string;
+  total: number;
 }
 
 // Instância singleton

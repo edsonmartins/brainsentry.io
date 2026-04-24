@@ -83,7 +83,83 @@
     "policies": "Policies",
     "events": "Events",
     "reasoning": "Reasoning",
-    "provenance": "Provenance"
+    "provenance": "Provenance",
+    "graphGlobal": "Global Graph",
+    "graphEgo": "Ego Graph",
+    "graphTimeline": "Timeline Graph"
+  },
+  "graphGlobal": {
+    "title": "Global Graph",
+    "subtitle": "Full memory map grouped by community",
+    "category": "Category",
+    "importance": "Importance",
+    "all": "All",
+    "overlayFeedback": "Opacity by feedback",
+    "nodes": "nodes",
+    "edges": "edges",
+    "communities": "communities",
+    "modularity": "modularity",
+    "detail": "Detail",
+    "label": "Label",
+    "loadError": "Failed to load global graph",
+    "superseded": "Superseded by",
+    "openEgo": "Open Ego Graph",
+    "openMemory": "Open memory",
+    "empty": {
+      "title": "No nodes in graph",
+      "desc": "Create memories and relationships to visualise the graph."
+    },
+    "stat": {
+      "access": "Access",
+      "helpful": "Helpful",
+      "notHelpful": "Not helpful",
+      "emotional": "Emotion",
+      "recorded": "Recorded at"
+    }
+  },
+  "graphEgo": {
+    "title": "Ego Graph",
+    "subtitle": "Multi-hop neighbourhood around a seed memory",
+    "idPlaceholder": "Seed memory UUID",
+    "hops": "Hops",
+    "limit": "Limit",
+    "explore": "Explore",
+    "detail": "Node detail",
+    "label": "Label",
+    "recenter": "Re-center here",
+    "hopLabel": "hop {{n}}",
+    "loadError": "Failed to load ego graph",
+    "goMemories": "Go to memories",
+    "empty": {
+      "title": "No data",
+      "desc": "Enter a memory UUID and click Explore."
+    }
+  },
+  "graphTimeline": {
+    "title": "Timeline Graph",
+    "subtitle": "Bi-temporal view with supersede arrows",
+    "range": "Range",
+    "range24h": "24h",
+    "range7d": "7d",
+    "range30d": "30d",
+    "rangeAll": "All",
+    "memories": "memories",
+    "supersedes": "supersedes",
+    "legendSupersedes": "SUPERSEDES",
+    "detail": "Detail",
+    "openEgo": "Open Ego Graph",
+    "openMemory": "Open memory",
+    "loadError": "Failed to load timeline",
+    "empty": {
+      "title": "No memories in range",
+      "desc": "Widen the window or create new memories."
+    },
+    "stat": {
+      "recorded": "Recorded at",
+      "validFrom": "Valid from",
+      "validTo": "Valid until",
+      "label": "Label"
+    }
   },
   "auth": {
     "login": "Sign in",

@@ -30,6 +30,9 @@ import {
   CalendarClock,
   Brain,
   FileCode2,
+  Globe2,
+  GitBranch,
+  Hourglass,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -64,6 +67,9 @@ export function AdminLayout() {
     { title: t("nav.events"), href: "/app/events", icon: CalendarClock, id: "events" },
     { title: t("nav.reasoning"), href: "/app/reasoning", icon: Brain, id: "reasoning" },
     { title: t("nav.provenance"), href: "/app/provenance", icon: FileCode2, id: "provenance" },
+    { title: t("nav.graphGlobal"), href: "/app/graph/global", icon: Globe2, id: "graph-global" },
+    { title: t("nav.graphEgo"), href: "/app/graph/ego", icon: GitBranch, id: "graph-ego" },
+    { title: t("nav.graphTimeline"), href: "/app/graph/timeline", icon: Hourglass, id: "graph-timeline" },
     { title: t("nav.audit"), href: "/app/audit", icon: Shield, id: "audit" },
     { title: t("nav.users"), href: "/app/users", icon: Users, id: "users" },
     { title: t("nav.tenants"), href: "/app/tenants", icon: Building2, id: "tenants" },
