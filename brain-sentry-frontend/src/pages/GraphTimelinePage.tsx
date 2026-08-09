@@ -127,6 +127,9 @@ export default function GraphTimelinePage() {
     for (const n of nodes) m.set(n.id, n);
     return m;
   }, [nodes]);
+  const memoryCount = useMemo(() => new Set(nodes.map((node) => node.memoryId ?? node.id)).size, [nodes]);
+  const versionEdges = edges.filter((edge) => edge.type === "VERSION");
+  const supersedesEdges = edges.filter((edge) => edge.type === "SUPERSEDES");
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -174,12 +177,14 @@ export default function GraphTimelinePage() {
             </button>
           ))}
           <div className="ml-auto flex gap-4 text-[11px] text-muted-foreground">
-            <span><strong className="font-mono text-foreground">{nodes.length}</strong> {t("graphTimeline.memories")}</span>
-            <span><strong className="font-mono text-foreground">{edges.length}</strong> {t("graphTimeline.supersedes")}</span>
+            <span><strong className="font-mono text-foreground">{memoryCount}</strong> {t("graphTimeline.memories")}</span>
+            <span><strong className="font-mono text-foreground">{nodes.length}</strong> {t("graphTimeline.versions")}</span>
+            <span><strong className="font-mono text-foreground">{supersedesEdges.length}</strong> {t("graphTimeline.supersedes")}</span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-0.5 bg-red-500" />
               {t("graphTimeline.legendSupersedes")}
             </span>
+            {versionEdges.length > 0 && <span className="flex items-center gap-1"><span className="w-3 border-t border-dashed border-muted-foreground" />{t("graphTimeline.legendVersion")}</span>}
           </div>
         </div>
 
@@ -274,7 +279,7 @@ export default function GraphTimelinePage() {
                   );
                 })}
 
-                {/* SUPERSEDES arrows */}
+                {/* Version transitions and cross-memory supersessions */}
                 {edges.map((e, i) => {
                   const src = nodesById.get(e.source);
                   const tgt = nodesById.get(e.target);
@@ -284,15 +289,18 @@ export default function GraphTimelinePage() {
                   const x2 = xFor(tgt.recordedAt);
                   const y2 = yFor(tgt.category || "OTHER");
                   const midY = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.1;
+                  const isSupersedes = e.type === "SUPERSEDES";
                   return (
                     <path
                       key={`e${i}`}
                       d={`M${x1},${y1} Q${(x1 + x2) / 2},${midY} ${x2},${y2}`}
                       fill="none"
-                      stroke="#ef4444"
-                      strokeWidth={1.3}
-                      markerEnd="url(#sup-arrow)"
-                      opacity={0.7}
+                      stroke={isSupersedes ? "#ef4444" : "currentColor"}
+                      strokeWidth={isSupersedes ? 1.6 : 1}
+                      strokeDasharray={isSupersedes ? undefined : "4 3"}
+                      markerEnd={isSupersedes ? "url(#sup-arrow)" : undefined}
+                      className={isSupersedes ? undefined : "text-muted-foreground"}
+                      opacity={isSupersedes ? 0.8 : 0.55}
                     />
                   );
                 })}
@@ -339,11 +347,15 @@ export default function GraphTimelinePage() {
               <div className="space-y-3 text-xs">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {t("graphTimeline.stat.recorded")}
+                    {t("graphTimeline.stat.systemFrom")}
                   </p>
                   <p className="font-mono text-[11px]">
-                    {new Date(selected.recordedAt).toLocaleString(i18n.language)}
+                    {new Date(selected.systemFrom ?? selected.recordedAt).toLocaleString(i18n.language)}
                   </p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {selected.version != null && <span className="px-2 py-0.5 rounded bg-muted text-[10px]">v{selected.version}</span>}
+                  {selected.operation && <span className="px-2 py-0.5 rounded bg-muted text-[10px]">{t(`graphTimeline.operation.${selected.operation}`, selected.operation)}</span>}
                 </div>
                 {selected.validFrom && (
                   <div>
@@ -387,7 +399,7 @@ export default function GraphTimelinePage() {
                     size="sm"
                     variant="outline"
                     className="w-full"
-                    onClick={() => navigate(`/app/graph/ego?id=${encodeURIComponent(selected.id)}`)}
+                    onClick={() => navigate(`/app/graph/ego?id=${encodeURIComponent(selected.memoryId ?? selected.id)}`)}
                   >
                     <GitBranch className="h-3.5 w-3.5 mr-1.5" />
                     {t("graphTimeline.openEgo")}
@@ -396,7 +408,7 @@ export default function GraphTimelinePage() {
                     size="sm"
                     variant="ghost"
                     className="w-full"
-                    onClick={() => navigate(`/app/memories?id=${encodeURIComponent(selected.id)}`)}
+                    onClick={() => navigate(`/app/memories?id=${encodeURIComponent(selected.memoryId ?? selected.id)}`)}
                   >
                     <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                     {t("graphTimeline.openMemory")}

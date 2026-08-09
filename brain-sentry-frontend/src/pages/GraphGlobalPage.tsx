@@ -13,12 +13,15 @@ import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/toast";
 import { api, type GraphNode, type GraphEdge } from "@/lib/api/client";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface Graph {
   nodes: (GraphNode & { x?: number; y?: number })[];
   links: (GraphEdge & { source: string | GraphNode; target: string | GraphNode })[];
   communities: number;
   modularity: number;
+  projectionStatus?: string;
+  warnings: string[];
 }
 
 const CATEGORIES = [
@@ -28,7 +31,7 @@ const CATEGORIES = [
 const IMPORTANCES = ["CRITICAL", "IMPORTANT", "MINOR"];
 
 function colorForCommunity(id: number): string {
-  if (id < 0) return "#94a3b8"; // slate-400 for unassigned
+  if (id < 0) return "#f59e0b";
   // Golden angle distribution for visually distinct hues
   const hue = (id * 137.508) % 360;
   return `hsl(${hue.toFixed(0)}, 68%, 55%)`;
@@ -52,6 +55,7 @@ export default function GraphGlobalPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -79,6 +83,8 @@ export default function GraphGlobalPage() {
         links,
         communities: res.communities?.length ?? 0,
         modularity: res.modularity ?? 0,
+        projectionStatus: res.projectionStatus,
+        warnings: res.warnings ?? [],
       });
     } catch (err: any) {
       toast({
@@ -121,6 +127,33 @@ export default function GraphGlobalPage() {
   const handleNodeClick = useCallback((n: any) => {
     setSelected(n as GraphNode);
   }, []);
+
+  const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const radius = nodeSize(node) + 2;
+    ctx.globalAlpha = showFeedbackOverlay ? feedbackOpacity(node) : 1;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
+    ctx.fillStyle = colorForCommunity(node.communityId);
+    ctx.fill();
+    ctx.lineWidth = selected?.id === node.id ? 2.5 / globalScale : 1 / globalScale;
+    ctx.strokeStyle = resolvedTheme === "dark" ? "#f8fafc" : "#0f172a";
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    if (globalScale >= 0.75 && node.label) {
+      const label = String(node.label).slice(0, 34);
+      const fontSize = Math.max(11 / globalScale, 3);
+      ctx.font = `600 ${fontSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const y = node.y + radius + 3 / globalScale;
+      const metrics = ctx.measureText(label);
+      ctx.fillStyle = resolvedTheme === "dark" ? "rgba(15,23,42,.82)" : "rgba(255,255,255,.88)";
+      ctx.fillRect(node.x - metrics.width / 2 - 3 / globalScale, y - 1 / globalScale, metrics.width + 6 / globalScale, fontSize + 3 / globalScale);
+      ctx.fillStyle = resolvedTheme === "dark" ? "#f8fafc" : "#0f172a";
+      ctx.fillText(label, node.x, y);
+    }
+  }, [resolvedTheme, selected?.id, showFeedbackOverlay]);
 
   const openEgoView = () => {
     if (!selected) return;
@@ -212,6 +245,15 @@ export default function GraphGlobalPage() {
             <span><strong className="font-mono text-foreground">{stats.communities}</strong> {t("graphGlobal.communities")}</span>
             <span><strong className="font-mono text-foreground">{stats.modularity.toFixed(3)}</strong> {t("graphGlobal.modularity")}</span>
           </div>
+          {data?.projectionStatus && data.projectionStatus !== "ready" && (
+            <div role="status" className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+              {data.projectionStatus === "unavailable"
+                ? t("graphGlobal.projectionUnavailable")
+                : data.projectionStatus === "not_configured"
+                  ? t("graphGlobal.projectionNotConfigured")
+                  : t("graphGlobal.noRelationships")}
+            </div>
+          )}
         </div>
 
         {/* Graph canvas */}
@@ -244,24 +286,11 @@ export default function GraphGlobalPage() {
                 nodeColor={(n: any) => colorForCommunity(n.communityId)}
                 nodeVal={nodeSize as any}
                 nodeRelSize={4}
-                nodeCanvasObjectMode={() => (showFeedbackOverlay ? "replace" : undefined)}
-                nodeCanvasObject={
-                  showFeedbackOverlay
-                    ? (node: any, ctx: CanvasRenderingContext2D) => {
-                        const size = nodeSize(node);
-                        const op = feedbackOpacity(node);
-                        ctx.globalAlpha = op;
-                        ctx.beginPath();
-                        ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-                        ctx.fillStyle = colorForCommunity(node.communityId);
-                        ctx.fill();
-                        ctx.globalAlpha = 1;
-                      }
-                    : undefined
-                }
+                nodeCanvasObjectMode={() => "replace"}
+                nodeCanvasObject={paintNode}
                 linkSource="source"
                 linkTarget="target"
-                linkColor={(l: any) => (l.type === "SUPERSEDES" ? "rgba(239,68,68,0.5)" : "rgba(148,163,184,0.25)")}
+                linkColor={(l: any) => (l.type === "SUPERSEDES" ? "rgba(239,68,68,0.65)" : resolvedTheme === "dark" ? "rgba(203,213,225,0.48)" : "rgba(71,85,105,0.4)")}
                 linkWidth={(l: any) => (l.type === "SUPERSEDES" ? 1.5 : 0.7)}
                 linkDirectionalArrowLength={(l: any) => (l.type === "SUPERSEDES" ? 4 : 0)}
                 linkDirectionalArrowRelPos={1}

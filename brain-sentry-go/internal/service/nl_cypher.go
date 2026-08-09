@@ -13,9 +13,9 @@ import (
 
 // NLCypherService translates natural language queries to Cypher and executes them.
 type NLCypherService struct {
-	openRouter      *OpenRouterService
-	graphClient     *graphrepo.Client
-	maxRetries      int
+	openRouter  *OpenRouterService
+	graphClient *graphrepo.Client
+	maxRetries  int
 }
 
 // NewNLCypherService creates a new NLCypherService.
@@ -32,12 +32,12 @@ func NewNLCypherService(
 
 // NLQueryResult represents the result of a natural language graph query.
 type NLQueryResult struct {
-	Query          string         `json:"query"`
-	GeneratedCypher string        `json:"generatedCypher"`
-	Results        []map[string]any `json:"results"`
-	Attempts       int            `json:"attempts"`
-	Success        bool           `json:"success"`
-	ErrorMessage   string         `json:"errorMessage,omitempty"`
+	Query           string           `json:"query"`
+	GeneratedCypher string           `json:"generatedCypher"`
+	Results         []map[string]any `json:"results"`
+	Attempts        int              `json:"attempts"`
+	Success         bool             `json:"success"`
+	ErrorMessage    string           `json:"errorMessage,omitempty"`
 }
 
 // GraphSchema describes the graph structure for the LLM.
@@ -133,7 +133,8 @@ IMPORTANT RULES:
 Respond in JSON format only:
 {"cypher": "the generated Cypher query"}
 
-Question: %s`, graphSchema, graphrepo.EscapeCypher(tenantID), feedbackSection, question)
+	Question data: %s`, graphSchema, graphrepo.EscapeCypher(tenantID), feedbackSection,
+		frameLLMData("nl-cypher-question", "external-query", question))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a Cypher query generator for FalkorDB. Generate valid, efficient Cypher queries. Respond with valid JSON only."},

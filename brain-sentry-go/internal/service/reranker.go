@@ -130,7 +130,7 @@ func (r *LLMReranker) Rerank(ctx context.Context, query string, memories []domai
 		if summary == "" {
 			summary = truncate(m.Content, 200)
 		}
-		candidates += fmt.Sprintf("[%d] %s\n", i, summary)
+		candidates += fmt.Sprintf("[%d] %s\n", i, frameLLMData(m.ID, "stored-memory", summary))
 	}
 
 	prompt := fmt.Sprintf(`Given a query and candidate memories, score each memory's relevance from 0 to 1.
@@ -141,7 +141,8 @@ Candidates:
 %s
 
 Respond in JSON format only:
-{"scores": [{"index": 0, "score": 0.9, "reason": "brief reason"}, ...]}`, query, candidates)
+{"scores": [{"index": 0, "score": 0.9, "reason": "brief reason"}, ...]}`,
+		frameLLMData("rerank-query", "external-query", query), candidates)
 
 	response, err := r.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a relevance scoring system. Score memories by their relevance to the query. Respond with valid JSON only."},

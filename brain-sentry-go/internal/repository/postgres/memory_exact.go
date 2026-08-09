@@ -128,27 +128,39 @@ func (r *MemoryRepository) BatchExpire(ctx context.Context, ids []string, source
 	query := fmt.Sprintf(`UPDATE memories
 		SET valid_to = NOW(),
 		    updated_at = NOW(),
+		    version = version + 1,
 		    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('expiredReason', $%d::text, 'expiredAt', NOW())
 		WHERE %s
-		RETURNING id`, len(args), where.String())
+		RETURNING %s`, len(args), where.String(), memoryColumns)
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("beginning batch expire: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("batch expire: %w", err)
 	}
-	defer rows.Close()
-
-	result := &BatchExpireResult{IDs: []string{}}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scanning expired id: %w", err)
-		}
-		result.IDs = append(result.IDs, id)
-	}
-	if err := rows.Err(); err != nil {
+	memories, err := scanMemories(rows)
+	rows.Close()
+	if err != nil {
 		return nil, err
 	}
+	result := &BatchExpireResult{IDs: make([]string, 0, len(memories))}
+	for i := range memories {
+		memories[i].Tags, err = loadTagsTx(ctx, tx, memories[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("loading tags for expired memory: %w", err)
+		}
+		if err := r.recordCanonicalMutation(ctx, tx, &memories[i], "update", reason); err != nil {
+			return nil, err
+		}
+		result.IDs = append(result.IDs, memories[i].ID)
+	}
 	result.Expired = int64(len(result.IDs))
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("committing batch expire: %w", err)
+	}
 	return result, nil
 }

@@ -282,7 +282,7 @@ Respond in JSON format only:
 }
 
 Session transcript:
-%s`, truncate(transcript, 4000))
+	%s`, frameLLMData("session-transcript", "external-session", truncate(transcript, 4000)))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a session analyst. Extract decisions from development sessions. Respond with valid JSON only."},
@@ -316,7 +316,7 @@ Maximum %d insights. Respond in JSON format only:
 }
 
 Session transcript:
-%s`, maxInsights, truncate(transcript, 4000))
+	%s`, maxInsights, frameLLMData("session-transcript", "external-session", truncate(transcript, 4000)))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a session analyst. Extract valuable insights from development sessions. Respond with valid JSON only."},
@@ -352,7 +352,7 @@ For each failure, suggest a resolution and prevention strategy. Respond in JSON 
 }
 
 Session transcript:
-%s`, truncate(transcript, 4000))
+	%s`, frameLLMData("session-transcript", "external-session", truncate(transcript, 4000)))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a failure analyst. Extract errors and suggest preventions. Respond with valid JSON only."},

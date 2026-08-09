@@ -61,7 +61,8 @@ func (s *MemoryCompressionService) Compress(ctx context.Context, content string)
 		return s.fallbackCompress(content), nil
 	}
 
-	userPrompt := fmt.Sprintf("Content to compress:\n\n%s", truncateForLLM(content, 4000))
+	framedContent := frameLLMData("memory-compression", "external-memory", truncateForLLM(content, 4000))
+	userPrompt := fmt.Sprintf("Extract structured memory data from the framed content:\n\n%s", framedContent)
 
 	var lastErr error
 	for attempt := 0; attempt <= s.maxRetries; attempt++ {
@@ -81,8 +82,8 @@ func (s *MemoryCompressionService) Compress(ctx context.Context, content string)
 				"error", err,
 			)
 			// Self-correcting: retry with feedback
-			userPrompt = fmt.Sprintf("Your previous response was invalid JSON. Error: %s\n\nPlease try again with valid JSON.\n\nContent to compress:\n\n%s",
-				err.Error(), truncateForLLM(content, 3500))
+			userPrompt = fmt.Sprintf("Your previous response was invalid JSON. Error: %s\n\nPlease try again with valid JSON.\n\n%s",
+				err.Error(), frameLLMData("memory-compression", "external-memory", truncateForLLM(content, 3500)))
 			lastErr = err
 			continue
 		}
@@ -93,8 +94,8 @@ func (s *MemoryCompressionService) Compress(ctx context.Context, content string)
 				"attempt", attempt+1,
 				"error", err,
 			)
-			userPrompt = fmt.Sprintf("Your response had validation errors: %s\n\nPlease fix and try again.\n\nContent to compress:\n\n%s",
-				err.Error(), truncateForLLM(content, 3500))
+			userPrompt = fmt.Sprintf("Your response had validation errors: %s\n\nPlease fix and try again.\n\n%s",
+				err.Error(), frameLLMData("memory-compression", "external-memory", truncateForLLM(content, 3500)))
 			lastErr = err
 			continue
 		}

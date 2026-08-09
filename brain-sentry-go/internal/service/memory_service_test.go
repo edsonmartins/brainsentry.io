@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -491,10 +492,30 @@ type batchExpireCall struct {
 type fakeMemoryGraphRepository struct {
 	ids    []string
 	scores []float64
+	saved  []domain.Memory
+	purged []string
 }
 
 func (f *fakeMemoryGraphRepository) VectorSearch(_ context.Context, _ []float32, _ int, _ string) ([]string, []float64, error) {
 	return f.ids, f.scores, nil
+}
+
+func (f *fakeMemoryGraphRepository) SaveToGraph(_ context.Context, m *domain.Memory) error {
+	f.saved = append(f.saved, *m)
+	return nil
+}
+
+func (f *fakeMemoryGraphRepository) CreateTagRelationships(_ context.Context, _ *domain.Memory) error {
+	return nil
+}
+
+func (f *fakeMemoryGraphRepository) PurgeMemoryNodes(_ context.Context, _ string, ids []string) error {
+	f.purged = append(f.purged, ids...)
+	return nil
+}
+
+func (f *fakeMemoryGraphRepository) FindRelated(_ context.Context, _ string, _ int, _ string) ([]string, error) {
+	return nil, nil
 }
 
 type fakeEmbeddingGenerator struct {
@@ -935,6 +956,72 @@ func TestCreateMemory_SourceReferenceSkipsDedupEntirely(t *testing.T) {
 	}
 	if len(repo.byID) != 2 {
 		t.Errorf("origens distintas devem produzir 2 memorias, tem %d", len(repo.byID))
+	}
+}
+
+func TestCreateMemory_DiscardsChainOfThoughtAndSyncsGraph(t *testing.T) {
+	repo := &fakeMemoryRepository{}
+	graph := &fakeMemoryGraphRepository{}
+	svc := &MemoryService{memoryRepo: repo, memoryGraphRepo: graph}
+
+	created, err := svc.CreateMemory(context.Background(), dto.CreateMemoryRequest{
+		Content: "public fact <THOUGHT>private reasoning</THOUGHT>",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if strings.Contains(created.Content, "private reasoning") || strings.Contains(string(created.Metadata), "private reasoning") {
+		t.Fatalf("chain-of-thought persisted: content=%q metadata=%s", created.Content, created.Metadata)
+	}
+	if created.ID == "" {
+		t.Fatal("service must assign an ID before persistence")
+	}
+	if len(graph.saved) != 1 || graph.saved[0].ID != created.ID {
+		t.Fatalf("graph projection not synchronized: %+v", graph.saved)
+	}
+}
+
+func TestDeleteMemoryPurgesGraphProjection(t *testing.T) {
+	repo := &fakeMemoryRepository{byID: map[string]*domain.Memory{"m1": {ID: "m1"}}}
+	graph := &fakeMemoryGraphRepository{}
+	svc := &MemoryService{memoryRepo: repo, memoryGraphRepo: graph}
+
+	if err := svc.DeleteMemory(context.Background(), "m1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if !reflect.DeepEqual(graph.purged, []string{"m1"}) {
+		t.Fatalf("purged=%v", graph.purged)
+	}
+}
+
+func TestUpdateMemoryStripsSecretsThoughtsAndRefreshesDerivedState(t *testing.T) {
+	originalHash := SimHashToHex(ComputeSimHash("old content"))
+	repo := &fakeMemoryRepository{byID: map[string]*domain.Memory{
+		"m1": {ID: "m1", Content: "old content", SimHash: originalHash, Version: 1},
+	}}
+	graph := &fakeMemoryGraphRepository{}
+	svc := (&MemoryService{
+		memoryRepo: repo, memoryGraphRepo: graph, embeddingService: fakeEmbeddingGenerator{},
+	}).WithPrivacyStripper(NewPrivacyStrippingService())
+
+	updated, err := svc.UpdateMemory(context.Background(), "m1", dto.UpdateMemoryRequest{
+		Content:     "public fact <THOUGHT>private reasoning</THOUGHT> export API_KEY=sk-abc123def456",
+		CodeExample: "const token = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890'",
+	})
+	if err != nil {
+		t.Fatalf("UpdateMemory() error = %v", err)
+	}
+	combined := updated.Content + updated.CodeExample + string(updated.Metadata)
+	for _, forbidden := range []string{"private reasoning", "sk-abc123def456", "ghp_abcdefghijklmnopqrstuvwxyz1234567890"} {
+		if strings.Contains(combined, forbidden) {
+			t.Fatalf("sensitive update data persisted: %q", forbidden)
+		}
+	}
+	if updated.SimHash == originalHash || len(updated.Embedding) == 0 {
+		t.Fatalf("derived state was not refreshed: simHash=%q embedding=%v", updated.SimHash, updated.Embedding)
+	}
+	if len(graph.saved) != 1 || graph.saved[0].ID != "m1" {
+		t.Fatalf("updated graph projection = %+v", graph.saved)
 	}
 }
 

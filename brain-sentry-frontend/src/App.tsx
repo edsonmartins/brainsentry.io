@@ -1,44 +1,54 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { ToastProvider, ToastProvider as ToastProviderComp } from "./components/ui/toast";
+import { ToastProvider as ToastProviderComp } from "./components/ui/toast";
 import { ErrorBoundary } from "./components/ui/error-boundary";
 import { AdminLayout } from "./components/layout/AdminLayout";
-import { LoginPage } from "./pages/LoginPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { SearchPage } from "./pages/SearchPage";
-import { RelationshipsPage } from "./pages/RelationshipsPage";
-import { AuditPage } from "./pages/AuditPage";
-import { ConfigurationPage } from "./pages/ConfigurationPage";
-import { UsersPage } from "./pages/UsersPage";
-import { TenantsPage } from "./pages/TenantsPage";
-import MemoryAdminPage from "./pages/MemoryAdminPage";
-import AnalyticsAdminPage from "./pages/AnalyticsAdminPage";
-import ProfilePage from "./pages/ProfilePage";
-import PlaygroundPage from "./pages/PlaygroundPage";
-import ConnectorsPage from "./pages/ConnectorsPage";
-import NotesPage from "./pages/NotesPage";
-import TasksPage from "./pages/TasksPage";
-import TimelinePage from "./pages/TimelinePage";
-import ConsolePage from "./pages/ConsolePage";
-import AgentTracesPage from "./pages/AgentTracesPage";
-import ExtractionLabPage from "./pages/ExtractionLabPage";
-import OntologyPage from "./pages/OntologyPage";
-import SessionCachePage from "./pages/SessionCachePage";
-import ActionsPage from "./pages/ActionsPage";
-import MeshPage from "./pages/MeshPage";
-import BatchSearchPage from "./pages/BatchSearchPage";
-import DecisionsPage from "./pages/DecisionsPage";
-import PoliciesPage from "./pages/PoliciesPage";
-import EventsPage from "./pages/EventsPage";
-import ReasoningPage from "./pages/ReasoningPage";
-import ProvenancePage from "./pages/ProvenancePage";
-import GraphGlobalPage from "./pages/GraphGlobalPage";
-import GraphEgoPage from "./pages/GraphEgoPage";
-import GraphTimelinePage from "./pages/GraphTimelinePage";
-import DiagnosticsPage from "./pages/DiagnosticsPage";
-import ModelsPage from "./pages/ModelsPage";
-import { LandingPage } from "./landing/pages/LandingPage";
+
+const LoginPage = lazy(() => import("./pages/LoginPage").then(({ LoginPage }) => ({ default: LoginPage })));
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then(({ DashboardPage }) => ({ default: DashboardPage })));
+const SearchPage = lazy(() => import("./pages/SearchPage").then(({ SearchPage }) => ({ default: SearchPage })));
+const RelationshipsPage = lazy(() => import("./pages/RelationshipsPage").then(({ RelationshipsPage }) => ({ default: RelationshipsPage })));
+const AuditPage = lazy(() => import("./pages/AuditPage").then(({ AuditPage }) => ({ default: AuditPage })));
+const ConfigurationPage = lazy(() => import("./pages/ConfigurationPage").then(({ ConfigurationPage }) => ({ default: ConfigurationPage })));
+const UsersPage = lazy(() => import("./pages/UsersPage").then(({ UsersPage }) => ({ default: UsersPage })));
+const TenantsPage = lazy(() => import("./pages/TenantsPage").then(({ TenantsPage }) => ({ default: TenantsPage })));
+const MemoryAdminPage = lazy(() => import("./pages/MemoryAdminPage"));
+const AnalyticsAdminPage = lazy(() => import("./pages/AnalyticsAdminPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const PlaygroundPage = lazy(() => import("./pages/PlaygroundPage"));
+const ConnectorsPage = lazy(() => import("./pages/ConnectorsPage"));
+const NotesPage = lazy(() => import("./pages/NotesPage"));
+const TasksPage = lazy(() => import("./pages/TasksPage"));
+const TimelinePage = lazy(() => import("./pages/TimelinePage"));
+const ConsolePage = lazy(() => import("./pages/ConsolePage"));
+const AgentTracesPage = lazy(() => import("./pages/AgentTracesPage"));
+const ExtractionLabPage = lazy(() => import("./pages/ExtractionLabPage"));
+const OntologyPage = lazy(() => import("./pages/OntologyPage"));
+const SessionCachePage = lazy(() => import("./pages/SessionCachePage"));
+const ActionsPage = lazy(() => import("./pages/ActionsPage"));
+const MeshPage = lazy(() => import("./pages/MeshPage"));
+const BatchSearchPage = lazy(() => import("./pages/BatchSearchPage"));
+const DecisionsPage = lazy(() => import("./pages/DecisionsPage"));
+const PoliciesPage = lazy(() => import("./pages/PoliciesPage"));
+const EventsPage = lazy(() => import("./pages/EventsPage"));
+const ReasoningPage = lazy(() => import("./pages/ReasoningPage"));
+const ProvenancePage = lazy(() => import("./pages/ProvenancePage"));
+const GraphGlobalPage = lazy(() => import("./pages/GraphGlobalPage"));
+const GraphEgoPage = lazy(() => import("./pages/GraphEgoPage"));
+const GraphTimelinePage = lazy(() => import("./pages/GraphTimelinePage"));
+const DiagnosticsPage = lazy(() => import("./pages/DiagnosticsPage"));
+const ModelsPage = lazy(() => import("./pages/ModelsPage"));
+const LandingPage = lazy(() => import("./landing/pages/LandingPage").then(({ LandingPage }) => ({ default: LandingPage })));
+
+function RouteLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" aria-busy="true">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden="true" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -63,6 +73,7 @@ function App() {
       <ThemeProvider>
         <ToastProviderComp>
           <AuthProvider>
+            <Suspense fallback={<RouteLoading />}>
             <Routes>
               {/* Landing Page - Public */}
               <Route path="/" element={<LandingPage />} />
@@ -121,6 +132,7 @@ function App() {
               {/* Catch all - redirect to landing */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
           </AuthProvider>
         </ToastProviderComp>
       </ThemeProvider>

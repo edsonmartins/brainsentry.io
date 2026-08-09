@@ -1,11 +1,13 @@
 # Brain Sentry Go
 
-AI Agent Memory System backend written in Go. Provides persistent, multi-tenant memory for AI agents with cognitive-inspired features: semantic search, knowledge graphs, temporal decay, spreading activation, automatic reflection, fact reconciliation, and cross-session learning.
+AI Agent Memory System backend written in Go. Provides persistent, multi-tenant memory for AI agents with cognitive-inspired features: hybrid retrieval, knowledge graphs, temporal decay, spreading activation, automatic reflection, fact reconciliation, and cross-session learning.
+
+PostgreSQL is the canonical system of record. FalkorDB, Redis, embeddings and graph communities are derived or rebuildable data. For the current functional contract and known limits, see [PRODUCT_CAPABILITIES.md](../documents/PRODUCT_CAPABILITIES.md).
 
 ## Prerequisites
 
 - **Go** 1.25+
-- **PostgreSQL** 16+ with pgvector extension
+- **PostgreSQL** 16+
 - **Redis** 7+ (for caching and async task scheduling)
 - **FalkorDB** (optional, for knowledge graph features)
 - **Docker** (optional, for containerized setup)
@@ -151,7 +153,7 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 - Paginated listing with filters by category, importance, tags
 
 ### Search & Retrieval
-- **Semantic search** via pgvector embeddings (cosine similarity)
+- **Semantic search** via FalkorDB vector index, with PostgreSQL full-text fallback
 - **Full-text search** via PostgreSQL tsvector/tsquery
 - **Composite hybrid scoring**: `sigmoid(α*sim_boost + β*token_overlap + γ*graph_proximity + δ*recency + ε*tag_match + ζ*importance)` with explainable score traces
 - **Intent-aware retrieval planning** with reflection loops (multi-round gap-filling queries, 80% coverage target)
@@ -171,7 +173,7 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 - **8 memory types**: Semantic, Episodic, Procedural, Personality, Preference, Thread, Task, Emotion
 - **Automatic classification** via pattern-based classifier (keywords + regex + category/tag heuristics)
 - **Temporal decay per type**: personality (0.001/day) to thread (0.05/day), with formula `baseScore × exp(-rate×age) × importanceFactor × log(frequency+1) × emotionalFactor`
-- **Temporal supersession**: `valid_from`/`valid_to` fields, auto-supersede contradictory facts
+- **Temporal supersession**: `valid_from`/`valid_to` fields and explicit supersession/reconciliation flows; lexical similarity alone never proves contradiction
 - **Emotional weight** (-1 to +1) influencing decay and search relevance
 - **Automatic reflection loop**: SimHash clustering → saliency scoring → LLM synthesis of higher-order insights
 - **LLM fact reconciliation**: extract atomic facts → search similar → LLM decides ADD/UPDATE/DELETE/NONE per fact
@@ -232,7 +234,7 @@ Configuration is loaded from `config.yaml` with environment variable overrides:
 - **Query Expansion** — LLM generates 3-5 query reformulations for better search recall
 - **RRF Scoring** — Reciprocal Rank Fusion (`1/(k+rank)`, k=60) combining vector, text, and graph streams
 - **Session Diversity** — Max 3 results per session to avoid result skew
-- **Auto-Forget** — TTL expiry + contradiction detection (Jaccard >0.9) + low-value cleanup
+- **Auto-Forget** — TTL expiry + conservative exact-duplicate supersession (opt-in) + low-value cleanup protected by usage/feedback signals
 - **Cascading Staleness** — BFS propagation of staleness through knowledge graph when memories are superseded
 - **Sliding Window Enrichment** — Entity resolution (pronouns → names), preference extraction, context bridges
 - **Fallback Chain Provider** — Sequential LLM provider fallback with per-provider circuit breakers

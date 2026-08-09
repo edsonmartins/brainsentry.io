@@ -87,6 +87,34 @@ func TestEmbedded_TenantIsolation(t *testing.T) {
 	}
 }
 
+func TestEmbedded_CreateIgnoresPayloadTenant(t *testing.T) {
+	s, _ := tmpEmbedded(t)
+	ctx := tenant.WithTenant(context.Background(), "owner")
+	created, err := s.Create(ctx, MemoryRecord{TenantID: "attacker-selected", Content: "private"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.TenantID != "owner" {
+		t.Fatalf("tenant came from payload: %q", created.TenantID)
+	}
+}
+
+func TestEmbedded_DeleteHonorsTenantScope(t *testing.T) {
+	s, _ := tmpEmbedded(t)
+	owner := tenant.WithTenant(context.Background(), "owner")
+	other := tenant.WithTenant(context.Background(), "other")
+	created, err := s.Create(owner, MemoryRecord{Content: "private"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.Delete(other, created.ID); err != nil {
+		t.Fatalf("cross-tenant delete should be an idempotent no-op: %v", err)
+	}
+	if _, err := s.Get(owner, created.ID); err != nil {
+		t.Fatalf("cross-tenant delete removed owner row: %v", err)
+	}
+}
+
 func TestEmbedded_ListNewestFirst(t *testing.T) {
 	s, _ := tmpEmbedded(t)
 	ctx := tenant.WithTenant(context.Background(), "t1")

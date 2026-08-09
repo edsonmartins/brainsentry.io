@@ -152,7 +152,7 @@ IMPORTANT RULES for the summary:
 }
 
 Content:
-%s`, content)
+	%s`, frameLLMData("importance-input", "external-content", content))
 
 	response, err := s.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a content classifier. Always respond with valid JSON only."},
@@ -191,9 +191,11 @@ func (s *OpenRouterService) AnalyzeRelevance(ctx context.Context, prompt string,
   "reasoning": "brief explanation"
 }`
 
-	userPrompt := fmt.Sprintf("User prompt: %s\n\nMemory summaries:\n", prompt)
-	for i, s := range memorySummaries {
-		userPrompt += fmt.Sprintf("%d. %s\n", i+1, s)
+	userPrompt := fmt.Sprintf("User prompt data: %s\n\nMemory summaries:\n",
+		frameLLMData("relevance-prompt", "external-prompt", prompt))
+	for i, summary := range memorySummaries {
+		userPrompt += fmt.Sprintf("%d. %s\n", i+1,
+			frameLLMData(fmt.Sprintf("summary-%d", i+1), "stored-memory", summary))
 	}
 
 	response, err := s.Chat(ctx, []ChatMessage{
@@ -228,8 +230,8 @@ type ExtractedEntity struct {
 // ExtractedRelationship represents a relationship between extracted entities.
 type ExtractedRelationship struct {
 	Source     string            `json:"source"`
-	Target    string            `json:"target"`
-	Type      string            `json:"type"`
+	Target     string            `json:"target"`
+	Type       string            `json:"type"`
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
@@ -248,7 +250,7 @@ IMPORTANT RULES:
 }
 
 Text:
-%s`, content)
+	%s`, frameLLMData("entity-input", "external-content", content))
 
 	response, err := s.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are an entity extraction system. Always respond with valid JSON only."},

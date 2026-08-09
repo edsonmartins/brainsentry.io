@@ -105,7 +105,7 @@
 `brain-sentry-go/internal/repository/postgres/memory.go`
 > `MemoryRepository`. Métodos importantes: `FullTextSearch`,
 > `FindByRecordedRange`, `IncrementInjectionCount`. Usa pgvector pra
-> embeddings (cosine). Schema fica em `cmd/server/migrations/`.
+> embeddings (cosine). Schema fica em `internal/repository/postgres/migrations/`.
 
 `brain-sentry-go/internal/store/`
 > Interface `MemoryStore` (Create/Get/List/Search/Delete/Close) com 2
@@ -233,7 +233,7 @@
 ## Onde estão as coisas
 
 - Specs OpenAPI/swagger: `brain-sentry-go/docs/swagger.go`
-- Migrations SQL: `brain-sentry-go/cmd/server/migrations/`
+- Migrations SQL: `brain-sentry-go/internal/repository/postgres/migrations/`
 - Seeds (demo user etc.): `brain-sentry-go/cmd/cli/`
 - Config: `brain-sentry-go/config.yaml`
 - E2E helpers: `brain-sentry-frontend/e2e/{fixtures,helpers,pages}/`

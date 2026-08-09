@@ -13,14 +13,14 @@ import (
 // CascadeEntityExtractionService performs entity extraction in three sequential
 // LLM passes for better precision vs the single-pass ExtractEntities:
 //
-//   1. Extract nodes (entities) — focused prompt, only names + types
-//   2. Extract edge triplets — candidate (source, target) pairs from node list
-//   3. Extract relationship names — label each edge with a canonical verb
+//  1. Extract nodes (entities) — focused prompt, only names + types
+//  2. Extract edge triplets — candidate (source, target) pairs from node list
+//  3. Extract relationship names — label each edge with a canonical verb
 //
 // Smaller, focused prompts reduce hallucination at the cost of ~3x LLM calls.
 type CascadeEntityExtractionService struct {
-	llm       LLMProvider
-	coref     *CoreferenceService // optional; runs before Pass 1 to normalise aliases
+	llm   LLMProvider
+	coref *CoreferenceService // optional; runs before Pass 1 to normalise aliases
 }
 
 // NewCascadeEntityExtractionService creates a new CascadeEntityExtractionService.
@@ -193,7 +193,7 @@ func (s *CascadeEntityExtractionService) Extract(ctx context.Context, content st
 }
 
 func (s *CascadeEntityExtractionService) extractNodes(ctx context.Context, content string) ([]ExtractedEntity, error) {
-	userPrompt := fmt.Sprintf("Text:\n\n%s", truncateForLLM(content, 4000))
+	userPrompt := fmt.Sprintf("Text data:\n\n%s", frameLLMData("cascade-nodes", "external-content", truncateForLLM(content, 4000)))
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: cascadeNodesPrompt},
@@ -243,8 +243,8 @@ func (s *CascadeEntityExtractionService) extractEdges(ctx context.Context, conte
 	}
 
 	userPrompt := fmt.Sprintf("Entities: %s\n\nText:\n\n%s",
-		entityList.String(),
-		truncateForLLM(content, 3500),
+		frameLLMData("cascade-entities", "extracted-data", entityList.String()),
+		frameLLMData("cascade-edges", "external-content", truncateForLLM(content, 3500)),
 	)
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
@@ -286,7 +286,9 @@ func (s *CascadeEntityExtractionService) extractEdges(ctx context.Context, conte
 
 func (s *CascadeEntityExtractionService) extractRelationshipName(ctx context.Context, content, source, target string) (string, error) {
 	userPrompt := fmt.Sprintf("Source: %s\nTarget: %s\n\nText:\n\n%s",
-		source, target, truncateForLLM(content, 2000))
+		frameLLMData("relationship-source", "extracted-data", source),
+		frameLLMData("relationship-target", "extracted-data", target),
+		frameLLMData("relationship-content", "external-content", truncateForLLM(content, 2000)))
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: cascadeRelationshipPrompt},

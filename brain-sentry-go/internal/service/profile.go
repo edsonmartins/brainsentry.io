@@ -171,7 +171,8 @@ func (s *ProfileService) buildStaticProfile(ctx context.Context, memories []doma
 		if summary == "" {
 			summary = truncate(m.Content, 200)
 		}
-		memorySummaries += fmt.Sprintf("[%s/%s] %s\n", m.MemoryType, m.Category, summary)
+		memorySummaries += fmt.Sprintf("[%s/%s] %s\n", m.MemoryType, m.Category,
+			frameLLMData(m.ID, "stored-memory", summary))
 	}
 
 	prompt := fmt.Sprintf(`Based on the following memories, generate a user profile. Extract:

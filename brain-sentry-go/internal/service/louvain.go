@@ -12,9 +12,9 @@ import (
 // LouvainService detects communities in the memory graph using the Louvain method.
 // Communities represent clusters of densely connected memories.
 type LouvainService struct {
-	graphClient    *graphrepo.Client
-	maxIterations  int
-	minModularity  float64 // stop if modularity gain < this
+	graphClient   *graphrepo.Client
+	maxIterations int
+	minModularity float64 // stop if modularity gain < this
 }
 
 // NewLouvainService creates a new LouvainService.
@@ -36,18 +36,27 @@ type Community struct {
 
 // CommunityResult represents the output of community detection.
 type CommunityResult struct {
-	Communities    []Community `json:"communities"`
-	TotalNodes     int        `json:"totalNodes"`
-	TotalEdges     int        `json:"totalEdges"`
-	Modularity     float64    `json:"modularity"`
-	Iterations     int        `json:"iterations"`
+	Communities []Community `json:"communities"`
+	TotalNodes  int         `json:"totalNodes"`
+	TotalEdges  int         `json:"totalEdges"`
+	Modularity  float64     `json:"modularity"`
+	Iterations  int         `json:"iterations"`
 }
 
 // graphEdge represents an edge in the graph for Louvain computation.
 type graphEdge struct {
-	From     string
-	To       string
-	Weight   float64
+	From   string
+	To     string
+	Weight float64
+}
+
+// CommunityLink is the backend-independent weighted edge consumed by the
+// community detector. It lets API views analyse the exact filtered graph
+// being displayed, including canonical PostgreSQL relationships.
+type CommunityLink struct {
+	From   string
+	To     string
+	Weight float64
 }
 
 // DetectCommunities runs Louvain community detection on the memory graph for a tenant.
@@ -62,8 +71,17 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 		return nil, fmt.Errorf("fetching edges: %w", err)
 	}
 
+	links := make([]CommunityLink, 0, len(edges))
+	for _, edge := range edges {
+		links = append(links, CommunityLink{From: edge.From, To: edge.To, Weight: edge.Weight})
+	}
+	return s.DetectCommunitiesFromLinks(links), nil
+}
+
+// DetectCommunitiesFromLinks analyses exactly the supplied graph.
+func (s *LouvainService) DetectCommunitiesFromLinks(edges []CommunityLink) *CommunityResult {
 	if len(edges) == 0 {
-		return &CommunityResult{}, nil
+		return &CommunityResult{}
 	}
 
 	// Build adjacency structure
@@ -101,7 +119,7 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 	}
 
 	if totalWeight == 0 {
-		return &CommunityResult{TotalNodes: n, TotalEdges: len(edges)}, nil
+		return &CommunityResult{TotalNodes: n, TotalEdges: len(edges)}
 	}
 
 	// Compute node strengths (sum of edge weights)
@@ -121,7 +139,10 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 	m2 := 2.0 * totalWeight
 	bestModularity := computeModularity(community, adj, strength, m2, n)
 
-	// Phase 1: Local moves
+	// Phase 1: local moves. Evaluate the real modularity for every candidate
+	// community. This is deliberately exact: the previous shortcut omitted
+	// non-adjacent and diagonal pairs and could report impossible values such
+	// as -9 for a graph with no visible communities.
 	var iterations int
 	for iter := 0; iter < s.maxIterations; iter++ {
 		iterations++
@@ -129,44 +150,26 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 
 		for i := 0; i < n; i++ {
 			currentComm := community[i]
-
-			// Compute neighbor communities and weights to them
-			commWeights := make(map[int]float64)
+			candidateCommunities := make(map[int]bool)
 			for _, nb := range adj[i] {
-				commWeights[community[nb.node]] += nb.weight
+				candidateCommunities[community[nb.node]] = true
 			}
-
-			// Remove node from its community
 			bestComm := currentComm
-			bestGain := 0.0
-
-			ki := strength[i]
-
-			// Sum of weights inside current community (excluding node i)
-			sumIn := communityInternalWeight(currentComm, community, adj, n) - 2*commWeights[currentComm]
-			sumTot := communityTotalStrength(currentComm, community, strength, n) - ki
-
-			// Modularity loss from removing i from current community
-			removeLoss := commWeights[currentComm]/m2 - (sumTot*ki)/(m2*m2)
-
-			for c, kiC := range commWeights {
+			currentModularity := computeModularity(community, adj, strength, m2, n)
+			bestCandidateModularity := currentModularity
+			for c := range candidateCommunities {
 				if c == currentComm {
 					continue
 				}
-				cSumTot := communityTotalStrength(c, community, strength, n)
-
-				// Modularity gain from adding i to community c
-				addGain := kiC/m2 - (cSumTot*ki)/(m2*m2)
-
-				deltaQ := addGain - removeLoss
-				if deltaQ > bestGain {
-					bestGain = deltaQ
+				community[i] = c
+				candidateModularity := computeModularity(community, adj, strength, m2, n)
+				if candidateModularity > bestCandidateModularity {
+					bestCandidateModularity = candidateModularity
 					bestComm = c
 				}
-				_ = sumIn // used for clarity
 			}
-
-			if bestComm != currentComm && bestGain > s.minModularity {
+			community[i] = currentComm
+			if bestComm != currentComm && bestCandidateModularity-currentModularity > s.minModularity {
 				community[i] = bestComm
 				improved = true
 			}
@@ -176,11 +179,7 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 			break
 		}
 
-		newMod := computeModularity(community, adj, strength, m2, n)
-		if newMod-bestModularity < s.minModularity {
-			break
-		}
-		bestModularity = newMod
+		bestModularity = computeModularity(community, adj, strength, m2, n)
 	}
 
 	// Build result communities
@@ -224,7 +223,7 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 		"iterations", iterations,
 	)
 
-	return result, nil
+	return result
 }
 
 type weightedNeighbor struct {
@@ -234,9 +233,10 @@ type weightedNeighbor struct {
 
 func (s *LouvainService) fetchEdges(ctx context.Context, tenantID string) ([]graphEdge, error) {
 	cypher := fmt.Sprintf(`MATCH (a:Memory)-[r:RELATED_TO]->(b:Memory)
-WHERE a.tenantId = '%s'
+WHERE a.tenantId = '%s' AND b.tenantId = '%s'
 RETURN a.id as fromId, b.id as toId, coalesce(r.strength, 1) as weight
 LIMIT 1000`,
+		graphrepo.EscapeCypher(tenantID),
 		graphrepo.EscapeCypher(tenantID),
 	)
 
@@ -257,22 +257,27 @@ LIMIT 1000`,
 	return edges, nil
 }
 
-// computeModularity calculates Q = (1/2m) * sum_ij[ A_ij - ki*kj/(2m) ] * delta(ci,cj)
+// computeModularity calculates Q = sum_c[L_c/m - (K_c/2m)^2].
 func computeModularity(community []int, adj [][]weightedNeighbor, strength []float64, m2 float64, n int) float64 {
 	if m2 == 0 {
 		return 0
 	}
 
-	q := 0.0
+	totalStrength := make(map[int]float64)
+	internalDirectedWeight := make(map[int]float64)
 	for i := 0; i < n; i++ {
+		totalStrength[community[i]] += strength[i]
 		for _, nb := range adj[i] {
-			j := nb.node
-			if community[i] == community[j] {
-				q += nb.weight - (strength[i]*strength[j])/m2
+			if community[i] == community[nb.node] {
+				internalDirectedWeight[community[i]] += nb.weight
 			}
 		}
 	}
-	return q / m2
+	q := 0.0
+	for c, k := range totalStrength {
+		q += internalDirectedWeight[c]/m2 - math.Pow(k/m2, 2)
+	}
+	return q
 }
 
 func communityTotalStrength(comm int, community []int, strength []float64, n int) float64 {

@@ -13,7 +13,7 @@ import (
 
 // EntityGraphRepository handles entity and relationship storage in FalkorDB.
 type EntityGraphRepository struct {
-	client *Client
+	client GraphBackend
 }
 
 // NewEntityGraphRepository creates a new EntityGraphRepository.
@@ -29,9 +29,9 @@ func (r *EntityGraphRepository) StoreEntity(ctx context.Context, name, entityTyp
 	if len(properties) > 0 {
 		parts := make([]string, 0, len(properties))
 		for k, v := range properties {
-			parts = append(parts, fmt.Sprintf("e.%s = '%s'", EscapeCypher(k), EscapeCypher(v)))
+			parts = append(parts, fmt.Sprintf("e.%s = '%s'", EscapeCypherIdentifier(k), EscapeCypher(v)))
 		}
-		propsStr = ", " + strings.Join(parts, ", ")
+		propsStr = " SET " + strings.Join(parts, ", ")
 	}
 
 	label := EscapeCypherIdentifier(entityType)
@@ -43,8 +43,7 @@ func (r *EntityGraphRepository) StoreEntity(ctx context.Context, name, entityTyp
 		tenantId: '%s',
 		sourceMemoryId: '%s',
 		createdAt: %d
-		%s
-	}) RETURN e.id as id`,
+	})%s RETURN e.id as id`,
 		label,
 		EscapeCypher(nodeID),
 		EscapeCypher(name),
@@ -61,10 +60,12 @@ func (r *EntityGraphRepository) StoreEntity(ctx context.Context, name, entityTyp
 	}
 
 	// Create MENTIONS relationship from Memory to Entity
-	mentionsCypher := fmt.Sprintf(`MATCH (m:Memory {id: '%s'}), (e:Entity {id: '%s'})
+	mentionsCypher := fmt.Sprintf(`MATCH (m:Memory {id: '%s', tenantId: '%s'}), (e:Entity {id: '%s', tenantId: '%s'})
 CREATE (m)-[:MENTIONS]->(e)`,
 		EscapeCypher(sourceMemoryID),
+		EscapeCypher(tenantID),
 		EscapeCypher(nodeID),
+		EscapeCypher(tenantID),
 	)
 	if _, err := r.client.Query(ctx, mentionsCypher); err != nil {
 		slog.Warn("failed to create MENTIONS relationship", "error", err)
@@ -86,14 +87,16 @@ func (r *EntityGraphRepository) StoreRelationship(ctx context.Context, sourceNod
 
 	relLabel := EscapeCypherIdentifier(relType)
 
-	cypher := fmt.Sprintf(`MATCH (source:Entity {id: '%s'}), (target:Entity {id: '%s'})
+	cypher := fmt.Sprintf(`MATCH (source:Entity {id: '%s', tenantId: '%s'}), (target:Entity {id: '%s', tenantId: '%s'})
 CREATE (source)-[r:%s {
 	tenantId: '%s',
 	createdAt: %d
 	%s
 }]->(target)`,
 		EscapeCypher(sourceNodeID),
+		EscapeCypher(tenantID),
 		EscapeCypher(targetNodeID),
+		EscapeCypher(tenantID),
 		relLabel,
 		EscapeCypher(tenantID),
 		time.Now().UnixMilli(),

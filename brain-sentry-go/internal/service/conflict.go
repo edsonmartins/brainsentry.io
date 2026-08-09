@@ -164,8 +164,8 @@ Respond with JSON only:
   "confidence": 0.0-1.0,
   "suggestion": "how to resolve the conflict"
 }`,
-		m1.Category, m1.Importance, contentForAnalysis(m1),
-		m2.Category, m2.Importance, contentForAnalysis(m2))
+		m1.Category, m1.Importance, frameLLMData(m1.ID, "stored-memory", contentForAnalysis(m1)),
+		m2.Category, m2.Importance, frameLLMData(m2.ID, "stored-memory", contentForAnalysis(m2)))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a conflict detection system. Analyze memories for contradictions. Respond with valid JSON only."},

@@ -9,8 +9,8 @@ import (
 
 // GraphRAGRepository provides advanced graph-based retrieval augmented generation.
 type GraphRAGRepository struct {
-	client       *Client
-	indexInit    func(ctx context.Context) error
+	client    GraphBackend
+	indexInit func(ctx context.Context) error
 }
 
 // NewGraphRAGRepository creates a new GraphRAGRepository.
@@ -45,7 +45,7 @@ func (r *GraphRAGRepository) EnsureVectorIndex(ctx context.Context, dimensions i
 // the rebuild after DropGraph wipes it (see internal/rebuild). Duplicating
 // the DDL is how the two drift apart — e.g. one gets the dimension bump and
 // the other doesn't, leaving queries failing on a stale index.
-func ensureVectorIndex(ctx context.Context, client *Client, dimensions int) error {
+func ensureVectorIndex(ctx context.Context, client GraphBackend, dimensions int) error {
 	cypher := fmt.Sprintf(
 		`CREATE VECTOR INDEX FOR (m:Memory) ON (m.embedding) OPTIONS {dimension: %d, similarityFunction: 'cosine'}`,
 		dimensions,
@@ -54,7 +54,7 @@ func ensureVectorIndex(ctx context.Context, client *Client, dimensions int) erro
 	_, err := client.Query(ctx, cypher)
 	if err != nil {
 		// Index might already exist — not fatal
-		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "ERR") {
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "already indexed") {
 			slog.Info("vector index already exists or not supported", "error", err)
 			return nil
 		}
@@ -96,7 +96,8 @@ func (r *GraphRAGRepository) MultiHopSearch(ctx context.Context, seedIDs []strin
 	}
 
 	cypher := fmt.Sprintf(`MATCH path = (seed:Memory)-[r:RELATED_TO*1..%d]-(target:Memory)
-WHERE seed.id IN [%s] AND target.tenantId = '%s' AND NOT target.id IN [%s]
+WHERE seed.id IN [%s] AND seed.tenantId = '%s' AND target.tenantId = '%s'
+  AND all(n IN nodes(path) WHERE n.tenantId = '%s') AND NOT target.id IN [%s]
 WITH target, min(length(path)) AS hopDistance,
      [n IN nodes(path) | n.id] AS pathNodes,
      sum(reduce(s = 0.0, rel IN relationships(path) | s + rel.strength)) AS totalStrength
@@ -107,6 +108,8 @@ ORDER BY hopDistance ASC, score DESC
 LIMIT %d`,
 		maxHops,
 		strings.Join(seedList, ", "),
+		EscapeCypher(tenantID),
+		EscapeCypher(tenantID),
 		EscapeCypher(tenantID),
 		strings.Join(seedList, ", "),
 		limit,

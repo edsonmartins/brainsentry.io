@@ -21,11 +21,11 @@ func NewSlidingWindowEnrichment(llm LLMProvider) *SlidingWindowEnrichment {
 
 // EnrichmentResult holds the result of enriching a piece of content.
 type EnrichmentResult struct {
-	EnrichedContent string   `json:"enrichedContent"`
+	EnrichedContent  string   `json:"enrichedContent"`
 	ResolvedEntities []string `json:"resolvedEntities,omitempty"` // e.g., "it" → "PostgreSQL"
-	Preferences     []string `json:"preferences,omitempty"`       // e.g., "prefers Go over Java"
-	ContextBridges  []string `json:"contextBridges,omitempty"`    // links to adjacent context
-	Changed         bool     `json:"changed"`
+	Preferences      []string `json:"preferences,omitempty"`      // e.g., "prefers Go over Java"
+	ContextBridges   []string `json:"contextBridges,omitempty"`   // links to adjacent context
+	Changed          bool     `json:"changed"`
 }
 
 const enrichmentPrompt = `You are a content enrichment engine. Given a piece of text and optional surrounding context, perform these enrichments:
@@ -63,9 +63,11 @@ func (s *SlidingWindowEnrichment) Enrich(ctx context.Context, content string, pr
 	if prevContext != "" {
 		contextParts = append(contextParts, fmt.Sprintf("Previous context: %s", truncateForLLM(prevContext, 500)))
 	}
-	contextParts = append(contextParts, fmt.Sprintf("Content to enrich: %s", truncateForLLM(content, 2000)))
+	contextParts = append(contextParts, fmt.Sprintf("Content to enrich: %s",
+		frameLLMData("window-content", "external-content", truncateForLLM(content, 2000))))
 	if nextContext != "" {
-		contextParts = append(contextParts, fmt.Sprintf("Next context: %s", truncateForLLM(nextContext, 500)))
+		contextParts = append(contextParts, fmt.Sprintf("Next context: %s",
+			frameLLMData("window-next", "external-content", truncateForLLM(nextContext, 500))))
 	}
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{

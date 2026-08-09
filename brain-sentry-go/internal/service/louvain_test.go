@@ -75,6 +75,20 @@ func TestComputeModularity_Empty(t *testing.T) {
 	}
 }
 
+func TestComputeModularityAlwaysStaysInMathematicalRange(t *testing.T) {
+	adj := [][]weightedNeighbor{
+		{{node: 1, weight: 1}},
+		{{node: 0, weight: 1}},
+	}
+	q := computeModularity([]int{0, 1}, adj, []float64{1, 1}, 2, 2)
+	if q < -1 || q > 1 {
+		t.Fatalf("modularity %f outside [-1,1]", q)
+	}
+	if q != -0.5 {
+		t.Fatalf("singleton partition modularity=%f, want -0.5", q)
+	}
+}
+
 func TestComputeModularity_TwoCommunities(t *testing.T) {
 	// Triangle A-B-C (community 0) and triangle D-E-F (community 1)
 	// with one weak edge B-D

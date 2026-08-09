@@ -56,6 +56,36 @@ test.describe("Graph Views", () => {
     await expect(container.locator("canvas")).toBeVisible();
   });
 
+  test("global graph: distinguishes an empty relationship projection", async ({ authenticatedPage }) => {
+    await authenticatedPage.route("**/v1/graph/global**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          nodes: [{ id: "isolated", memoryId: "isolated", label: "Memória isolada", communityId: -1, createdAt: "2026-08-09T10:00:00Z", recordedAt: "2026-08-09T10:00:00Z" }],
+          edges: [], communities: [], modularity: 0, total: 1, projectionStatus: "empty",
+        }),
+      });
+    });
+    await authenticatedPage.goto(ROUTES.graphGlobal);
+    await expect(authenticatedPage.getByRole("status")).toContainText("ainda não há relações projetadas");
+    await expect(authenticatedPage.getByText(/0\.000\s+modularidade/)).toBeVisible();
+  });
+
+  test("global graph: remains rendered when switching light and dark themes", async ({ authenticatedPage }) => {
+    await authenticatedPage.goto(ROUTES.graphGlobal);
+    const themeButton = authenticatedPage.getByRole("button", { name: "Toggle theme" });
+    await themeButton.click();
+    await authenticatedPage.getByRole("menuitem", { name: "Claro" }).click();
+    await expect(authenticatedPage.locator("html")).toHaveClass(/light/);
+    await expect(authenticatedPage.getByTestId("graph-global-canvas").locator("canvas")).toBeVisible();
+
+    await themeButton.click();
+    await authenticatedPage.getByRole("menuitem", { name: "Escuro" }).click();
+    await expect(authenticatedPage.locator("html")).toHaveClass(/dark/);
+    await expect(authenticatedPage.getByTestId("graph-global-canvas").locator("canvas")).toBeVisible();
+  });
+
   test("ego graph: empty state before seed, canvas after explore", async ({ authenticatedPage }) => {
     await authenticatedPage.goto(ROUTES.graphEgo);
     await expect(authenticatedPage).toHaveURL(/\/app\/graph\/ego/);
@@ -64,6 +94,7 @@ test.describe("Graph Views", () => {
 
     const idInput = authenticatedPage.getByPlaceholder("UUID da memória-semente");
     await expect(idInput).toBeVisible();
+    await expect(authenticatedPage.getByLabel("Escolher memória-semente")).toBeVisible();
 
     // Empty state visible before any seed
     await expect(authenticatedPage.getByText("Sem dados")).toBeVisible();
@@ -119,7 +150,7 @@ test.describe("Graph Views", () => {
 
     await svg.locator("circle").first().click({ force: true });
 
-    await expect(authenticatedPage.getByText("Registrada em").first()).toBeVisible();
+    await expect(authenticatedPage.getByText("Versão registrada no sistema em").first()).toBeVisible();
     await expect(authenticatedPage.getByRole("button", { name: /Abrir Ego-grafo/ })).toBeVisible();
   });
 

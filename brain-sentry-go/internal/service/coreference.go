@@ -50,7 +50,7 @@ Rules:
 Text:
 """
 %s
-"""`, trimmed)
+"""`, frameLLMData("coreference-input", "external-content", trimmed))
 
 	raw, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You resolve coreferences and normalise aliases. JSON only."},

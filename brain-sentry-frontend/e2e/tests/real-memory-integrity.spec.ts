@@ -245,7 +245,7 @@ test.describe("real backend memory integrity", () => {
         .toEqual(expect.arrayContaining([1]));
 
       await page.goto("/app/memories");
-      await expect(page.getByRole("heading", { name: "Memórias" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /Memórias|Memories/ })).toBeVisible();
       await expect(page.getByText(createPayload.summary, { exact: true })).toBeVisible();
       await expect(page.getByText("CRITICAL").first()).toBeVisible();
       await expect(page.getByText("KNOWLEDGE").first()).toBeVisible();
@@ -302,14 +302,14 @@ test.describe("real backend memory integrity", () => {
       expect(versions.some((version) => version.summary === createPayload.summary)).toBeTruthy();
       expect(versions.some((version) => version.changeReason === updatePayload.changeReason)).toBeTruthy();
 
-      await page.getByPlaceholder("Buscar memórias...").fill(marker);
+      await page.getByPlaceholder(/Buscar memórias|Search memories/).fill(marker);
       await expect(page.getByText(updatePayload.summary, { exact: true })).toBeVisible();
       await expect(page.getByText("IMPORTANT").first()).toBeVisible();
       await expect(page.getByText("DECISION").first()).toBeVisible();
       await page.getByText(updatePayload.summary).hover();
-      await page.getByTitle("Histórico de versões").click();
-      await expect(page.getByRole("heading", { name: "Histórico de Versões" })).toBeVisible();
-      await expect(page.getByText("Versão 2")).toBeVisible();
+      await page.getByTitle(/Histórico de versões|Version history/).click();
+      await expect(page.getByRole("heading", { name: /Histórico de Versões|Version History/ })).toBeVisible();
+      await expect(page.getByText(/Versão 2|Version 2/)).toBeVisible();
       await expect(page.getByText(createPayload.summary, { exact: true })).toBeVisible();
 
       const deleteResponse = await api.delete(apiPath(`/v1/memories/${memoryId}`));
@@ -324,8 +324,8 @@ test.describe("real backend memory integrity", () => {
         .toBe(404);
 
       await page.goto("/app/memories");
-      await page.getByPlaceholder("Buscar memórias...").fill(marker);
-      await expect(page.getByText(`Nenhuma memória encontrada para "${marker}"`)).toBeVisible();
+      await page.getByPlaceholder(/Buscar memórias|Search memories/).fill(marker);
+      await expect(page.getByText(new RegExp(`(Nenhuma memória encontrada para|No memory found for) "${marker}"`))).toBeVisible();
     } finally {
       if (memoryId) {
         await api.delete(apiPath(`/v1/memories/${memoryId}`));
@@ -364,7 +364,7 @@ test.describe("real backend memory integrity", () => {
           expectedInContext: true,
         },
         sourceType: "playwright",
-        sourceReference: "intercept-real-e2e",
+        sourceReference: `intercept-real-e2e:${marker}:active`,
         createdBy: auth.user.email,
         tenantId: auth.tenantId,
         validFrom: past,
@@ -384,7 +384,7 @@ test.describe("real backend memory integrity", () => {
           expectedInContext: false,
         },
         sourceType: "playwright",
-        sourceReference: "intercept-real-e2e",
+        sourceReference: `intercept-real-e2e:${marker}:expired`,
         createdBy: auth.user.email,
         tenantId: auth.tenantId,
         validFrom: past,
@@ -404,7 +404,7 @@ test.describe("real backend memory integrity", () => {
           expectedInContext: false,
         },
         sourceType: "playwright",
-        sourceReference: "intercept-real-e2e",
+        sourceReference: `intercept-real-e2e:${marker}:minor`,
         createdBy: auth.user.email,
         tenantId: auth.tenantId,
         validFrom: past,
@@ -467,7 +467,7 @@ test.describe("real backend memory integrity", () => {
           tags: ["e2e-real", "auto-forget", marker],
           metadata: { suite: "real-learning-lifecycle", marker, shouldRemainAfterDryRun: true },
           sourceType: "playwright",
-          sourceReference: "learning-real-e2e",
+          sourceReference: `learning-real-e2e:${marker}:expired`,
           createdBy: auth.user.email,
           tenantId: auth.tenantId,
           validTo: past,
@@ -497,7 +497,7 @@ test.describe("real backend memory integrity", () => {
           tags: ["e2e-real", "semantic-consolidate", marker],
           metadata: { suite: "real-learning-lifecycle", marker },
           sourceType: "playwright",
-          sourceReference: "learning-real-e2e",
+          sourceReference: `learning-real-e2e:${marker}:semantic`,
           createdBy: auth.user.email,
           tenantId: auth.tenantId,
         },

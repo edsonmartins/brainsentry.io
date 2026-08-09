@@ -39,6 +39,15 @@ func NewRelationshipService(
 // CreateRelationship creates or updates a relationship between two memories.
 func (s *RelationshipService) CreateRelationship(ctx context.Context, fromID, toID string, relType domain.RelationshipType) (*domain.MemoryRelationship, error) {
 	tenantID := tenant.FromContext(ctx)
+	if fromID == toID {
+		return nil, fmt.Errorf("a memory cannot be related to itself")
+	}
+	for _, memoryID := range []string{fromID, toID} {
+		memory, findErr := s.memoryRepo.FindByID(ctx, memoryID)
+		if findErr != nil || memory == nil {
+			return nil, fmt.Errorf("memory %s not found in tenant", memoryID)
+		}
+	}
 
 	// Check if relationship exists
 	existing, err := s.relRepo.FindByFromAndTo(ctx, fromID, toID)

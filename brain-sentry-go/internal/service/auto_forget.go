@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/integraltech/brainsentry/internal/domain"
 	"github.com/integraltech/brainsentry/internal/repository/postgres"
+	"github.com/integraltech/brainsentry/pkg/tenant"
 )
 
 // AutoForgetConfig holds configuration for auto-forget behavior.
@@ -25,8 +27,10 @@ type AutoForgetConfig struct {
 // DefaultAutoForgetConfig returns sensible defaults.
 func DefaultAutoForgetConfig() AutoForgetConfig {
 	return AutoForgetConfig{
-		TTLEnabled:             true,
-		ContradictionEnabled:   true,
+		TTLEnabled: true,
+		// Lexical similarity is not proof of contradiction. Automatic semantic
+		// supersession is opt-in until a stronger, evidence-based detector is used.
+		ContradictionEnabled:   false,
 		LowValueEnabled:        true,
 		LowValueMaxAgeDays:     180,
 		LowValueMaxImportance:  "MINOR",
@@ -75,12 +79,18 @@ func NewAutoForgetService(
 func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetResult, error) {
 	result := &AutoForgetResult{DryRun: dryRun}
 	var allDeletedIDs []string
+	var runErrors []error
+	maxDeletes := s.config.MaxDeletesPerRun
+	if maxDeletes <= 0 {
+		maxDeletes = 50
+	}
 
 	// 1. TTL-based expiry
 	if s.config.TTLEnabled {
-		ids, err := s.expireTTL(ctx, dryRun)
+		ids, err := s.expireTTL(ctx, dryRun, maxDeletes-len(allDeletedIDs))
 		if err != nil {
 			slog.Warn("auto-forget TTL expiry failed", "error", err)
+			runErrors = append(runErrors, fmt.Errorf("TTL expiry: %w", err))
 		} else {
 			result.TTLExpired = len(ids)
 			allDeletedIDs = append(allDeletedIDs, ids...)
@@ -88,10 +98,11 @@ func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetRe
 	}
 
 	// 2. Contradiction detection
-	if s.config.ContradictionEnabled && len(allDeletedIDs) < s.config.MaxDeletesPerRun {
-		ids, err := s.detectContradictions(ctx, dryRun)
+	if s.config.ContradictionEnabled && len(allDeletedIDs) < maxDeletes {
+		ids, err := s.detectContradictions(ctx, dryRun, maxDeletes-len(allDeletedIDs))
 		if err != nil {
 			slog.Warn("auto-forget contradiction detection failed", "error", err)
+			runErrors = append(runErrors, fmt.Errorf("duplicate detection: %w", err))
 		} else {
 			result.Contradictions = len(ids)
 			allDeletedIDs = append(allDeletedIDs, ids...)
@@ -99,10 +110,11 @@ func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetRe
 	}
 
 	// 3. Low-value cleanup
-	if s.config.LowValueEnabled && len(allDeletedIDs) < s.config.MaxDeletesPerRun {
-		ids, err := s.cleanupLowValue(ctx, dryRun)
+	if s.config.LowValueEnabled && len(allDeletedIDs) < maxDeletes {
+		ids, err := s.cleanupLowValue(ctx, dryRun, maxDeletes-len(allDeletedIDs))
 		if err != nil {
 			slog.Warn("auto-forget low-value cleanup failed", "error", err)
+			runErrors = append(runErrors, fmt.Errorf("low-value cleanup: %w", err))
 		} else {
 			result.LowValue = len(ids)
 			allDeletedIDs = append(allDeletedIDs, ids...)
@@ -121,20 +133,20 @@ func (s *AutoForgetService) Run(ctx context.Context, dryRun bool) (*AutoForgetRe
 		)
 
 		if s.auditService != nil {
-			go s.auditService.LogError(context.Background(), "auto_forget",
+			auditCtx := tenant.WithTenant(context.Background(), tenant.FromContext(ctx))
+			go s.auditService.LogError(auditCtx, "auto_forget",
 				fmt.Sprintf("ttl=%d contradictions=%d low_value=%d total=%d",
 					result.TTLExpired, result.Contradictions, result.LowValue, result.TotalDeleted))
 		}
 	}
 
-	return result, nil
+	return result, errors.Join(runErrors...)
 }
 
 // expireTTL deletes memories whose ValidTo has passed.
-func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool) ([]string, error) {
+func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool, limit int) ([]string, error) {
 	now := time.Now()
-
-	memories, _, err := s.memoryRepo.List(ctx, 0, 500)
+	memories, err := s.listAll(ctx, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -143,18 +155,22 @@ func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool) ([]strin
 	for _, m := range memories {
 		if m.ValidTo != nil && now.After(*m.ValidTo) && m.DeletedAt == nil {
 			expired = append(expired, m.ID)
-			if len(expired) >= s.config.MaxDeletesPerRun {
+			if len(expired) >= limit {
 				break
 			}
 		}
 	}
 
 	if !dryRun {
+		deleted := expired[:0]
 		for _, id := range expired {
 			if err := s.memoryRepo.Delete(ctx, id); err != nil {
 				slog.Warn("failed to delete expired memory", "id", id, "error", err)
+				continue
 			}
+			deleted = append(deleted, id)
 		}
+		expired = deleted
 	}
 
 	return expired, nil
@@ -162,17 +178,18 @@ func (s *AutoForgetService) expireTTL(ctx context.Context, dryRun bool) ([]strin
 
 // detectContradictions finds memories with very similar content (Jaccard > threshold)
 // and marks the older one as superseded.
-func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun bool) ([]string, error) {
-	memories, _, err := s.memoryRepo.List(ctx, 0, 200)
+func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun bool, limit int) ([]string, error) {
+	memories, err := s.listAll(ctx, 200)
 	if err != nil {
 		return nil, err
 	}
 
 	type memoryText struct {
-		id       string
-		tokens   map[string]bool
-		created  time.Time
-		category domain.MemoryCategory
+		id         string
+		tokens     map[string]bool
+		created    time.Time
+		category   domain.MemoryCategory
+		normalized string
 	}
 
 	var items []memoryText
@@ -182,10 +199,11 @@ func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun boo
 		}
 		tokens := tokenizeForJaccard(m.Content)
 		items = append(items, memoryText{
-			id:       m.ID,
-			tokens:   tokens,
-			created:  m.CreatedAt,
-			category: m.Category,
+			id:         m.ID,
+			tokens:     tokens,
+			created:    m.CreatedAt,
+			category:   m.Category,
+			normalized: normalizeMemoryText(m.Content),
 		})
 	}
 
@@ -206,7 +224,10 @@ func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun boo
 			}
 
 			sim := jaccardSimilarity(items[i].tokens, items[j].tokens)
-			if sim >= s.config.ContradictionThreshold {
+			// Similar wording can express the opposite fact (especially around
+			// negation). Only exact normalized duplicates are safe to supersede
+			// automatically; semantic contradictions require explicit review.
+			if sim >= s.config.ContradictionThreshold && items[i].normalized == items[j].normalized {
 				// Keep newer, supersede older
 				olderID := items[i].id
 				newerID := items[j].id
@@ -223,10 +244,13 @@ func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun boo
 						if err := s.memoryRepo.SupersedeMemory(ctx, olderID, newerID); err != nil {
 							slog.Warn("failed to supersede contradicting memory",
 								"older", olderID, "newer", newerID, "error", err)
+							seen[olderID] = false
+							superseded = superseded[:len(superseded)-1]
+							continue
 						}
 					}
 
-					if len(superseded) >= s.config.MaxDeletesPerRun {
+					if len(superseded) >= limit {
 						return superseded, nil
 					}
 				}
@@ -238,8 +262,8 @@ func (s *AutoForgetService) detectContradictions(ctx context.Context, dryRun boo
 }
 
 // cleanupLowValue removes old memories with low importance and no recent access.
-func (s *AutoForgetService) cleanupLowValue(ctx context.Context, dryRun bool) ([]string, error) {
-	memories, _, err := s.memoryRepo.List(ctx, 0, 500)
+func (s *AutoForgetService) cleanupLowValue(ctx context.Context, dryRun bool, limit int) ([]string, error) {
+	memories, err := s.listAll(ctx, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -273,22 +297,47 @@ func (s *AutoForgetService) cleanupLowValue(ctx context.Context, dryRun bool) ([
 		if m.AccessCount > 3 {
 			continue
 		}
+		if m.HelpfulCount > 0 || m.InjectionCount > 0 {
+			continue
+		}
 
 		lowValue = append(lowValue, m.ID)
-		if len(lowValue) >= s.config.MaxDeletesPerRun {
+		if len(lowValue) >= limit {
 			break
 		}
 	}
 
 	if !dryRun {
+		deleted := lowValue[:0]
 		for _, id := range lowValue {
 			if err := s.memoryRepo.Delete(ctx, id); err != nil {
 				slog.Warn("failed to delete low-value memory", "id", id, "error", err)
+				continue
 			}
+			deleted = append(deleted, id)
 		}
+		lowValue = deleted
 	}
 
 	return lowValue, nil
+}
+
+func (s *AutoForgetService) listAll(ctx context.Context, pageSize int) ([]domain.Memory, error) {
+	var all []domain.Memory
+	for page := 0; ; page++ {
+		batch, total, err := s.memoryRepo.List(ctx, page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if len(batch) == 0 || int64(len(all)) >= total {
+			return all, nil
+		}
+	}
+}
+
+func normalizeMemoryText(text string) string {
+	return strings.Join(strings.Fields(strings.ToLower(text)), " ")
 }
 
 // tokenize splits text into lowercase word tokens.

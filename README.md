@@ -12,6 +12,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Como a memória funciona](#como-a-memória-funciona)
 - [Matriz de Funcionalidades](#matriz-de-funcionalidades)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
@@ -28,21 +29,22 @@
 
 ## Overview
 
-**Brain Sentry** é um sistema de gerenciamento de contexto para aplicações de IA que funciona como "memória de longo prazo" para agentes de IA. Ao contrário de sistemas tradicionais de RAG, o Brain Sentry oferece:
+**Brain Sentry** é uma camada de memória persistente para agentes de IA. Ele recebe fatos, eventos, conversas e decisões; transforma esse conteúdo em memórias multi-tenant; recupera contexto por texto, embeddings, tempo e relacionamentos; e entrega esse contexto por REST, MCP ou interceptação de prompts.
 
-- **8 Tipos de Memória**: Semântica, Episódica, Procedural, Personalidade, Preferência, Thread, Task e Emoção
-- **Graph-Native Storage**: Relacionamentos entre memórias são nativos via FalkorDB
-- **Busca Semântica**: Vector search com embeddings (384 dimensões) + scoring híbrido composto
-- **Multi-tenant**: Suporte completo a multi-tenancy
-- **Audit Trail**: Rastreabilidade completa de todas as operações
-- **Interceptação de Prompts**: Injeção automática de contexto relevante com budget de tokens
-- **Modelo Cognitivo**: Decaimento temporal, spreading activation, reflexão automática, reconciliação de fatos
-- **Trust & Provenance**: Provenance tipado + trust score explicável (0-1 com razões auditáveis)
-- **Ingestão de Documentos**: Upload de txt/md/csv/json/docx convertido em memórias rastreáveis
-- **Resolução de Conflitos**: Detecção + resolução interativa (supersede/dismiss)
-- **MCP Protocol**: Integração nativa com agentes de IA via JSON-RPC 2.0 + SSE
+O produto vai além de um RAG somente leitura porque também cria, atualiza, versiona, consolida, corrige, supersede e expira memórias. O PostgreSQL é a fonte canônica. FalkorDB, Redis, embeddings, comunidades e sumarizações são projeções derivadas ou caches reconstruíveis.
 
-> **Visão completa**: veja a [Matriz de Funcionalidades](#matriz-de-funcionalidades) para o catálogo por área com status e requisitos.
+Capacidades centrais:
+
+- memórias semânticas, episódicas, procedurais, preferências e contexto operacional;
+- persistência canônica com tags, proveniência, validade temporal, feedback e soft delete;
+- busca lexical, vetorial, temporal e por grafo, com score híbrido e fallback;
+- injeção automática de contexto com limite de tokens e mascaramento de PII;
+- relacionamentos, GraphRAG e spreading activation para recuperação associativa;
+- reconciliação, consolidação, reflexão, conflito e retenção;
+- isolamento por tenant, autenticação, auditoria e trust score explicável;
+- integração por MCP JSON-RPC 2.0, SSE, REST, CLI, TUI e painel web.
+
+Veja [O que o produto faz e suas capacidades](documents/PRODUCT_CAPABILITIES.md) para o contrato funcional e a [auditoria final e cobertura de testes](documents/FINAL_AUDIT_AND_TEST_COVERAGE.md) para as evidências e limites verificados. Documentos que descrevem Java/Spring, Next.js ou FalkorDB como fonte primária são históricos e não representam a arquitetura atual.
 
 ### Problema
 
@@ -54,12 +56,12 @@
 
 ### Solução
 
-- Memória estruturada em graph database (FalkorDB)
-- Análise inteligente com LLM (via OpenRouter)
-- Injeção automática de contexto relevante com budget de tokens
-- Auditável e corrigível
-- Detecção e mascaramento de PII antes de enviar ao LLM
-- Aprendizado cross-session com reflexão automática
+- memória canônica no PostgreSQL, separada das projeções derivadas;
+- enriquecimento opcional por LLM e embeddings;
+- recuperação híbrida com degradação para busca textual;
+- contexto injetado com budget, temporalidade, PII masking e framing de segurança;
+- conhecimento corrigível por versionamento, feedback, supersessão e revisão;
+- aprendizado cross-session, consolidação e reflexão.
 
 ### Infográfico do Sistema
 
@@ -67,24 +69,61 @@
 
 ---
 
+## Como a memória funciona
+
+```text
+conteúdo recebido
+      |
+      v
+privacy stripping -> classificação -> extração -> deduplicação
+      |                                      |
+      v                                      v
+PostgreSQL canônico                 embeddings/grafo/eventos
+      |                                      |
+      +---------- retrieval híbrido <--------+
+                         |
+                         v
+      filtro temporal -> ranking -> budget -> PII masking -> agente
+```
+
+| Forma | O que representa | Persistência |
+|---|---|---|
+| Semântica | Fatos, conceitos e conhecimento estável | Conteúdo canônico, resumo, tags e metadata; embedding derivado |
+| Episódica | Eventos ligados a uma sessão ou instante | Memória com proveniência, `recorded_at` e referência de origem |
+| Procedural | Regras, padrões e instruções | Memória tipada, opcionalmente com código e contexto |
+| Preferência/personalidade | Características persistentes de usuário ou cliente | Tipo, confiança, proveniência e sinais de feedback |
+| Operacional | Threads, tarefas, decisões, políticas, notas e incidentes | Memórias e entidades especializadas no PostgreSQL |
+| Associativa | Relações entre memórias, entidades e conceitos | Arestas canônicas quando curadas e projeção FalkorDB para travessia |
+
+Princípios:
+
+- conteúdo humano ou registrado por agente é canônico no PostgreSQL;
+- resultados recalculáveis de LLM, embedding e algoritmos de grafo são derivados;
+- expiração e supersessão encerram validade sem apagar silenciosamente a história;
+- toda operação do caminho principal é escopada pelo tenant autenticado;
+- sem LLM ou FalkorDB, o produto continua com menos enriquecimento e recall semântico/associativo.
+
+---
+
 ## Matriz de Funcionalidades
 
-Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
-✅ disponível · 🔑 requer chave de LLM/embedding · 🧩 requer FalkorDB · 🗄️ requer pgvector.
+Visão consolidada do que o Brain Sentry faz hoje:
+
+- **Disponível**: implementado no caminho principal sem dependência opcional.
+- **Condicional**: depende de LLM, embedding, Redis ou FalkorDB.
+- **Parcial**: existe, mas ainda não satisfaz completamente o contrato pretendido.
 
 ### Núcleo de Memória
 
 | Funcionalidade | Status | Endpoint / Onde |
 |---|---|---|
-| CRUD de memórias | ✅ | `POST/GET/PUT/DELETE /v1/memories` |
-| Busca semântica + híbrida (BM25 + vetor + grafo + recência) | ✅ | `POST /v1/memories/search` |
-| Filtro por categoria / importância | ✅ | `/v1/memories/by-category|by-importance` |
-| Paginação | ✅ | `GET /v1/memories?page&size` |
-| Versionamento + rollback | ✅ | `/v1/memories/{id}/versions`, `/rollback` |
-| Feedback (helpful/not) | ✅ | `POST /v1/memories/{id}/feedback` |
-| Flag + review de correção | ✅ | `/v1/memories/{id}/flag|review` |
-| SimHash dedup (on-insert) | ✅ | automático |
-| Store plugável (Postgres/embedded) | ✅ | `/v1/store/memories` |
+| CRUD, filtros e paginação | Disponível | `/v1/memories` |
+| Busca lexical e score híbrido | Disponível | `POST /v1/memories/search` |
+| Busca vetorial e GraphRAG | Condicional | Requer embedding e FalkorDB atualizado |
+| Versionamento + rollback | Disponível | Snapshot, auditoria e outbox persistidos na transação canônica |
+| Feedback, flag e review | Disponível | Endpoints por memória |
+| SimHash e idempotência por origem | Disponível | Automático no create |
+| Store plugável | Parcial | Embedded oferece apenas CRUD e busca textual básica |
 
 ### Inteligência de Memória (v0.2.0 — inspirado no comparativo memanto)
 
@@ -97,16 +136,16 @@ Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
 | Detecção de conflitos / quase-duplicatas | ✅ 🔑 | `/v1/conflicts/detect|scan|near-duplicates` |
 | Benchmark de retrieval reprodutível | ✅ | `brain-sentry-explorer: npm run benchmark` |
 
-### Temporal & Bi-temporal
+### Temporalidade e validade
 
 | Funcionalidade | Status | Endpoint / Onde |
 |---|---|---|
-| Decaimento temporal por tipo | ✅ | automático |
-| Supersessão (`valid_from`/`valid_to`) | ✅ | automático + cascading staleness |
-| Consulta "as of" (ponto no tempo) | ✅ | `GET /v1/memories/as-of` |
-| Sync incremental (delta) | ✅ | `GET /v1/memories/changed-since` |
-| Recall por janela temporal (NL, pt-BR/en) | ✅ | automático no `POST /v1/intercept` |
-| Export de proveniência W3C PROV-O | ✅ | `/v1/export/provenance` |
+| Decaimento temporal por tipo | Disponível | Aplicado no ranking |
+| Validade e supersessão | Parcial | Campos implementados; automação requer endurecimento |
+| Consulta `as-of` | Disponível | Reconstrói versões em `memory_history` pelos tempos válido e de sistema |
+| Sync incremental | Disponível | `GET /v1/memories/changed-since` |
+| Recall temporal pt-BR/en | Disponível | Integrado ao interceptador |
+| Export de proveniência W3C PROV-O | Disponível | `/v1/export/provenance` |
 
 ### Grafo de Conhecimento
 
@@ -114,11 +153,14 @@ Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
 |---|---|---|
 | Relacionamentos entre memórias | ✅ | `/v1/relationships` |
 | Auto-detecção de relacionamentos | ✅ 🔑 | `POST /v1/relationships/{id}/suggest` |
-| Grafo global / ego / timeline | ✅ 🧩 | `/v1/graph/*` |
+| Grafo Global | ✅ 🧩 | Memórias e relações canônicas do PostgreSQL, relações derivadas do FalkorDB e comunidades sobre o mapa filtrado |
+| Ego-grafo | ✅ 🧩 | Vizinhança multi-hop combinando relações canônicas e projeção derivada |
+| Grafo Temporal | ✅ | Versões de `memory_history`, transições de versão e supersessões entre memórias |
 | Extração de entidades | ✅ 🔑🧩 | `/v1/entity-graph/*` |
 | Detecção de comunidades (Louvain) | ✅ 🧩 | `/v1/graph/communities` |
 | NL → Cypher | ✅ 🔑🧩 | `/v1/graph/nl-query` |
 | Spreading activation | ✅ 🧩 | `/v1/memories/activate` |
+| Sincronização incremental PostgreSQL → FalkorDB | Parcial | Rebuild disponível; escrita normal ainda não atualiza toda projeção |
 
 ### Governança & Semântica
 
@@ -128,7 +170,7 @@ Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
 | Políticas + enforcement | ✅ 🗄️ | `/v1/policies` |
 | Eventos | ✅ 🗄️ | `/v1/events` |
 | Raciocínio abdutivo | ✅ 🔑 | `/v1/reasoning/abduce` |
-| Audit trail completo | ✅ | `/v1/audit/*` |
+| Audit trail operacional | Parcial | Eventos disponíveis em `/v1/audit/*`; atomicidade com toda mutação ainda está em endurecimento |
 
 ### Agente & Integração
 
@@ -167,8 +209,8 @@ Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
 |------------|-----------|-------|----------|
 | Frontend | React 19 + Vite | 80 | Interface web administrativa |
 | Backend | Go 1.25 + Chi | 8080 | API REST + MCP Server |
-| PostgreSQL | PostgreSQL 16 + pgvector | 5432 | Memórias, audit logs, users, tenants |
-| FalkorDB | FalkorDB Latest | 6379 | Knowledge graph + vector database |
+| PostgreSQL | PostgreSQL 16 | 5432 | Fonte canônica: memórias, versões, auditoria, usuários e tenants |
+| FalkorDB | FalkorDB Latest | 6379 | Projeção derivada: knowledge graph e busca vetorial |
 | Redis | Redis 7 | 6379 | Cache de embeddings + task scheduler |
 | Nginx | Nginx Alpine | 443/80 | Reverse proxy (produção) |
 
@@ -180,8 +222,8 @@ Visão consolidada do que o Brain Sentry faz hoje, por área. Status:
 ```yaml
 Language:     Go 1.25
 Router:       Chi
-Database:     PostgreSQL 16 + pgvector
-              FalkorDB (Graph + Cypher)
+Database:     PostgreSQL 16 (system of record)
+              FalkorDB (graph + vector derivados)
 Cache:        Redis 7 (go-redis/v9)
 LLM:          OpenRouter (multiple models)
 Embeddings:   all-MiniLM-L6-v2 (384 dim)
@@ -454,7 +496,7 @@ curl -H "Authorization: Bearer <token>" \
 | POST | `/v1/memories/{id}/feedback` | Registrar feedback |
 | GET | `/v1/memories/{id}/trust` | **Trust score explicável** (0-1 + label + reasons) |
 | GET | `/v1/memories/{id}/versions` | Histórico de versões |
-| GET | `/v1/memories/as-of` | Consulta bi-temporal "as of" (ponto no tempo) |
+| GET | `/v1/memories/as-of` | Consulta temporal `as-of` sobre o estado canônico atual |
 | GET | `/v1/memories/changed-since` | **Delta incremental** (sync de agente) |
 
 #### Conflitos
@@ -655,6 +697,9 @@ go test ./internal/service/ -v
 
 # Testes de integração (requer Docker)
 go test -tags=integration ./internal/repository/postgres/ -v
+
+# Smoke real de um provedor LLM (requer um dos secrets suportados)
+go test -tags=llm_smoke ./internal/service -run TestLiveLLMProvider -count=1
 ```
 
 ### Frontend Tests
@@ -662,11 +707,15 @@ go test -tags=integration ./internal/repository/postgres/ -v
 ```bash
 cd brain-sentry-frontend
 
-# Run tests
-npm run test
+# Testes de componentes
+pnpm test
 
-# Run with coverage
-npm run test:coverage
+# Cobertura de statements com gate de regressão
+pnpm test:coverage
+
+# E2E nos navegadores homologados
+pnpm exec playwright test --project=chromium
+pnpm exec playwright test --project=firefox
 ```
 
 ---

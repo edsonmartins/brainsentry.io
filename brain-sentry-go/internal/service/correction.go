@@ -15,8 +15,8 @@ import (
 
 // CorrectionService handles memory corrections, flagging, and rollbacks.
 type CorrectionService struct {
-	memoryRepo  *postgres.MemoryRepository
-	versionRepo *postgres.VersionRepository
+	memoryRepo   *postgres.MemoryRepository
+	versionRepo  *postgres.VersionRepository
 	auditService *AuditService
 }
 
@@ -27,8 +27,8 @@ func NewCorrectionService(
 	auditService *AuditService,
 ) *CorrectionService {
 	return &CorrectionService{
-		memoryRepo:  memoryRepo,
-		versionRepo: versionRepo,
+		memoryRepo:   memoryRepo,
+		versionRepo:  versionRepo,
 		auditService: auditService,
 	}
 }
@@ -126,14 +126,6 @@ func (s *CorrectionService) RollbackMemory(ctx context.Context, memoryID string,
 	m, err := s.memoryRepo.FindByID(ctx, memoryID)
 	if err != nil {
 		return nil, fmt.Errorf("memory not found: %w", err)
-	}
-
-	// Archive current version before rollback
-	if s.versionRepo != nil {
-		bgCtx := tenant.WithTenant(context.Background(), m.TenantID)
-		if err := s.versionRepo.CreateFromMemory(bgCtx, m, "rollback", fmt.Sprintf("rolling back to version %d", targetVersion), ""); err != nil {
-			slog.Warn("failed to archive version before rollback", "error", err)
-		}
 	}
 
 	// Apply rollback

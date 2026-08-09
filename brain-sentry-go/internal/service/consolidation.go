@@ -153,7 +153,9 @@ Memory 2:
 %s
 
 Respond with JSON:
-{"content": "merged content", "summary": "brief summary"}`, primary.Content, secondary.Content)
+{"content": "merged content", "summary": "brief summary"}`,
+		frameLLMData(primary.ID, "stored-memory", primary.Content),
+		frameLLMData(secondary.ID, "stored-memory", secondary.Content))
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a memory consolidation system. Merge similar memories while preserving all unique information. Respond with valid JSON only."},
@@ -227,7 +229,8 @@ Content:
 %s
 
 Respond with JSON:
-{"content": "compressed content", "summary": "brief summary"}`, m.Content)
+{"content": "compressed content", "summary": "brief summary"}`,
+		frameLLMData(m.ID, "stored-memory", m.Content))
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a content compressor. Reduce verbosity while keeping all essential information. Respond with valid JSON only."},

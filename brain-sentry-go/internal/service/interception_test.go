@@ -231,7 +231,7 @@ func TestEstimateTokens_KnownLengths(t *testing.T) {
 	}{
 		{"", 0},
 		{"abcd", 1},
-		{"ab", 0},
+		{"ab", 1},
 		{strings.Repeat("a", 400), 100},
 		{strings.Repeat("x", 4000), 1000},
 	}

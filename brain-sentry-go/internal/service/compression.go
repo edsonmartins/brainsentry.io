@@ -29,14 +29,14 @@ func NewCompressionService(summaryRepo *postgres.ContextSummaryRepository, openR
 
 // CompressionResult represents the result of context compression.
 type CompressionResult struct {
-	Summary              string   `json:"summary"`
-	Goals                []string `json:"goals"`
-	Decisions            []string `json:"decisions"`
-	Errors               []string `json:"errors"`
-	Todos                []string `json:"todos"`
-	OriginalTokenCount   int      `json:"originalTokenCount"`
-	CompressedTokenCount int      `json:"compressedTokenCount"`
-	CompressionRatio     float64  `json:"compressionRatio"`
+	Summary              string                   `json:"summary"`
+	Goals                []string                 `json:"goals"`
+	Decisions            []string                 `json:"decisions"`
+	Errors               []string                 `json:"errors"`
+	Todos                []string                 `json:"todos"`
+	OriginalTokenCount   int                      `json:"originalTokenCount"`
+	CompressedTokenCount int                      `json:"compressedTokenCount"`
+	CompressionRatio     float64                  `json:"compressionRatio"`
 	PreservedMessages    []dto.CompressionMessage `json:"preservedMessages,omitempty"`
 }
 
@@ -80,17 +80,17 @@ func (s *CompressionService) Compress(ctx context.Context, req dto.CompressionRe
 	}
 
 	// Build conversation text for compression
-	conversationText := formatMessagesForCompression(toCompress)
+	conversationText := frameLLMData("conversation", "external-session", formatMessagesForCompression(toCompress))
 
 	// Build keyword preservation instruction
 	keywordInst := ""
 	if len(req.PreserveKeywords) > 0 {
-		keywordInst = fmt.Sprintf("\nIMPORTANT: Preserve mentions of these keywords: %s", strings.Join(req.PreserveKeywords, ", "))
+		keywordInst = fmt.Sprintf("\nPreserve mentions of these data keywords: %s", frameLLMData("keywords", "external-request", strings.Join(req.PreserveKeywords, ", ")))
 	}
 
 	contextHint := ""
 	if req.ContextHint != "" {
-		contextHint = fmt.Sprintf("\nContext hint: %s", req.ContextHint)
+		contextHint = fmt.Sprintf("\nContext hint data: %s", frameLLMData("context-hint", "external-request", req.ContextHint))
 	}
 
 	targetRatio := req.TargetRatio
