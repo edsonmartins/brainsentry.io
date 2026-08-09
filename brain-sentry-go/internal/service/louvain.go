@@ -73,7 +73,7 @@ func (s *LouvainService) DetectCommunities(ctx context.Context, tenantID string)
 
 	links := make([]CommunityLink, 0, len(edges))
 	for _, edge := range edges {
-		links = append(links, CommunityLink{From: edge.From, To: edge.To, Weight: edge.Weight})
+		links = append(links, CommunityLink(edge))
 	}
 	return s.DetectCommunitiesFromLinks(links), nil
 }
@@ -278,31 +278,6 @@ func computeModularity(community []int, adj [][]weightedNeighbor, strength []flo
 		q += internalDirectedWeight[c]/m2 - math.Pow(k/m2, 2)
 	}
 	return q
-}
-
-func communityTotalStrength(comm int, community []int, strength []float64, n int) float64 {
-	total := 0.0
-	for i := 0; i < n; i++ {
-		if community[i] == comm {
-			total += strength[i]
-		}
-	}
-	return total
-}
-
-func communityInternalWeight(comm int, community []int, adj [][]weightedNeighbor, n int) float64 {
-	w := 0.0
-	for i := 0; i < n; i++ {
-		if community[i] != comm {
-			continue
-		}
-		for _, nb := range adj[i] {
-			if community[nb.node] == comm {
-				w += nb.weight
-			}
-		}
-	}
-	return w
 }
 
 func computeCommunityDensity(members []string, nodeIndex map[string]int, adj [][]weightedNeighbor) float64 {
