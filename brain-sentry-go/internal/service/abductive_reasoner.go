@@ -32,18 +32,18 @@ func NewAbductiveReasoner(llm LLMProvider, decisionRepo *postgres.DecisionReposi
 
 // Hypothesis is a single candidate explanation with its confidence.
 type Hypothesis struct {
-	Cause       string   `json:"cause"`
-	Confidence  float64  `json:"confidence"`
-	Evidence    []string `json:"evidence,omitempty"`
-	EntityIDs   []string `json:"entityIds,omitempty"`
-	MemoryIDs   []string `json:"memoryIds,omitempty"`
+	Cause      string   `json:"cause"`
+	Confidence float64  `json:"confidence"`
+	Evidence   []string `json:"evidence,omitempty"`
+	EntityIDs  []string `json:"entityIds,omitempty"`
+	MemoryIDs  []string `json:"memoryIds,omitempty"`
 }
 
 // AbduceRequest is the input for Abduce.
 type AbduceRequest struct {
-	DecisionID string `json:"decisionId"`
-	Question   string `json:"question,omitempty"`
-	MaxHypotheses int `json:"maxHypotheses,omitempty"`
+	DecisionID    string `json:"decisionId"`
+	Question      string `json:"question,omitempty"`
+	MaxHypotheses int    `json:"maxHypotheses,omitempty"`
 }
 
 // AbduceResult is the full reasoning report.
@@ -92,7 +92,7 @@ func (r *AbductiveReasoner) Abduce(ctx context.Context, req AbduceRequest) (*Abd
 				}
 				summary = content
 			}
-			evidence = append(evidence, fmt.Sprintf("[%s] %s", m.ID, summary))
+			evidence = append(evidence, frameLLMData(m.ID, "stored-memory", summary))
 		}
 	}
 
@@ -106,8 +106,9 @@ func (r *AbductiveReasoner) Abduce(ctx context.Context, req AbduceRequest) (*Abd
 		if node.Relation != "ancestor" {
 			continue
 		}
-		ancestry.WriteString(fmt.Sprintf("- (%s) %s → outcome=%s, confidence=%.2f\n",
-			node.Decision.Category, node.Decision.Scenario, node.Decision.Outcome, node.Decision.Confidence))
+		ancestry.WriteString(frameLLMData(node.Decision.ID, "decision-ancestor",
+			fmt.Sprintf("category=%s scenario=%s outcome=%s confidence=%.2f",
+				node.Decision.Category, node.Decision.Scenario, node.Decision.Outcome, node.Decision.Confidence)) + "\n")
 	}
 
 	prompt := fmt.Sprintf(`You are performing ABDUCTIVE reasoning — given an observed outcome,
@@ -137,10 +138,13 @@ Return ONLY a JSON array with at most %d objects, each with:
   - entityIds (strings, from ancestry if relevant)
 
 Rank from highest confidence to lowest. No commentary.`,
-		target.ID, target.Category, target.Scenario, target.Reasoning, target.Outcome, target.Confidence,
+		target.ID, target.Category,
+		frameLLMData(target.ID+":scenario", "decision", target.Scenario),
+		frameLLMData(target.ID+":reasoning", "decision", target.Reasoning),
+		frameLLMData(target.ID+":outcome", "decision", string(target.Outcome)), target.Confidence,
 		orPlaceholder(ancestry.String(), "(none)"),
 		orPlaceholder(strings.Join(evidence, "\n"), "(none)"),
-		q, maxH)
+		frameLLMData("abductive-question", "external-query", q), maxH)
 
 	raw, err := r.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You perform abductive reasoning over structured traces. Output JSON only."},

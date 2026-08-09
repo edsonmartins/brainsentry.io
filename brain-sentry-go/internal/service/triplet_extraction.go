@@ -68,7 +68,7 @@ func (s *TripletExtractionService) ExtractFromContent(ctx context.Context, conte
 		return []ExtractedTriplet{}, nil
 	}
 
-	userPrompt := fmt.Sprintf("Text:\n\n%s", truncateForLLM(content, 4000))
+	userPrompt := fmt.Sprintf("Text data:\n\n%s", frameLLMData("triplet-input", "external-content", truncateForLLM(content, 4000)))
 
 	var lastErr error
 	for attempt := 0; attempt <= s.maxRetries; attempt++ {

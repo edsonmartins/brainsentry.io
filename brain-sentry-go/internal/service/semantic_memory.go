@@ -169,7 +169,8 @@ func (s *SemanticMemoryService) extractFromGroup(ctx context.Context, category s
 		if i >= 20 { // limit to 20 memories per group
 			break
 		}
-		contentBuilder += fmt.Sprintf("Memory %d [%s]: %s\n\n", i+1, m.Category, truncateForLLM(m.Content, 500))
+		contentBuilder += fmt.Sprintf("Memory %d [%s]: %s\n\n", i+1, m.Category,
+			frameLLMData(m.ID, "stored-memory", truncateForLLM(m.Content, 500)))
 		sourceIDs = append(sourceIDs, m.ID)
 	}
 

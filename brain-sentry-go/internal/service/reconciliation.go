@@ -166,8 +166,8 @@ Respond in JSON format only:
   ]
 }
 
-Text:
-%s`, truncate(content, 4000))
+	Text data:
+	%s`, frameLLMData("reconciliation-input", "external-content", truncate(content, 4000)))
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a fact extraction system. Extract atomic facts as subject-predicate-object triples. Respond with valid JSON only."},
@@ -198,7 +198,8 @@ func (s *ReconciliationService) decideAction(ctx context.Context, fact Extracted
 	// Build existing memories context
 	var existingContext string
 	for i, m := range existingMemories {
-		existingContext += fmt.Sprintf("\n[Memory %d, ID=%s]: %s", i+1, m.ID, truncate(m.Content, 300))
+		existingContext += fmt.Sprintf("\nMemory %d: %s", i+1,
+			frameLLMData(m.ID, "stored-memory", truncate(m.Content, 300)))
 	}
 
 	prompt := fmt.Sprintf(`Given a new fact and existing memories, decide what action to take.
@@ -223,7 +224,10 @@ Respond in JSON format only:
   "reason": "brief explanation",
   "existingMemoryId": "ID of affected memory if UPDATE or DELETE",
   "mergedContent": "new content for the memory if UPDATE"
-}`, fact.Subject, fact.Predicate, fact.Object, fact.Context, existingContext)
+	}`, frameLLMData("fact-subject", "extracted-fact", fact.Subject),
+		frameLLMData("fact-predicate", "extracted-fact", fact.Predicate),
+		frameLLMData("fact-object", "extracted-fact", fact.Object),
+		frameLLMData("fact-context", "extracted-fact", fact.Context), existingContext)
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a fact reconciliation system. Decide how to handle new facts relative to existing memories. Respond with valid JSON only."},

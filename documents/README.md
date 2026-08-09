@@ -1,5 +1,7 @@
 # Brain Sentry - Complete Project Documentation
 
+> **Aviso:** este índice foi criado para a arquitetura inicial Java/Spring e é mantido como histórico. Para a arquitetura Go/React vigente e as capacidades verificadas, comece por [PRODUCT_CAPABILITIES.md](PRODUCT_CAPABILITIES.md), pela [auditoria final e cobertura](FINAL_AUDIT_AND_TEST_COVERAGE.md), pelo [README principal](../README.md) e por [AGENTS.md](../AGENTS.md).
+
 **Version:** 1.0.0  
 **Date:** January 17, 2025  
 **Created for:** EDSON (IntegrAllTech)  

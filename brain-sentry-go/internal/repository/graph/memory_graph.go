@@ -12,7 +12,7 @@ import (
 
 // MemoryGraphRepository handles memory operations in FalkorDB.
 type MemoryGraphRepository struct {
-	client *Client
+	client GraphBackend
 }
 
 // NewMemoryGraphRepository creates a new MemoryGraphRepository.
@@ -31,7 +31,11 @@ func (r *MemoryGraphRepository) EnsureVectorIndex(ctx context.Context, dimension
 // the rebuild executor (internal/rebuild). See the system-of-record doc
 // for context.
 func (r *MemoryGraphRepository) DropGraph(ctx context.Context) error {
-	return r.client.DropGraph(ctx)
+	dropper, ok := r.client.(interface{ DropGraph(context.Context) error })
+	if !ok {
+		return fmt.Errorf("graph backend %q does not support dropping graphs", r.client.Name())
+	}
+	return dropper.DropGraph(ctx)
 }
 
 // PurgeMemoryNodes deletes Memory nodes (and their edges) by id.
@@ -62,25 +66,27 @@ func (r *MemoryGraphRepository) PurgeMemoryNodes(ctx context.Context, tenantID s
 // SaveToGraph stores or updates a memory node in the graph.
 func (r *MemoryGraphRepository) SaveToGraph(ctx context.Context, m *domain.Memory) error {
 	tagsStr := formatStringList(m.Tags)
-	embeddingStr := formatFloatList(m.Embedding)
+	embeddingStr := "null"
+	if len(m.Embedding) > 0 {
+		embeddingStr = fmt.Sprintf("vecf32(%s)", formatFloatList(m.Embedding))
+	}
 
-	cypher := fmt.Sprintf(`MERGE (m:Memory {id: '%s'})
-SET m.content = '%s',
+	cypher := fmt.Sprintf(`MERGE (m:Memory {id: '%s', tenantId: '%s'})
+	SET m.content = '%s',
     m.summary = '%s',
     m.category = '%s',
     m.importance = '%s',
-    m.tenantId = '%s',
-    m.tags = %s,
+	    m.tags = %s,
     m.embedding = %s,
     m.createdAt = %d,
     m.accessCount = %d,
     m.version = %d`,
 		EscapeCypher(m.ID),
+		EscapeCypher(m.TenantID),
 		EscapeCypher(m.Content),
 		EscapeCypher(m.Summary),
 		EscapeCypher(string(m.Category)),
 		EscapeCypher(string(m.Importance)),
-		EscapeCypher(m.TenantID),
 		tagsStr,
 		embeddingStr,
 		m.CreatedAt.UnixMilli(),
@@ -98,26 +104,33 @@ SET m.content = '%s',
 
 // CreateTagRelationships creates RELATED_TO edges between memories that share tags.
 func (r *MemoryGraphRepository) CreateTagRelationships(ctx context.Context, m *domain.Memory) error {
+	cleanup := fmt.Sprintf(`MATCH (m:Memory {id: '%s', tenantId: '%s'})-[r:RELATED_TO]-()
+		WHERE r.type = 'shared_tag' DELETE r`, EscapeCypher(m.ID), EscapeCypher(m.TenantID))
+	if _, err := r.client.Query(ctx, cleanup); err != nil {
+		return fmt.Errorf("clearing stale tag relationships: %w", err)
+	}
 	if len(m.Tags) == 0 {
 		return nil
 	}
 
 	for _, tag := range m.Tags {
-		cypher := fmt.Sprintf(`MATCH (m1:Memory {id: '%s'}), (m2:Memory)
-WHERE m2.tenantId = '%s' AND m1.id <> m2.id AND '%s' IN m2.tags
-MERGE (m1)-[r:RELATED_TO]->(m2)
-ON CREATE SET r.type = 'shared_tag', r.tag = '%s', r.strength = 1, r.mentions = 1, r.updatedAt = %d
-ON MATCH SET r.strength = r.strength + 1, r.mentions = coalesce(r.mentions, 0) + 1, r.updatedAt = %d`,
+		cypher := fmt.Sprintf(`MATCH (m1:Memory {id: '%s', tenantId: '%s'}), (m2:Memory)
+	WHERE m2.tenantId = '%s' AND m1.id <> m2.id AND '%s' IN m2.tags
+	MERGE (m1)-[r:RELATED_TO]->(m2)
+	ON CREATE SET r.type = 'shared_tag', r.tag = '%s', r.strength = 1, r.mentions = 1, r.updatedAt = %d
+	ON MATCH SET r.type = 'shared_tag', r.tag = '%s', r.strength = 1, r.updatedAt = %d`,
 			EscapeCypher(m.ID),
+			EscapeCypher(m.TenantID),
 			EscapeCypher(m.TenantID),
 			EscapeCypher(tag),
 			EscapeCypher(tag),
 			time.Now().UnixMilli(),
+			EscapeCypher(tag),
 			time.Now().UnixMilli(),
 		)
 
 		if _, err := r.client.Query(ctx, cypher); err != nil {
-			slog.Warn("failed to create tag relationship", "error", err, "tag", tag)
+			return fmt.Errorf("creating relationship for tag %q: %w", tag, err)
 		}
 	}
 
@@ -132,7 +145,7 @@ MATCH (m2:Memory) WHERE m2.tenantId = '%s' AND m1.id < m2.id AND tag1 IN m2.tags
 WITH m1, m2, collect(DISTINCT tag1)[0] as sharedTag
 MERGE (m1)-[r:RELATED_TO]->(m2)
 ON CREATE SET r.type = 'shared_tag', r.tag = sharedTag, r.strength = 1, r.mentions = 1, r.updatedAt = %d
-ON MATCH SET r.strength = r.strength + 1, r.mentions = coalesce(r.mentions, 0) + 1, r.updatedAt = %d`,
+	ON MATCH SET r.type = 'shared_tag', r.tag = sharedTag, r.strength = 1, r.updatedAt = %d`,
 		EscapeCypher(tenantID),
 		EscapeCypher(tenantID),
 		time.Now().UnixMilli(),
@@ -152,13 +165,23 @@ func (r *MemoryGraphRepository) VectorSearch(ctx context.Context, embedding []fl
 	// just vector search silently degrading to access-count ranking forever.
 	embeddingStr := fmt.Sprintf("vecf32(%s)", formatFloatList(embedding))
 
-	// Try vector search first
+	// FalkorDB's vector procedure selects candidates before Cypher can apply the
+	// tenant predicate. Overfetch so other tenants' nearest nodes do not consume
+	// the caller's entire top-K window before isolation is applied.
+	candidateLimit := limit * 20
+	if candidateLimit < 100 {
+		candidateLimit = 100
+	}
+	if candidateLimit > 2000 {
+		candidateLimit = 2000
+	}
+
 	cypher := fmt.Sprintf(`CALL db.idx.vector.queryNodes('Memory', 'embedding', %d, %s)
 YIELD node, score
 WHERE node.tenantId = '%s'
 RETURN node.id as id, score
 LIMIT %d`,
-		limit,
+		candidateLimit,
 		embeddingStr,
 		EscapeCypher(tenantID),
 		limit,
@@ -278,9 +301,7 @@ LIMIT %d`,
 
 // DeleteMemory removes a memory node and its edges from the graph.
 func (r *MemoryGraphRepository) DeleteMemory(ctx context.Context, memoryID string) error {
-	cypher := fmt.Sprintf(`MATCH (m:Memory {id: '%s'}) DETACH DELETE m`, EscapeCypher(memoryID))
-	_, err := r.client.Query(ctx, cypher)
-	return err
+	return fmt.Errorf("tenant-scoped delete required for memory %s; use PurgeMemoryNodes", memoryID)
 }
 
 // GraphRelationship represents a relationship returned from the graph.

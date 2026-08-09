@@ -20,15 +20,14 @@ import (
 	"github.com/integraltech/brainsentry/internal/diagnostics"
 	"github.com/integraltech/brainsentry/internal/eval"
 	"github.com/integraltech/brainsentry/internal/handler"
-	modelsrouting "github.com/integraltech/brainsentry/internal/models"
 	"github.com/integraltech/brainsentry/internal/mcp"
 	"github.com/integraltech/brainsentry/internal/middleware"
+	modelsrouting "github.com/integraltech/brainsentry/internal/models"
 	"github.com/integraltech/brainsentry/internal/rebuild"
 	graphrepo "github.com/integraltech/brainsentry/internal/repository/graph"
 	"github.com/integraltech/brainsentry/internal/repository/postgres"
 	"github.com/integraltech/brainsentry/internal/service"
 	"github.com/integraltech/brainsentry/internal/store"
-	"github.com/integraltech/brainsentry/pkg/lazy"
 	"github.com/integraltech/brainsentry/pkg/trust"
 )
 
@@ -99,18 +98,11 @@ func main() {
 		entityGraphRepo = graphrepo.NewEntityGraphRepository(graphClient)
 		graphRAGRepo = graphrepo.NewGraphRAGRepository(graphClient)
 
-		// Ensure vector index exists — lazily so boot is fast. The index is
-		// created on first semantic search instead of during startup.
-		vectorIndexReady := lazy.New(func() (bool, error) {
-			if err := graphRAGRepo.EnsureVectorIndex(context.Background(), cfg.Embedding.Dimensions); err != nil {
-				return false, err
-			}
-			return true, nil
-		})
-		graphRAGRepo.SetIndexInitializer(func(ctx context.Context) error {
-			_, err := vectorIndexReady.Get()
-			return err
-		})
+		// VectorSearch is also used outside GraphRAG, so the index must exist
+		// before the first request rather than only after a graph traversal.
+		if err := graphRAGRepo.EnsureVectorIndex(context.Background(), cfg.Embedding.Dimensions); err != nil {
+			logger.Warn("vector index unavailable; graph search will use fallback ranking", "error", err)
+		}
 
 		logger.Info("connected to FalkorDB", "graph", cfg.FalkorDB.GraphName)
 	}
@@ -128,6 +120,12 @@ func main() {
 	apiKeyRepo := postgres.NewAPIKeyRepository(pool)
 	receiptRepo := postgres.NewReceiptRepository(pool)
 	memoryRepo := postgres.NewMemoryRepository(pool)
+	var graphProjectionWorker *service.GraphProjectionWorker
+	if memoryGraphRepo != nil {
+		outboxRepo := postgres.NewProjectionOutboxRepository(pool)
+		graphProjectionWorker = service.NewGraphProjectionWorker(outboxRepo, memoryRepo, memoryGraphRepo)
+		graphProjectionWorker.Start(ctx)
+	}
 	auditRepo := postgres.NewAuditRepository(pool)
 	versionRepo := postgres.NewVersionRepository(pool)
 	relRepo := postgres.NewRelationshipRepository(pool)
@@ -503,8 +501,12 @@ func main() {
 		cascadeExtractionService.WithCoreference(coreferenceService)
 	}
 
-	// Fire event extraction asynchronously after each memory create.
-	memoryService.WithEventExtractor(eventService)
+	// Automatic event extraction is meaningful only with an LLM provider.
+	// Keep the event CRUD API available without one, but do not enqueue tasks
+	// that can only fail and exhaust their retries.
+	if llmProvider != nil {
+		memoryService.WithEventExtractor(eventService)
+	}
 
 	// Route the heavy (LLM-bound) triplet/event extractions through the durable
 	// task scheduler when Redis is available, and register the handler that runs
@@ -627,7 +629,7 @@ func main() {
 
 	var graphViewHandler *handler.GraphViewHandler
 	if memoryRepo != nil {
-		graphViewHandler = handler.NewGraphViewHandler(memoryRepo, graphClient, graphRAGRepo, louvainService)
+		graphViewHandler = handler.NewGraphViewHandler(memoryRepo, relRepo, graphClient, graphRAGRepo, louvainService)
 	}
 
 	// Diagnostics ("doctor") — TCP probes for every external dependency the
@@ -1347,6 +1349,9 @@ func main() {
 	sessionService.Stop()
 	if taskScheduler != nil {
 		taskScheduler.Stop()
+	}
+	if graphProjectionWorker != nil {
+		graphProjectionWorker.Stop()
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)

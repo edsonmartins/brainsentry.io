@@ -10,21 +10,21 @@ import (
 )
 
 type Config struct {
-	Server       ServerConfig       `yaml:"server"`
-	Database     DatabaseConfig     `yaml:"database"`
-	Redis        RedisConfig        `yaml:"redis"`
-	FalkorDB     FalkorDBConfig     `yaml:"falkordb"`
-	Security     SecurityConfig     `yaml:"security"`
-	Tenant       TenantConfig       `yaml:"tenant"`
-	AI           AIConfig           `yaml:"ai"`
+	Server       ServerConfig            `yaml:"server"`
+	Database     DatabaseConfig          `yaml:"database"`
+	Redis        RedisConfig             `yaml:"redis"`
+	FalkorDB     FalkorDBConfig          `yaml:"falkordb"`
+	Security     SecurityConfig          `yaml:"security"`
+	Tenant       TenantConfig            `yaml:"tenant"`
+	AI           AIConfig                `yaml:"ai"`
 	Anthropic    AnthropicProviderConfig `yaml:"anthropic"`
 	Gemini       GeminiProviderConfig    `yaml:"gemini"`
-	Models       ModelsConfig       `yaml:"models"`
-	Store        StoreConfig        `yaml:"store"`
-	Embedding    EmbeddingConfig    `yaml:"embedding"`
-	Interception InterceptionConfig `yaml:"interception"`
-	Memory       MemoryConfig       `yaml:"memory"`
-	Logging      LoggingConfig      `yaml:"logging"`
+	Models       ModelsConfig            `yaml:"models"`
+	Store        StoreConfig             `yaml:"store"`
+	Embedding    EmbeddingConfig         `yaml:"embedding"`
+	Interception InterceptionConfig      `yaml:"interception"`
+	Memory       MemoryConfig            `yaml:"memory"`
+	Logging      LoggingConfig           `yaml:"logging"`
 }
 
 type ServerConfig struct {
@@ -80,10 +80,10 @@ func (f FalkorDBConfig) Addr() string {
 }
 
 type SecurityConfig struct {
-	JWTSecret     string     `yaml:"jwt_secret"`
+	JWTSecret     string        `yaml:"jwt_secret"`
 	JWTExpiration time.Duration `yaml:"jwt_expiration"`
-	BcryptCost    int        `yaml:"bcrypt_cost"`
-	CORS          CORSConfig `yaml:"cors"`
+	BcryptCost    int           `yaml:"bcrypt_cost"`
+	CORS          CORSConfig    `yaml:"cors"`
 	// DemoAuthEnabled exposes POST /v1/auth/demo, which logs anyone in as
 	// the shared demo user. Dev/demo convenience only — Validate refuses
 	// it in production.
@@ -150,7 +150,7 @@ type ModelsConfig struct {
 // backend = "" or "postgres" → store.PostgresStore wraps the existing repo
 // backend = "embedded"        → store.EmbeddedStore at Embedded.Path
 type StoreConfig struct {
-	Backend  string             `yaml:"backend"`
+	Backend  string              `yaml:"backend"`
 	Embedded EmbeddedStoreConfig `yaml:"embedded"`
 }
 
@@ -166,9 +166,9 @@ type EmbeddingConfig struct {
 }
 
 type InterceptionConfig struct {
-	QuickCheckEnabled  bool    `yaml:"quick_check_enabled"`
-	DeepAnalysisEnabled bool   `yaml:"deep_analysis_enabled"`
-	RelevanceThreshold float64 `yaml:"relevance_threshold"`
+	QuickCheckEnabled   bool    `yaml:"quick_check_enabled"`
+	DeepAnalysisEnabled bool    `yaml:"deep_analysis_enabled"`
+	RelevanceThreshold  float64 `yaml:"relevance_threshold"`
 }
 
 type MemoryConfig struct {
@@ -292,6 +292,9 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.Security.JWTSecret = v
 	}
 	if v := os.Getenv("BRAINSENTRY_AI_AGENTIC_MODEL_API_KEY"); v != "" {
+		cfg.AI.APIKey = v
+	}
+	if v := os.Getenv("OPENROUTER_API_KEY"); v != "" {
 		cfg.AI.APIKey = v
 	}
 	if v := os.Getenv("AI_MODEL"); v != "" {

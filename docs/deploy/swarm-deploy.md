@@ -241,7 +241,7 @@ until docker exec $(docker ps -q -f name=devops_brainsentry-postgres) \
     pg_isready -U brainsentry -d brainsentry; do sleep 2; done
 ```
 
-### 2. Apply migrations 1–9
+### 2. Apply every migration in order
 
 The image ships migrations at `/app/migrations/`. The binary does NOT
 auto-run them — apply manually with `psql`. From a host with network
@@ -267,6 +267,31 @@ done
 The migration files are also in this repo under
 `brain-sentry-go/internal/repository/postgres/migrations/`. Copy them to
 the host or run them straight from the repo.
+
+After applying them, verify the bi-temporal history and projection outbox
+before starting the new backend version:
+
+```bash
+PGPASSWORD="$(cat secrets/brainsentry_postgres_password.txt)" psql \
+  -h <swarm_manager_ip> -p 5445 -U brainsentry -d brainsentry \
+  -v ON_ERROR_STOP=1 -c "
+    SELECT to_regclass('public.memory_history') AS memory_history,
+           to_regclass('public.projection_outbox') AS projection_outbox;
+    SELECT count(*) AS current_history_rows
+      FROM memory_history WHERE system_to IS NULL;
+    SELECT count(*) AS incompatible_snapshots
+      FROM memory_history WHERE snapshot ? 'tenant_id';"
+```
+
+`incompatible_snapshots` must be zero. Migration `000017` repairs snapshots
+created by the original `000016` backfill in environments that applied it
+before the domain-key compatibility fix.
+
+Do not run the `000016` down migration as an application rollback: it removes
+the accumulated temporal history and pending projection events. Roll back the
+application binary while keeping the forward-compatible schema instead.
+Migration `000017` is an irreversible, idempotent data repair and its down file
+intentionally does not restore the incompatible JSON shape.
 
 ### 3. Verify backend health
 

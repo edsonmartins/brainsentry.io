@@ -1328,23 +1328,31 @@ export async function mockAdminApis(page: Page) {
     if (path === "/v1/graph/timeline" && method === "GET") {
       const nodes = [
         {
-          id: "mem-auth",
+          id: "mem-auth@2",
+          memoryId: "mem-auth",
           label: "Autenticacao com refresh token",
           category: "INSIGHT",
           importance: "CRITICAL",
           communityId: -1,
           createdAt: "2026-04-09T10:00:00.000Z",
           recordedAt: "2026-04-09T10:00:00.000Z",
+          systemFrom: "2026-04-09T10:00:00.000Z",
+          version: 2,
+          operation: "update",
           validFrom: "2026-04-09T10:00:00.000Z",
         },
         {
-          id: "mem-old-auth",
+          id: "mem-old-auth@1",
+          memoryId: "mem-old-auth",
           label: "Auth antigo",
           category: "INSIGHT",
           importance: "MINOR",
           communityId: -1,
           createdAt: "2026-04-01T12:00:00.000Z",
           recordedAt: "2026-04-01T12:00:00.000Z",
+          systemFrom: "2026-04-01T12:00:00.000Z",
+          version: 1,
+          operation: "create",
           validFrom: "2026-04-01T12:00:00.000Z",
           validTo: "2026-04-09T10:00:00.000Z",
           supersededBy: "mem-auth",
@@ -1352,7 +1360,7 @@ export async function mockAdminApis(page: Page) {
       ];
       return json(route, {
         nodes,
-        edges: [{ source: "mem-old-auth", target: "mem-auth", type: "SUPERSEDES", strength: 1.0 }],
+        edges: [{ source: "mem-old-auth@1", target: "mem-auth@2", type: "SUPERSEDES", strength: 1.0 }],
         total: nodes.length,
         tenantId: DEFAULT_TENANT_ID,
       });

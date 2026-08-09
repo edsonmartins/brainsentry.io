@@ -24,13 +24,13 @@ const (
 
 // SessionEvent represents a recorded event during a session.
 type SessionEvent struct {
-	ID        string          `json:"id"`
-	SessionID string          `json:"sessionId"`
+	ID        string                 `json:"id"`
+	SessionID string                 `json:"sessionId"`
 	Type      domain.ObservationType `json:"type"`
-	Title     string          `json:"title"`
-	Content   string          `json:"content"`
-	Timestamp time.Time       `json:"timestamp"`
-	Metadata  map[string]any  `json:"metadata,omitempty"`
+	Title     string                 `json:"title"`
+	Content   string                 `json:"content"`
+	Timestamp time.Time              `json:"timestamp"`
+	Metadata  map[string]any         `json:"metadata,omitempty"`
 }
 
 // CrossSessionEntry represents a memory entry derived from session analysis.
@@ -47,13 +47,13 @@ type CrossSessionEntry struct {
 
 // CrossSessionResult represents the outcome of cross-session processing.
 type CrossSessionResult struct {
-	SessionID          string              `json:"sessionId"`
-	EventsRecorded     int                 `json:"eventsRecorded"`
-	ObservationsFound  int                 `json:"observationsFound"`
-	EntriesCreated     int                 `json:"entriesCreated"`
-	EntriesSuperseded  int                 `json:"entriesSuperseded"`
-	ContextInjected    string              `json:"contextInjected,omitempty"`
-	TokensInjected     int                 `json:"tokensInjected"`
+	SessionID         string `json:"sessionId"`
+	EventsRecorded    int    `json:"eventsRecorded"`
+	ObservationsFound int    `json:"observationsFound"`
+	EntriesCreated    int    `json:"entriesCreated"`
+	EntriesSuperseded int    `json:"entriesSuperseded"`
+	ContextInjected   string `json:"contextInjected,omitempty"`
+	TokensInjected    int    `json:"tokensInjected"`
 }
 
 // SessionLifecycleHook is a callback for session lifecycle events.
@@ -281,7 +281,8 @@ func (s *CrossSessionService) extractObservations(ctx context.Context, events []
 func (s *CrossSessionService) llmExtractObservations(ctx context.Context, events []SessionEvent) []CrossSessionEntry {
 	var eventSummary strings.Builder
 	for _, e := range events {
-		eventSummary.WriteString(fmt.Sprintf("[%s] %s: %s\n", e.Type, e.Title, truncate(e.Content, 200)))
+		eventSummary.WriteString(fmt.Sprintf("[%s] %s\n", e.Type,
+			frameLLMData(e.ID, "session-event", e.Title+": "+truncate(e.Content, 200))))
 	}
 
 	prompt := fmt.Sprintf(`Analyze these session events and extract key observations.
@@ -315,10 +316,10 @@ TYPE|title|description`, eventSummary.String())
 
 		obsType := parseObservationType(strings.TrimSpace(parts[0]))
 		entries = append(entries, CrossSessionEntry{
-			ID:    uuid.New().String(),
-			Type:  obsType,
-			Title: strings.TrimSpace(parts[1]),
-			Content: strings.TrimSpace(parts[2]),
+			ID:        uuid.New().String(),
+			Type:      obsType,
+			Title:     strings.TrimSpace(parts[1]),
+			Content:   strings.TrimSpace(parts[2]),
 			CreatedAt: time.Now(),
 		})
 	}
@@ -334,10 +335,10 @@ func (s *CrossSessionService) directExtractObservations(events []SessionEvent) [
 	entries := make([]CrossSessionEntry, 0, len(events))
 	for _, e := range events {
 		entries = append(entries, CrossSessionEntry{
-			ID:      uuid.New().String(),
-			Type:    e.Type,
-			Title:   e.Title,
-			Content: e.Content,
+			ID:        uuid.New().String(),
+			Type:      e.Type,
+			Title:     e.Title,
+			Content:   e.Content,
 			CreatedAt: time.Now(),
 		})
 	}
@@ -362,16 +363,16 @@ func (s *CrossSessionService) createCrossSessionEntry(ctx context.Context, sessi
 
 	// Create as EPISODIC memory with observation type in tags
 	memory := &domain.Memory{
-		ID:        uuid.New().String(),
-		TenantID:  tenantID,
-		Content:   content,
-		Summary:   fmt.Sprintf("[%s] %s", entry.Type, entry.Title),
-		Category:  domain.CategoryKnowledge,
+		ID:         uuid.New().String(),
+		TenantID:   tenantID,
+		Content:    content,
+		Summary:    fmt.Sprintf("[%s] %s", entry.Type, entry.Title),
+		Category:   domain.CategoryKnowledge,
 		MemoryType: domain.MemoryTypeEpisodic,
 		Importance: observationImportance(entry.Type),
-		Tags:      []string{"cross-session", string(entry.Type), "session:" + sessionID},
-		CreatedAt: time.Now(),
-		Version:   1,
+		Tags:       []string{"cross-session", string(entry.Type), "session:" + sessionID},
+		CreatedAt:  time.Now(),
+		Version:    1,
 	}
 
 	if err := s.memoryRepo.Create(ctx, memory); err != nil {

@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/toast";
-import { api, type GraphNode } from "@/lib/api/client";
+import { api, type GraphNode, type Memory } from "@/lib/api/client";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const HOP_COLORS = ["#ef4444", "#f59e0b", "#eab308", "#10b981", "#6b7280"];
 
@@ -19,6 +20,7 @@ export default function GraphEgoPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -27,11 +29,12 @@ export default function GraphEgoPage() {
   const [inputId, setInputId] = useState(searchParams.get("id") ?? "");
   const [hops, setHops] = useState(Number(searchParams.get("hops") ?? 2));
   const [limit, setLimit] = useState(Number(searchParams.get("limit") ?? 30));
-  const [data, setData] = useState<{ nodes: GraphNode[]; links: any[] } | null>(null);
+  const [data, setData] = useState<{ nodes: GraphNode[]; links: any[]; projectionStatus?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
+  const [memoryOptions, setMemoryOptions] = useState<Memory[]>([]);
 
   const load = useCallback(async (id: string) => {
     if (!id) return;
@@ -41,6 +44,7 @@ export default function GraphEgoPage() {
       setData({
         nodes: (res.nodes || []).map((n) => ({ ...n })),
         links: (res.edges || []).map((e) => ({ ...e })),
+        projectionStatus: res.projectionStatus,
       });
       setSeedId(id);
       setSearchParams({ id, hops: String(hops), limit: String(limit) });
@@ -54,6 +58,10 @@ export default function GraphEgoPage() {
   useEffect(() => {
     if (seedId) load(seedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    api.getMemories(0, 100).then((res) => setMemoryOptions(res.memories ?? [])).catch(() => setMemoryOptions([]));
   }, []);
 
   useEffect(() => {
@@ -144,6 +152,22 @@ export default function GraphEgoPage() {
       <main className="flex-1 flex flex-col min-h-0">
         <div className="border-b bg-muted/20 px-4 py-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label={t("graphEgo.memoryPicker")}
+              value={memoryOptions.some((memory) => memory.id === inputId) ? inputId : ""}
+              onChange={(e) => {
+                setInputId(e.target.value);
+                if (e.target.value) load(e.target.value);
+              }}
+              className="min-w-[260px] max-w-md bg-background border rounded px-2 py-1 text-xs"
+            >
+              <option value="">{t("graphEgo.selectMemory")}</option>
+              {memoryOptions.map((memory) => (
+                <option key={memory.id} value={memory.id}>
+                  {(memory.summary || memory.content).slice(0, 80)}
+                </option>
+              ))}
+            </select>
             <input
               value={inputId}
               onChange={(e) => setInputId(e.target.value)}
@@ -188,6 +212,15 @@ export default function GraphEgoPage() {
               ))}
             </span>
           </div>
+          {data?.projectionStatus === "unavailable" ? (
+            <div role="status" className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+              {t("graphEgo.projectionUnavailable")}
+            </div>
+          ) : data?.nodes.length === 1 && (
+            <div role="status" className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+              {t("graphEgo.noNeighbors")}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 flex min-h-0">
@@ -233,7 +266,7 @@ export default function GraphEgoPage() {
                   ctx.fill();
                   if (isSeed) {
                     ctx.lineWidth = 2;
-                    ctx.strokeStyle = "#fff";
+                  ctx.strokeStyle = resolvedTheme === "dark" ? "#fff" : "#0f172a";
                     ctx.stroke();
                   }
                   const label = node.label as string;
@@ -241,12 +274,18 @@ export default function GraphEgoPage() {
                   ctx.font = `${fontSize}px sans-serif`;
                   ctx.textAlign = "center";
                   ctx.textBaseline = "middle";
-                  ctx.fillStyle = "rgba(100,116,139,0.9)";
-                  if (globalScale > 1.2 && label) {
-                    ctx.fillText(label.slice(0, 28), node.x, node.y + r + fontSize);
+                  ctx.fillStyle = resolvedTheme === "dark" ? "#f8fafc" : "#0f172a";
+                  if (globalScale > 0.75 && label) {
+                    const shortLabel = label.slice(0, 32);
+                    const y = node.y + r + fontSize * 0.35;
+                    const metrics = ctx.measureText(shortLabel);
+                    ctx.fillStyle = resolvedTheme === "dark" ? "rgba(15,23,42,.82)" : "rgba(255,255,255,.88)";
+                    ctx.fillRect(node.x - metrics.width / 2 - 2, y - 1, metrics.width + 4, fontSize + 2);
+                    ctx.fillStyle = resolvedTheme === "dark" ? "#f8fafc" : "#0f172a";
+                    ctx.fillText(shortLabel, node.x, y);
                   }
                 }}
-                linkColor={() => "rgba(148,163,184,0.35)"}
+                linkColor={() => resolvedTheme === "dark" ? "rgba(203,213,225,0.55)" : "rgba(71,85,105,0.45)"}
                 linkWidth={1}
                 linkDirectionalArrowLength={3}
                 linkDirectionalArrowRelPos={1}

@@ -77,9 +77,9 @@ func (s *EmbeddedStore) Create(ctx context.Context, m MemoryRecord) (MemoryRecor
 	if m.ID == "" {
 		m.ID = uuid.NewString()
 	}
-	if m.TenantID == "" {
-		m.TenantID = tenant.FromContext(ctx)
-	}
+	// The authenticated context is authoritative. Never accept a tenant carried
+	// in an external payload, even in embedded mode.
+	m.TenantID = tenant.FromContext(ctx)
 	now := time.Now().UTC()
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
@@ -199,10 +199,11 @@ func (s *EmbeddedStore) Search(ctx context.Context, query string, limit int) ([]
 }
 
 // Delete removes by ID. Idempotent.
-func (s *EmbeddedStore) Delete(_ context.Context, id string) error {
+func (s *EmbeddedStore) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.rows[id]; !ok {
+	r, ok := s.rows[id]
+	if !ok || !sameTenant(ctx, r) {
 		return nil
 	}
 	delete(s.rows, id)
@@ -234,7 +235,7 @@ func (s *EmbeddedStore) flushLocked() error {
 
 func sameTenant(ctx context.Context, r MemoryRecord) bool {
 	t := tenant.FromContext(ctx)
-	return r.TenantID == "" || r.TenantID == t
+	return r.TenantID == t
 }
 
 // tokenize lowercases and splits on non-alphanumeric runes; drops tokens

@@ -5,8 +5,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,16 +72,73 @@ func TestMain(m *testing.M) {
 }
 
 func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	migration, err := os.ReadFile("migrations/000001_init_schema.up.sql")
+	entries, err := os.ReadDir("migrations")
 	if err != nil {
-		return fmt.Errorf("reading migration: %w", err)
+		return fmt.Errorf("listing migrations: %w", err)
 	}
-	_, err = pool.Exec(ctx, string(migration))
-	return err
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
+			continue
+		}
+		// The generic postgres:16 test image does not bundle pgvector. Migration
+		// 000008 is covered in the production pgvector image; these repository
+		// tests exercise the memory schema and later temporal migrations.
+		if strings.HasPrefix(entry.Name(), "000008_") {
+			continue
+		}
+		migration, err := os.ReadFile(filepath.Join("migrations", entry.Name()))
+		if err != nil {
+			return fmt.Errorf("reading migration %s: %w", entry.Name(), err)
+		}
+		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+			return fmt.Errorf("applying migration %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
 
 func testContext() context.Context {
 	return tenant.WithTenant(context.Background(), "test-tenant-integration")
+}
+
+func TestFindHistoryRangeReturnsAllSystemVersions(t *testing.T) {
+	ctx := tenant.WithTenant(context.Background(), "tenant-history-range")
+	ensureTenantExists(t, ctx, "tenant-history-range")
+	repo := NewMemoryRepository(testPool)
+	memory := &domain.Memory{ID: "history-range-memory", Content: "first", Summary: "first", Category: domain.CategoryKnowledge, Importance: domain.ImportanceImportant}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memory_history WHERE memory_id=$1`, memory.ID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memory_tags WHERE memory_id=$1`, memory.ID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memories WHERE id=$1`, memory.ID)
+	})
+	if err := repo.Create(ctx, memory); err != nil {
+		t.Fatal(err)
+	}
+	memory.Content = "second"
+	memory.Summary = "second"
+	memory.Version++
+	if err := repo.UpdateWithReason(ctx, memory, "test update"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, memory.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := repo.FindHistoryRange(ctx, time.Now().Add(-time.Hour), time.Now().Add(time.Hour), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("history entries=%d, want create/update/delete", len(entries))
+	}
+	for i, operation := range []string{"create", "update", "delete"} {
+		if entries[i].Operation != operation {
+			t.Fatalf("entry %d operation=%q, want %q", i, entries[i].Operation, operation)
+		}
+	}
+	if entries[0].SystemTo == nil || entries[1].SystemTo == nil || entries[2].SystemTo != nil {
+		t.Fatalf("unexpected system intervals: %#v", entries)
+	}
 }
 
 func ensureTenantExists(t *testing.T, ctx context.Context, id string) {
@@ -90,6 +150,232 @@ func ensureTenantExists(t *testing.T, ctx context.Context, id string) {
 		Slug:   fmt.Sprintf("%s-%d", id, time.Now().UnixNano()),
 		Active: true,
 	})
+}
+
+func TestMigration16BackfillUsesDomainJSONShape(t *testing.T) {
+	ctx := tenant.WithTenant(context.Background(), "tenant-migration-compat")
+	activeID := "memory-before-migration-active"
+	deletedID := "memory-before-migration-deleted"
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	deletedAt := now.Add(-time.Minute)
+
+	for _, id := range []string{activeID, deletedID} {
+		if _, err := testPool.Exec(ctx, `INSERT INTO memories (
+			id, content, summary, category, importance, validation_status, metadata,
+			source_type, source_reference, created_by, tenant_id, created_at, updated_at,
+			version, access_count, injection_count, helpful_count, not_helpful_count,
+			code_example, programming_language, memory_type, emotional_weight, sim_hash,
+			valid_from, decay_rate, superseded_by, recorded_at, provenance, deleted_at
+		) VALUES ($1,$2,$3,'DECISION','CRITICAL','APPROVED',$4,'migration','legacy-ref',
+			'legacy-user',$5,$6,$6,7,11,5,3,1,'fmt.Println()','go','semantic',0.75,
+			'legacyhash',$6,0.02,'',$6,'VALIDATED',$7)`,
+			id, "legacy content "+id, "legacy summary", []byte(`{"legacy":true}`),
+			"tenant-migration-compat", now, func() any {
+				if id == deletedID {
+					return deletedAt
+				}
+				return nil
+			}()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO memory_tags(memory_id, tag) VALUES ($1,'legacy-tag'),($2,'deleted-tag')`, activeID, deletedID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memory_history WHERE memory_id IN ($1,$2)`, activeID, deletedID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memories WHERE id IN ($1,$2)`, activeID, deletedID)
+	})
+
+	migration, err := os.ReadFile("migrations/000016_bitemporal_outbox.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, string(migration)); err != nil {
+		t.Fatalf("reapplying migration 16 for legacy rows: %v", err)
+	}
+
+	var snapshot []byte
+	if err := testPool.QueryRow(ctx, `SELECT snapshot FROM memory_history WHERE memory_id=$1`, activeID).Scan(&snapshot); err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]any
+	if err := json.Unmarshal(snapshot, &keys); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"validationStatus", "tenantId", "createdAt", "deletedAt", "memoryType", "recordedAt"} {
+		if _, ok := keys[key]; !ok {
+			t.Fatalf("backfilled snapshot missing domain key %q: %s", key, snapshot)
+		}
+	}
+	for _, key := range []string{"validation_status", "tenant_id", "deleted_at"} {
+		if _, ok := keys[key]; ok {
+			t.Fatalf("backfilled snapshot contains database key %q: %s", key, snapshot)
+		}
+	}
+
+	repo := NewMemoryRepository(testPool)
+	memories, err := repo.FindAsOf(ctx, now.Add(time.Second), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("deleted legacy memory leaked into as-of result: %+v", memories)
+	}
+	got := memories[0]
+	if got.ID != activeID || got.TenantID != "tenant-migration-compat" || got.ValidationStatus != domain.ValidationApproved || got.Version != 7 || got.CreatedBy != "legacy-user" || len(got.Tags) != 1 || got.Tags[0] != "legacy-tag" {
+		t.Fatalf("legacy snapshot did not round-trip through domain JSON: %+v", got)
+	}
+}
+
+func TestMigration17RepairsAlreadyBackfilledDatabaseJSON(t *testing.T) {
+	ctx := tenant.WithTenant(context.Background(), "tenant-migration-repair")
+	memoryID := "memory-bad-snapshot-before-repair"
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	legacySnapshot := map[string]any{
+		"id":                memoryID,
+		"content":           "legacy database-shaped snapshot",
+		"summary":           "legacy",
+		"category":          "KNOWLEDGE",
+		"importance":        "IMPORTANT",
+		"validation_status": "APPROVED",
+		"tenant_id":         "tenant-migration-repair",
+		"created_at":        now,
+		"updated_at":        now,
+		"recorded_at":       now,
+		"version":           4,
+		"access_count":      9,
+		"memory_type":       "semantic",
+		"deleted_at":        nil,
+		"embedding":         []float32{0.1, 0.2},
+	}
+	raw, err := json.Marshal(legacySnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO memory_history
+		(memory_id,tenant_id,system_from,valid_from,operation,snapshot,tags)
+		VALUES ($1,$2,$3,$3,'create',$4,$5)`, memoryID, "tenant-migration-repair", now, raw, []string{"repaired"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM memory_history WHERE memory_id=$1`, memoryID)
+	})
+
+	migration, err := os.ReadFile("migrations/000017_repair_bitemporal_snapshot_json.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, string(migration)); err != nil {
+		t.Fatalf("repairing deployed database-shaped snapshot: %v", err)
+	}
+
+	repo := NewMemoryRepository(testPool)
+	memories, err := repo.FindAsOf(ctx, now.Add(time.Second), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("repaired memory missing: %+v", memories)
+	}
+	got := memories[0]
+	if got.ID != memoryID || got.TenantID != "tenant-migration-repair" || got.ValidationStatus != domain.ValidationApproved || got.AccessCount != 9 || got.Version != 4 || len(got.Tags) != 1 || got.Tags[0] != "repaired" {
+		t.Fatalf("database-shaped snapshot was not repaired: %+v", got)
+	}
+	var hasSnakeKey, hasEmbedding bool
+	if err := testPool.QueryRow(ctx, `SELECT snapshot ? 'tenant_id', snapshot ? 'embedding'
+		FROM memory_history WHERE memory_id=$1`, memoryID).Scan(&hasSnakeKey, &hasEmbedding); err != nil {
+		t.Fatal(err)
+	}
+	if hasSnakeKey || hasEmbedding {
+		t.Fatalf("repair left incompatible keys: tenant_id=%v embedding=%v", hasSnakeKey, hasEmbedding)
+	}
+}
+
+func TestMemoryRepository_BitemporalAtomicMutation(t *testing.T) {
+	ctx := tenant.WithTenant(context.Background(), "tenant-bitemporal")
+	repo := NewMemoryRepository(testPool)
+	memory := &domain.Memory{
+		ID:         "memory-bitemporal",
+		Content:    "estado inicial",
+		Category:   domain.CategoryKnowledge,
+		Importance: domain.ImportanceImportant,
+		Tags:       []string{"historico"},
+	}
+	if err := repo.Create(ctx, memory); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	createdAt := memory.UpdatedAt
+
+	memory.Content = "estado atualizado"
+	memory.Version++
+	if err := repo.Update(ctx, memory); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	updatedAt := memory.UpdatedAt
+
+	atCreation, err := repo.FindAsOf(ctx, createdAt, 10)
+	if err != nil {
+		t.Fatalf("FindAsOf(create) error = %v", err)
+	}
+	if len(atCreation) != 1 || atCreation[0].Content != "estado inicial" {
+		t.Fatalf("creation snapshot = %+v", atCreation)
+	}
+	atUpdate, err := repo.FindAsOf(ctx, updatedAt, 10)
+	if err != nil {
+		t.Fatalf("FindAsOf(update) error = %v", err)
+	}
+	if len(atUpdate) != 1 || atUpdate[0].Content != "estado atualizado" {
+		t.Fatalf("updated snapshot = %+v", atUpdate)
+	}
+
+	if err := repo.Delete(ctx, memory.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	var historyCount, versionCount, auditCount, outboxCount int
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM memory_history WHERE memory_id=$1`, memory.ID).Scan(&historyCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM memory_versions WHERE memory_id=$1`, memory.ID).Scan(&versionCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM audit_memories_created amc
+		JOIN audit_logs a ON a.id=amc.audit_log_id WHERE amc.memory_id=$1 AND a.tenant_id=$2`, memory.ID, "tenant-bitemporal").Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM projection_outbox WHERE aggregate_id=$1 AND tenant_id=$2`, memory.ID, "tenant-bitemporal").Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if historyCount != 3 || versionCount != 3 || auditCount != 1 || outboxCount != 3 {
+		t.Fatalf("atomic records history=%d versions=%d createAudits=%d outbox=%d", historyCount, versionCount, auditCount, outboxCount)
+	}
+	outbox := NewProjectionOutboxRepository(testPool)
+	events, err := outbox.Claim(ctx, 10)
+	if err != nil || len(events) != 3 {
+		t.Fatalf("Claim() events=%v error=%v", events, err)
+	}
+	if err := outbox.MarkProcessed(ctx, events[0].ID); err != nil {
+		t.Fatalf("MarkProcessed() error = %v", err)
+	}
+	if err := outbox.MarkFailed(ctx, events[1], errors.New("temporary graph failure")); err != nil {
+		t.Fatalf("MarkFailed() error = %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `UPDATE projection_outbox SET available_at=NOW()-INTERVAL '1 second'
+		WHERE id=$1`, events[2].ID); err != nil {
+		t.Fatal(err)
+	}
+	reclaimed, err := outbox.Claim(ctx, 10)
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].ID != events[2].ID {
+		t.Fatalf("stale processing event was not reclaimed: events=%v error=%v", reclaimed, err)
+	}
+
+	afterDelete, err := repo.FindAsOf(ctx, time.Now(), 10)
+	if err != nil {
+		t.Fatalf("FindAsOf(delete) error = %v", err)
+	}
+	if len(afterDelete) != 0 {
+		t.Fatalf("deleted memory visible after deletion: %+v", afterDelete)
+	}
 }
 
 // --- Tenant Repository Tests ---

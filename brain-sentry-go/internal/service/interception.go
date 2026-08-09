@@ -32,6 +32,18 @@ var quickCheckPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bpattern\b`),
 	regexp.MustCompile(`(?i)\bdecision\b`),
 	regexp.MustCompile(`(?i)\buse\b`),
+	regexp.MustCompile(`(?i)\bagente?s?\b`),
+	regexp.MustCompile(`(?i)\bservi[cç]os?\b`),
+	regexp.MustCompile(`(?i)\bcriar?\b`),
+	regexp.MustCompile(`(?i)\bimplementar?\b`),
+	regexp.MustCompile(`(?i)\badicionar?\b`),
+	regexp.MustCompile(`(?i)\bcorrigir?\b`),
+	regexp.MustCompile(`(?i)\berros?\b`),
+	regexp.MustCompile(`(?i)\bdecis(?:ão|ao|ões|oes)\b`),
+	regexp.MustCompile(`(?i)\bcliente?s?\b`),
+	regexp.MustCompile(`(?i)\bprefer(?:e|ência|encia)\b`),
+	regexp.MustCompile(`(?i)\brecus(?:a|ou|ar)\b`),
+	regexp.MustCompile(`(?i)\bpagamento?s?\b`),
 }
 
 var errorKeywords = []string{
@@ -219,6 +231,20 @@ func (s *InterceptionService) Intercept(ctx context.Context, req dto.InterceptRe
 		tokenBudget = req.MaxTokens
 	}
 	contextStr := s.formatContextWithBudget(memories, hindsightNotes, tokenBudget)
+	if contextStr == "" {
+		resp.Reasoning = "token budget too small for safe context framing"
+		resp.LLMCalls = llmCalls
+		resp.LatencyMs = time.Since(start).Milliseconds()
+		return resp, nil
+	}
+
+	packedMemories := make([]domain.Memory, 0, len(memories))
+	for _, m := range memories {
+		if strings.Contains(contextStr, `id="`+m.ID+`"`) {
+			packedMemories = append(packedMemories, m)
+		}
+	}
+	memories = packedMemories
 
 	// Mask PII before injecting into prompt sent to LLM
 	if s.piiService != nil {
@@ -386,7 +412,7 @@ func containsErrorKeywords(text string) bool {
 }
 
 func estimateTokens(text string) int {
-	return len(text) / 4
+	return (len(text) + 3) / 4
 }
 
 // formatContextWithBudget builds context respecting a token budget via greedy
@@ -396,8 +422,12 @@ func (s *InterceptionService) formatContextWithBudget(memories []domain.Memory, 
 	var sb strings.Builder
 	header := "<system_context>\n" + security.SystemPromptPreamble + "\n\n"
 	footer := "</system_context>"
+	minimumTokens := estimateTokens(header) + estimateTokens(footer)
+	if tokenBudget < minimumTokens {
+		return ""
+	}
 	sb.WriteString(header)
-	usedTokens := estimateTokens(header) + estimateTokens(footer)
+	usedTokens := minimumTokens
 
 	matchedAll := make(map[string]int)
 

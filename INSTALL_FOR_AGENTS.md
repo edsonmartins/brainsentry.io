@@ -55,12 +55,26 @@ todos `Up (healthy)`. Se algum não subiu, `docker compose logs <svc>`.
 ## Passo 3 — Migrations + seed
 
 ```bash
-cd brain-sentry-go
-go run ./cmd/server --migrate-only   # cria schema; sai depois
-go run ./cmd/cli seed --demo         # cria tenant demo + user demo@example.com
+# A partir da raiz do repositório. O backend não auto-migra.
+docker compose -f docker-compose.production.yml --profile migrate run --rm migrate
 ```
 
-Esperado: `migration applied: 0023_...`, `demo user ensured`.
+Esperado: cada arquivo `*.up.sql` aparece em ordem e o comando termina com
+`migrations OK`. O tenant padrão é criado pela migration inicial; o usuário
+demo é provisionado pelo fluxo lazy da aplicação, não por um comando `seed`.
+
+Verifique as migrations estruturais mais recentes:
+
+```bash
+docker compose -f docker-compose.production.yml exec -T postgres \
+  psql -U "${POSTGRES_USER:-brainsentry}" -d "${POSTGRES_DB:-brainsentry}" \
+  -c "SELECT to_regclass('public.memory_history'), to_regclass('public.projection_outbox');
+      SELECT count(*) AS incompatible_snapshots
+      FROM memory_history WHERE snapshot ? 'tenant_id';"
+```
+
+`incompatible_snapshots` precisa ser zero. A migration `000017` corrige de
+forma idempotente ambientes que aplicaram a versão original da `000016`.
 
 ---
 

@@ -17,10 +17,10 @@ import (
 // ReflectionService performs automatic reflection loops over accumulated memories.
 // Clusters similar memories → computes saliency → synthesizes reflective summaries.
 type ReflectionService struct {
-	openRouter    *OpenRouterService
-	memoryRepo    *postgres.MemoryRepository
-	memoryService *MemoryService
-	minClusterSize int
+	openRouter          *OpenRouterService
+	memoryRepo          *postgres.MemoryRepository
+	memoryService       *MemoryService
+	minClusterSize      int
 	similarityThreshold float64 // SimHash Hamming distance threshold for clustering
 }
 
@@ -41,19 +41,19 @@ func NewReflectionService(
 
 // MemoryCluster represents a group of similar memories.
 type MemoryCluster struct {
-	ID        string          `json:"id"`
-	Topic     string          `json:"topic"`
-	Memories  []domain.Memory `json:"memories"`
-	Saliency  float64         `json:"saliency"` // aggregate importance
-	Size      int             `json:"size"`
+	ID       string          `json:"id"`
+	Topic    string          `json:"topic"`
+	Memories []domain.Memory `json:"memories"`
+	Saliency float64         `json:"saliency"` // aggregate importance
+	Size     int             `json:"size"`
 }
 
 // ReflectionResult summarizes what the reflection loop produced.
 type ReflectionResult struct {
-	ClustersFound     int      `json:"clustersFound"`
-	ReflectionsCreated int     `json:"reflectionsCreated"`
-	MemoriesProcessed int      `json:"memoriesProcessed"`
-	ConsolidatedIDs   []string `json:"consolidatedIds"`
+	ClustersFound      int      `json:"clustersFound"`
+	ReflectionsCreated int      `json:"reflectionsCreated"`
+	MemoriesProcessed  int      `json:"memoriesProcessed"`
+	ConsolidatedIDs    []string `json:"consolidatedIds"`
 }
 
 // RunReflection performs one reflection cycle: cluster → score → synthesize.
@@ -110,9 +110,9 @@ func (s *ReflectionService) RunReflection(ctx context.Context) (*ReflectionResul
 					Content:    content,
 					SourceType: "reflection",
 					Metadata: map[string]any{
-						"source":         "auto_reflection",
+						"source":           "auto_reflection",
 						"consolidatedFrom": sourceIDs,
-						"clusterSize":    len(clusterMemories),
+						"clusterSize":      len(clusterMemories),
 					},
 				})
 				if err != nil {
@@ -238,7 +238,8 @@ func (s *ReflectionService) synthesizeReflection(ctx context.Context, cluster Me
 		if summary == "" {
 			summary = truncate(m.Content, 200)
 		}
-		memorySummaries += fmt.Sprintf("[%d] [%s] %s\n", i+1, m.MemoryType, summary)
+		memorySummaries += fmt.Sprintf("[%d] [%s] %s\n", i+1, m.MemoryType,
+			frameLLMData(m.ID, "stored-memory", summary))
 	}
 
 	prompt := fmt.Sprintf(`The following %d memories are clustered as similar/related. Synthesize them into a single reflective insight that captures the higher-order pattern, lesson, or principle they collectively represent.

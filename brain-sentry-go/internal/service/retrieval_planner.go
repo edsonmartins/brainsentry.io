@@ -162,7 +162,7 @@ Respond in JSON format only:
   ]
 }
 
-Query: %s`, query)
+Query data: %s`, frameLLMData("retrieval-query", "external-query", query))
 
 	response, err := s.openRouter.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You are a retrieval planning system. Analyze queries and plan retrieval strategies. Respond with valid JSON only."},

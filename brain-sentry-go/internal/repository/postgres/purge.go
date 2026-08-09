@@ -137,6 +137,8 @@ func (r *MemoryRepository) PurgeMemories(ctx context.Context, ids []string, dryR
 		surface string
 		sql     string
 	}{
+		{"projection_outbox", `DELETE FROM projection_outbox WHERE aggregate_type = 'memory' AND aggregate_id = ANY($1)`},
+		{"memory_history", `DELETE FROM memory_history WHERE memory_id = ANY($1)`},
 		{"memory_versions", `DELETE FROM memory_versions WHERE memory_id = ANY($1)`},
 		{"memory_relationships", `DELETE FROM memory_relationships WHERE from_memory_id = ANY($1) OR to_memory_id = ANY($1)`},
 		{"memory_tags", `DELETE FROM memory_tags WHERE memory_id = ANY($1)`},

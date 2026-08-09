@@ -48,6 +48,20 @@ func TestLoad_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestLoad_OpenRouterEnvironmentKey(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "openrouter-secret")
+	t.Setenv("BRAINSENTRY_AI_AGENTIC_MODEL_API_KEY", "legacy-secret")
+	f := writeTempFile(t, "ai:\n  api_key: file-secret\n")
+
+	cfg, err := Load(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AI.APIKey != "openrouter-secret" {
+		t.Fatalf("OPENROUTER_API_KEY must be authoritative, got %q", cfg.AI.APIKey)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Load – valid YAML (mirrors config.yaml in project root)
 // ---------------------------------------------------------------------------

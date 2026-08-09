@@ -1348,6 +1348,7 @@ export interface AbductionResult {
 
 export interface GraphNode {
   id: string;
+  memoryId?: string;
   label: string;
   category?: string;
   importance?: string;
@@ -1364,6 +1365,10 @@ export interface GraphNode {
   tags?: string[];
   hopDistance?: number;
   score?: number;
+  version?: number;
+  operation?: "create" | "update" | "delete" | string;
+  systemFrom?: string;
+  systemTo?: string;
 }
 
 export interface GraphEdge {
@@ -1387,6 +1392,8 @@ export interface GraphResponse {
   modularity?: number;
   tenantId?: string;
   total: number;
+  projectionStatus?: "ready" | "empty" | "unavailable" | "not_configured" | string;
+  warnings?: string[];
 }
 
 // Instância singleton

@@ -20,6 +20,7 @@ import (
 //   - GET /v1/graph/timeline — bi-temporal view with SUPERSEDES edges
 type GraphViewHandler struct {
 	memRepo     *postgres.MemoryRepository
+	relRepo     *postgres.RelationshipRepository
 	graphClient *graphrepo.Client
 	graphRAG    *graphrepo.GraphRAGRepository
 	louvain     *service.LouvainService
@@ -28,12 +29,14 @@ type GraphViewHandler struct {
 // NewGraphViewHandler constructs the handler.
 func NewGraphViewHandler(
 	memRepo *postgres.MemoryRepository,
+	relRepo *postgres.RelationshipRepository,
 	graphClient *graphrepo.Client,
 	graphRAG *graphrepo.GraphRAGRepository,
 	louvain *service.LouvainService,
 ) *GraphViewHandler {
 	return &GraphViewHandler{
 		memRepo:     memRepo,
+		relRepo:     relRepo,
 		graphClient: graphClient,
 		graphRAG:    graphRAG,
 		louvain:     louvain,
@@ -43,6 +46,7 @@ func NewGraphViewHandler(
 // GraphNode is the node DTO shared by all three endpoints.
 type GraphNode struct {
 	ID              string     `json:"id"`
+	MemoryID        string     `json:"memoryId,omitempty"`
 	Label           string     `json:"label"`
 	Category        string     `json:"category,omitempty"`
 	Importance      string     `json:"importance,omitempty"`
@@ -59,6 +63,10 @@ type GraphNode struct {
 	Tags            []string   `json:"tags,omitempty"`
 	HopDistance     int        `json:"hopDistance,omitempty"`
 	Score           float64    `json:"score,omitempty"`
+	Version         int        `json:"version,omitempty"`
+	Operation       string     `json:"operation,omitempty"`
+	SystemFrom      *time.Time `json:"systemFrom,omitempty"`
+	SystemTo        *time.Time `json:"systemTo,omitempty"`
 }
 
 // GraphEdge is the edge DTO.
@@ -71,12 +79,14 @@ type GraphEdge struct {
 
 // GraphResponse is the common response envelope.
 type GraphResponse struct {
-	Nodes       []GraphNode         `json:"nodes"`
-	Edges       []GraphEdge         `json:"edges"`
-	Communities []service.Community `json:"communities,omitempty"`
-	Modularity  float64             `json:"modularity,omitempty"`
-	TenantID    string              `json:"tenantId,omitempty"`
-	Total       int                 `json:"total"`
+	Nodes            []GraphNode         `json:"nodes"`
+	Edges            []GraphEdge         `json:"edges"`
+	Communities      []service.Community `json:"communities,omitempty"`
+	Modularity       float64             `json:"modularity,omitempty"`
+	TenantID         string              `json:"tenantId,omitempty"`
+	Total            int                 `json:"total"`
+	ProjectionStatus string              `json:"projectionStatus,omitempty"`
+	Warnings         []string            `json:"warnings,omitempty"`
 }
 
 // Global handles GET /v1/graph/global
@@ -102,6 +112,17 @@ func (h *GraphViewHandler) Global(w http.ResponseWriter, r *http.Request) {
 	var memories []domain.Memory
 	var err error
 	switch {
+	case category != "" && importance != "":
+		memories, err = h.memRepo.FindByCategory(r.Context(), domain.MemoryCategory(category))
+		if err == nil {
+			filtered := memories[:0]
+			for _, memory := range memories {
+				if string(memory.Importance) == importance {
+					filtered = append(filtered, memory)
+				}
+			}
+			memories = filtered
+		}
 	case category != "":
 		memories, err = h.memRepo.FindByCategory(r.Context(), domain.MemoryCategory(category))
 	case importance != "":
@@ -122,12 +143,34 @@ func (h *GraphViewHandler) Global(w http.ResponseWriter, r *http.Request) {
 		memberSet[m.ID] = true
 	}
 
-	var edges []GraphEdge
+	edges := make([]GraphEdge, 0)
+	edgeSet := make(map[string]bool)
+	addEdge := func(edge GraphEdge) {
+		key := edge.Source + "→" + edge.Target + ":" + edge.Type
+		if edge.Source == "" || edge.Target == "" || edgeSet[key] || !memberSet[edge.Source] || !memberSet[edge.Target] {
+			return
+		}
+		edgeSet[key] = true
+		edges = append(edges, edge)
+	}
+	if h.relRepo != nil {
+		if relationships, relErr := h.relRepo.ListByTenant(r.Context()); relErr == nil {
+			for _, relationship := range relationships {
+				addEdge(GraphEdge{Source: relationship.FromMemoryID, Target: relationship.ToMemoryID, Type: string(relationship.Type), Strength: relationship.Strength})
+			}
+		} else {
+			writeError(w, http.StatusInternalServerError, "loading canonical relationships: "+relErr.Error())
+			return
+		}
+	}
+	projectionStatus := "not_configured"
+	warnings := make([]string, 0)
 	if h.graphClient != nil {
+		projectionStatus = "empty"
 		cypher := fmt.Sprintf(`MATCH (a:Memory)-[r:RELATED_TO]->(b:Memory)
-WHERE a.tenantId = '%s'
+WHERE a.tenantId = '%s' AND b.tenantId = '%s'
 RETURN a.id AS src, b.id AS tgt, coalesce(r.strength, 1.0) AS strength
-LIMIT %d`, graphrepo.EscapeCypher(tenantID), limit*10)
+LIMIT %d`, graphrepo.EscapeCypher(tenantID), graphrepo.EscapeCypher(tenantID), limit*10)
 		if result, qerr := h.graphClient.Query(r.Context(), cypher); qerr == nil {
 			for _, rec := range result.Records {
 				src := graphrepo.GetString(rec.Values, "src")
@@ -135,19 +178,25 @@ LIMIT %d`, graphrepo.EscapeCypher(tenantID), limit*10)
 				if !memberSet[src] || !memberSet[tgt] {
 					continue
 				}
-				edges = append(edges, GraphEdge{
+				addEdge(GraphEdge{
 					Source:   src,
 					Target:   tgt,
 					Type:     "RELATED_TO",
 					Strength: graphrepo.GetFloat64(rec.Values, "strength"),
 				})
 			}
+			if len(edges) > 0 {
+				projectionStatus = "ready"
+			}
+		} else {
+			projectionStatus = "unavailable"
+			warnings = append(warnings, "memory graph projection is unavailable")
 		}
 	}
 
 	for _, m := range memories {
 		if m.SupersededBy != "" && memberSet[m.SupersededBy] {
-			edges = append(edges, GraphEdge{
+			addEdge(GraphEdge{
 				Source:   m.ID,
 				Target:   m.SupersededBy,
 				Type:     "SUPERSEDES",
@@ -157,17 +206,23 @@ LIMIT %d`, graphrepo.EscapeCypher(tenantID), limit*10)
 	}
 
 	communityMap := make(map[string]int)
-	resp := GraphResponse{Total: len(memories), TenantID: tenantID}
+	resp := GraphResponse{Total: len(memories), TenantID: tenantID, ProjectionStatus: projectionStatus, Warnings: warnings}
 	if withCommunities && h.louvain != nil {
-		if cr, cerr := h.louvain.DetectCommunities(r.Context(), tenantID); cerr == nil && cr != nil {
-			for _, c := range cr.Communities {
-				for _, mid := range c.MemberIDs {
-					communityMap[mid] = c.ID
-				}
+		links := make([]service.CommunityLink, 0, len(edges))
+		for _, edge := range edges {
+			if edge.Type == "SUPERSEDES" {
+				continue
 			}
-			resp.Communities = cr.Communities
-			resp.Modularity = cr.Modularity
+			links = append(links, service.CommunityLink{From: edge.Source, To: edge.Target, Weight: edge.Strength})
 		}
+		cr := h.louvain.DetectCommunitiesFromLinks(links)
+		for _, c := range cr.Communities {
+			for _, mid := range c.MemberIDs {
+				communityMap[mid] = c.ID
+			}
+		}
+		resp.Communities = cr.Communities
+		resp.Modularity = cr.Modularity
 	}
 
 	nodes := make([]GraphNode, 0, len(memories))
@@ -178,6 +233,7 @@ LIMIT %d`, graphrepo.EscapeCypher(tenantID), limit*10)
 		}
 		nodes = append(nodes, GraphNode{
 			ID:              m.ID,
+			MemoryID:        m.ID,
 			Label:           graphLabel(m.Summary, m.Content, 120),
 			Category:        string(m.Category),
 			Importance:      string(m.Importance),
@@ -229,20 +285,25 @@ func (h *GraphViewHandler) Ego(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "seed memory not found")
 		return
 	}
-	if h.graphRAG == nil {
-		writeError(w, http.StatusServiceUnavailable, "graph rag repository not available")
-		return
-	}
-
-	results, err := h.graphRAG.MultiHopSearch(r.Context(), []string{memoryID}, hops, limit, tenantID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	var results []graphrepo.MultiHopResult
+	projectionStatus := "not_configured"
+	warnings := make([]string, 0)
+	if h.graphRAG != nil {
+		projectionStatus = "empty"
+		results, err = h.graphRAG.MultiHopSearch(r.Context(), []string{memoryID}, hops, limit, tenantID)
+		if err != nil {
+			projectionStatus = "unavailable"
+			warnings = append(warnings, "derived graph projection is unavailable; canonical relationships are still included")
+			results = nil
+		} else if len(results) > 0 {
+			projectionStatus = "ready"
+		}
 	}
 
 	seen := map[string]bool{seed.ID: true}
 	nodes := []GraphNode{{
 		ID:              seed.ID,
+		MemoryID:        seed.ID,
 		Label:           graphLabel(seed.Summary, seed.Content, 120),
 		Category:        string(seed.Category),
 		Importance:      string(seed.Importance),
@@ -279,6 +340,7 @@ func (h *GraphViewHandler) Ego(w http.ResponseWriter, r *http.Request) {
 		if !seen[res.MemoryID] {
 			nodes = append(nodes, GraphNode{
 				ID:          res.MemoryID,
+				MemoryID:    res.MemoryID,
 				Label:       res.Summary,
 				Category:    res.Category,
 				Importance:  res.Importance,
@@ -293,11 +355,62 @@ func (h *GraphViewHandler) Ego(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.relRepo != nil {
+		relationships, relErr := h.relRepo.ListByTenant(r.Context())
+		if relErr != nil {
+			writeError(w, http.StatusInternalServerError, relErr.Error())
+			return
+		}
+		type neighbor struct {
+			id       string
+			relType  string
+			strength float64
+		}
+		adjacency := make(map[string][]neighbor)
+		for _, relationship := range relationships {
+			adjacency[relationship.FromMemoryID] = append(adjacency[relationship.FromMemoryID], neighbor{relationship.ToMemoryID, string(relationship.Type), relationship.Strength})
+			adjacency[relationship.ToMemoryID] = append(adjacency[relationship.ToMemoryID], neighbor{relationship.FromMemoryID, string(relationship.Type), relationship.Strength})
+		}
+		distance := map[string]int{memoryID: 0}
+		queue := []string{memoryID}
+		for len(queue) > 0 && len(nodes) < limit {
+			current := queue[0]
+			queue = queue[1:]
+			if distance[current] >= hops {
+				continue
+			}
+			for _, next := range adjacency[current] {
+				if _, exists := distance[next.id]; !exists {
+					distance[next.id] = distance[current] + 1
+					queue = append(queue, next.id)
+				}
+				if !seen[next.id] {
+					if len(nodes) >= limit {
+						continue
+					}
+					memory, findErr := h.memRepo.FindByID(r.Context(), next.id)
+					if findErr != nil || memory == nil {
+						continue
+					}
+					seen[next.id] = true
+					nodes = append(nodes, GraphNode{ID: memory.ID, MemoryID: memory.ID, Label: graphLabel(memory.Summary, memory.Content, 120), Category: string(memory.Category), Importance: string(memory.Importance), CommunityID: -1, CreatedAt: memory.CreatedAt, RecordedAt: memory.RecordedAt, HopDistance: distance[next.id], Score: next.strength})
+				}
+				key := current + "→" + next.id
+				if !edgeSet[key] {
+					edgeSet[key] = true
+					edges = append(edges, GraphEdge{Source: current, Target: next.id, Type: next.relType, Strength: next.strength})
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, GraphResponse{
-		Nodes:    nodes,
-		Edges:    edges,
-		Total:    len(nodes),
-		TenantID: tenantID,
+		Nodes:            nodes,
+		Edges:            edges,
+		Total:            len(nodes),
+		TenantID:         tenantID,
+		ProjectionStatus: projectionStatus,
+		Warnings:         warnings,
 	})
 }
 
@@ -330,18 +443,32 @@ func (h *GraphViewHandler) Timeline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	memories, err := h.memRepo.FindByRecordedRange(r.Context(), from, to, limit)
+	history, err := h.memRepo.FindHistoryRange(r.Context(), from, to, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	nodes := make([]GraphNode, 0, len(memories))
-	memberSet := make(map[string]bool, len(memories))
-	for _, m := range memories {
-		memberSet[m.ID] = true
+	nodes, edges := buildTimelineGraph(history)
+
+	writeJSON(w, http.StatusOK, GraphResponse{
+		Nodes:    nodes,
+		Edges:    edges,
+		Total:    len(nodes),
+		TenantID: tenantID,
+	})
+}
+
+func buildTimelineGraph(history []postgres.MemoryHistoryEntry) ([]GraphNode, []GraphEdge) {
+	nodes := make([]GraphNode, 0, len(history))
+	versionNodes := make(map[string][]GraphNode)
+	for _, entry := range history {
+		m := entry.Memory
+		nodeID := fmt.Sprintf("%s@%d", m.ID, entry.SystemFrom.UnixNano())
+		systemFrom := entry.SystemFrom
 		nodes = append(nodes, GraphNode{
-			ID:              m.ID,
+			ID:              nodeID,
+			MemoryID:        m.ID,
 			Label:           graphLabel(m.Summary, m.Content, 120),
 			Category:        string(m.Category),
 			Importance:      string(m.Importance),
@@ -353,26 +480,36 @@ func (h *GraphViewHandler) Timeline(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:       m.CreatedAt,
 			ValidFrom:       m.ValidFrom,
 			ValidTo:         m.ValidTo,
-			RecordedAt:      m.RecordedAt,
 			SupersededBy:    m.SupersededBy,
 			Tags:            m.Tags,
+			Version:         m.Version,
+			Operation:       entry.Operation,
+			SystemFrom:      &systemFrom,
+			SystemTo:        entry.SystemTo,
+			RecordedAt:      systemFrom,
 		})
+		versionNodes[m.ID] = append(versionNodes[m.ID], nodes[len(nodes)-1])
 	}
 	edges := make([]GraphEdge, 0)
-	for _, m := range memories {
-		if m.SupersededBy != "" && memberSet[m.SupersededBy] {
+	for _, versions := range versionNodes {
+		for i := 0; i+1 < len(versions); i++ {
+			edges = append(edges, GraphEdge{Source: versions[i].ID, Target: versions[i+1].ID, Type: "VERSION", Strength: 1})
+		}
+	}
+	for _, versions := range versionNodes {
+		for _, node := range versions {
+			if node.SupersededBy == "" || len(versionNodes[node.SupersededBy]) == 0 {
+				continue
+			}
+			targetVersions := versionNodes[node.SupersededBy]
+			target := targetVersions[len(targetVersions)-1]
 			edges = append(edges, GraphEdge{
-				Source: m.ID, Target: m.SupersededBy, Type: "SUPERSEDES", Strength: 1.0,
+				Source: node.ID, Target: target.ID, Type: "SUPERSEDES", Strength: 1.0,
 			})
 		}
 	}
 
-	writeJSON(w, http.StatusOK, GraphResponse{
-		Nodes:    nodes,
-		Edges:    edges,
-		Total:    len(nodes),
-		TenantID: tenantID,
-	})
+	return nodes, edges
 }
 
 func graphLabel(summary, content string, max int) string {

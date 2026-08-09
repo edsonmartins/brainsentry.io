@@ -72,8 +72,8 @@ func TestDefaultAutoForgetConfig(t *testing.T) {
 	if !cfg.TTLEnabled {
 		t.Error("TTL should be enabled by default")
 	}
-	if !cfg.ContradictionEnabled {
-		t.Error("Contradiction detection should be enabled by default")
+	if cfg.ContradictionEnabled {
+		t.Error("lexical contradiction detection must be opt-in")
 	}
 	if cfg.ContradictionThreshold != 0.9 {
 		t.Errorf("expected threshold 0.9, got %f", cfg.ContradictionThreshold)
@@ -229,6 +229,25 @@ func TestAutoForgetRun_SupersedesOlderDuplicateMemory(t *testing.T) {
 	}
 }
 
+func TestAutoForgetRun_DoesNotSupersedeHighOverlapOppositeFacts(t *testing.T) {
+	now := time.Now()
+	repo := &fakeAutoForgetMemoryRepo{memories: []domain.Memory{
+		{ID: "accepts", Content: "cliente aceita pagamento em trinta dias", Category: domain.CategoryKnowledge, CreatedAt: now.Add(-time.Hour)},
+		{ID: "rejects", Content: "cliente nao aceita pagamento em trinta dias", Category: domain.CategoryKnowledge, CreatedAt: now},
+	}}
+	svc := &AutoForgetService{memoryRepo: repo, config: AutoForgetConfig{
+		ContradictionEnabled: true, ContradictionThreshold: 0.8, MaxDeletesPerRun: 10,
+	}}
+
+	result, err := svc.Run(context.Background(), false)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Contradictions != 0 || len(repo.supersededIDs) != 0 {
+		t.Fatalf("opposite facts were auto-superseded: %+v", repo.supersededIDs)
+	}
+}
+
 func TestAutoForgetRun_DeletesLowValueMemory(t *testing.T) {
 	now := time.Now()
 	recentAccess := now.Add(-time.Hour)
@@ -252,6 +271,13 @@ func TestAutoForgetRun_DeletesLowValueMemory(t *testing.T) {
 				Importance:  domain.ImportanceImportant,
 				CreatedAt:   now.AddDate(0, 0, -200),
 				AccessCount: 0,
+			},
+			{
+				ID:             "helpful-memory",
+				Importance:     domain.ImportanceMinor,
+				CreatedAt:      now.AddDate(0, 0, -200),
+				HelpfulCount:   1,
+				InjectionCount: 1,
 			},
 		},
 	}

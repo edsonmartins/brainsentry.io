@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -17,6 +18,10 @@ type RedisCache struct {
 
 // NewRedisCache creates a new Redis cache client. Returns nil if connection fails (non-fatal).
 func NewRedisCache(addr, password string, db int) *RedisCache {
+	if strings.TrimSpace(addr) == "" {
+		slog.Info("Redis address not configured, caching disabled")
+		return nil
+	}
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,

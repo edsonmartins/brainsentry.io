@@ -47,16 +47,18 @@ func (r *RelationshipRepository) Create(ctx context.Context, rel *domain.MemoryR
 
 // Update updates a relationship.
 func (r *RelationshipRepository) Update(ctx context.Context, rel *domain.MemoryRelationship) error {
-	query := `UPDATE memory_relationships SET frequency=$1, strength=$2, last_used_at=$3, description=$4 WHERE id=$5`
-	_, err := r.pool.Exec(ctx, query, rel.Frequency, rel.Strength, rel.LastUsedAt, rel.Description, rel.ID)
+	tenantID := tenant.FromContext(ctx)
+	query := `UPDATE memory_relationships SET frequency=$1, strength=$2, last_used_at=$3, description=$4 WHERE id=$5 AND tenant_id=$6`
+	_, err := r.pool.Exec(ctx, query, rel.Frequency, rel.Strength, rel.LastUsedAt, rel.Description, rel.ID, tenantID)
 	return err
 }
 
 // FindByFromAndTo finds a relationship between two memories.
 func (r *RelationshipRepository) FindByFromAndTo(ctx context.Context, fromID, toID string) (*domain.MemoryRelationship, error) {
-	query := fmt.Sprintf(`SELECT %s FROM memory_relationships WHERE from_memory_id = $1 AND to_memory_id = $2`, relColumns)
+	tenantID := tenant.FromContext(ctx)
+	query := fmt.Sprintf(`SELECT %s FROM memory_relationships WHERE from_memory_id = $1 AND to_memory_id = $2 AND tenant_id = $3`, relColumns)
 	var rel domain.MemoryRelationship
-	err := r.scanRel(&rel, r.pool.QueryRow(ctx, query, fromID, toID).Scan)
+	err := r.scanRel(&rel, r.pool.QueryRow(ctx, query, fromID, toID, tenantID).Scan)
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +98,11 @@ func (r *RelationshipRepository) FindRelatedWithMinStrength(ctx context.Context,
 // UpdateStrength updates the strength of a relationship.
 func (r *RelationshipRepository) UpdateStrength(ctx context.Context, id string, strength float64) (*domain.MemoryRelationship, error) {
 	now := time.Now()
-	query := fmt.Sprintf(`UPDATE memory_relationships SET strength = $1, last_used_at = $2 WHERE id = $3
+	tenantID := tenant.FromContext(ctx)
+	query := fmt.Sprintf(`UPDATE memory_relationships SET strength = $1, last_used_at = $2 WHERE id = $3 AND tenant_id = $4
 		RETURNING %s`, relColumns)
 	var rel domain.MemoryRelationship
-	err := r.scanRel(&rel, r.pool.QueryRow(ctx, query, strength, now, id).Scan)
+	err := r.scanRel(&rel, r.pool.QueryRow(ctx, query, strength, now, id, tenantID).Scan)
 	if err != nil {
 		return nil, fmt.Errorf("updating strength: %w", err)
 	}
@@ -108,15 +111,17 @@ func (r *RelationshipRepository) UpdateStrength(ctx context.Context, id string, 
 
 // DeleteByFromAndTo deletes a relationship between two memories.
 func (r *RelationshipRepository) DeleteByFromAndTo(ctx context.Context, fromID, toID string) error {
+	tenantID := tenant.FromContext(ctx)
 	_, err := r.pool.Exec(ctx,
-		`DELETE FROM memory_relationships WHERE from_memory_id = $1 AND to_memory_id = $2`, fromID, toID)
+		`DELETE FROM memory_relationships WHERE from_memory_id = $1 AND to_memory_id = $2 AND tenant_id = $3`, fromID, toID, tenantID)
 	return err
 }
 
 // DeleteByMemoryID deletes all relationships for a memory.
 func (r *RelationshipRepository) DeleteByMemoryID(ctx context.Context, memoryID string) error {
+	tenantID := tenant.FromContext(ctx)
 	_, err := r.pool.Exec(ctx,
-		`DELETE FROM memory_relationships WHERE from_memory_id = $1 OR to_memory_id = $1`, memoryID)
+		`DELETE FROM memory_relationships WHERE (from_memory_id = $1 OR to_memory_id = $1) AND tenant_id = $2`, memoryID, tenantID)
 	return err
 }
 

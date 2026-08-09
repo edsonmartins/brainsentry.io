@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/integraltech/brainsentry/internal/domain"
 	"github.com/integraltech/brainsentry/internal/dto"
 )
 
@@ -30,6 +32,42 @@ func TestWriteJSON(t *testing.T) {
 	}
 	if resp["key"] != "value" {
 		t.Errorf("expected 'value', got '%s'", resp["key"])
+	}
+}
+
+func TestWriteDomainErrorMappings(t *testing.T) {
+	tests := []struct {
+		err      error
+		status   int
+		category string
+		code     string
+	}{
+		{domain.NewNotFoundError("missing"), http.StatusNotFound, "NOT_FOUND", "not_found"},
+		{domain.NewValidationError("invalid"), http.StatusBadRequest, "VALIDATION", "validation"},
+		{domain.NewConflictError("conflict"), http.StatusConflict, "CONFLICT", "conflict"},
+		{&domain.DomainError{Err: domain.ErrAlreadyExists, Message: "exists", Code: "already_exists"}, http.StatusConflict, "CONFLICT", "already_exists"},
+		{&domain.DomainError{Err: domain.ErrUnauthorized, Message: "login", Code: "unauthorized"}, http.StatusUnauthorized, "AUTH", "unauthorized"},
+		{&domain.DomainError{Err: domain.ErrForbidden, Message: "denied", Code: "forbidden"}, http.StatusForbidden, "AUTH", "forbidden"},
+		{&domain.DomainError{Err: domain.ErrRateLimited, Message: "slow down", Code: "rate_limited"}, http.StatusTooManyRequests, "INTERNAL", "rate_limited"},
+		{domain.NewInternalError("broken"), http.StatusInternalServerError, "INTERNAL", "internal"},
+	}
+
+	for _, tc := range tests {
+		rr := httptest.NewRecorder()
+		writeDomainError(rr, tc.err)
+		var response dto.ErrorResponse
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatal(err)
+		}
+		if rr.Code != tc.status || response.ErrorCategory != tc.category || response.ErrorCode != tc.code {
+			t.Fatalf("err=%v response=%+v status=%d", tc.err, response, rr.Code)
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	writeDomainError(rr, errors.New("opaque"))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("opaque errors must map to 500, got %d", rr.Code)
 	}
 }
 

@@ -117,7 +117,7 @@ func (s *EventService) ExtractFromText(ctx context.Context, content, sourceMemor
 Text:
 """
 %s
-"""`, content)
+"""`, frameLLMData("event-input", "external-content", content))
 	raw, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: "You extract structured events from text. Respond with JSON only."},
 		{Role: "user", Content: prompt},

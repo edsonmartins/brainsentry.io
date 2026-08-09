@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/integraltech/brainsentry/internal/domain"
 	"github.com/integraltech/brainsentry/internal/dto"
 	graphrepo "github.com/integraltech/brainsentry/internal/repository/graph"
@@ -118,6 +119,16 @@ type memoryGraphRepository interface {
 	VectorSearch(ctx context.Context, embedding []float32, limit int, tenantID string) ([]string, []float64, error)
 }
 
+type memoryGraphWriter interface {
+	SaveToGraph(ctx context.Context, m *domain.Memory) error
+	CreateTagRelationships(ctx context.Context, m *domain.Memory) error
+	PurgeMemoryNodes(ctx context.Context, tenantID string, ids []string) error
+}
+
+type memoryGraphAssociator interface {
+	FindRelated(ctx context.Context, memoryID string, depth int, tenantID string) ([]string, error)
+}
+
 type embeddingGenerator interface {
 	Embed(text string) []float32
 	HasAPI() bool
@@ -187,6 +198,7 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 	}
 
 	m := &domain.Memory{
+		ID:                  uuid.NewString(),
 		Content:             req.Content,
 		Summary:             req.Summary,
 		Category:            req.Category,
@@ -212,15 +224,11 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 		m.EmotionalWeight = w
 	}
 
-	// Extract chain-of-thought traces from content and store in metadata
-	content, cotTrace := extractChainOfThought(m.Content)
-	if cotTrace != "" {
-		m.Content = content
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]any)
-		}
-		req.Metadata["chainOfThought"] = cotTrace
-	}
+	// Reasoning traces are not durable memory. Remove explicitly tagged traces
+	// from the user-visible content and discard them instead of persisting raw
+	// chain-of-thought in metadata.
+	content, _ := extractChainOfThought(m.Content)
+	m.Content = content
 
 	if req.Metadata != nil {
 		metaJSON, _ := json.Marshal(req.Metadata)
@@ -351,55 +359,11 @@ func (s *MemoryService) CreateMemory(ctx context.Context, req dto.CreateMemoryRe
 		m.Provenance = domain.ProvenanceExplicit
 	}
 
-	// Check for temporal supersession: if a similar memory with same subject exists, supersede it
-	if m.SimHash != "" {
-		if existingHashes, err := s.memoryRepo.FindSimHashes(ctx); err == nil {
-			newHash := SimHashFromHex(m.SimHash)
-			for existingID, existingHex := range existingHashes {
-				existingHash := SimHashFromHex(existingHex)
-				dist := SimHashHammingDistance(newHash, existingHash)
-				// Near-match (4-8 distance) with same category = candidate for supersession
-				if dist > 3 && dist <= 8 && m.Category != "" {
-					existing, err := s.memoryRepo.FindByID(ctx, existingID)
-					if err == nil && existing.Category == m.Category && existing.SupersededBy == "" {
-						// Supersede the old memory + propagate staleness through graph.
-						go func(oldID, newID, tid string) {
-							bgCtx := tenant.WithTenant(context.Background(), tid)
-							if err := s.memoryRepo.SupersedeMemory(bgCtx, oldID, newID); err != nil {
-								slog.Warn("supersede failed", "oldId", oldID, "error", err)
-								return
-							}
-							if s.stalenessSvc != nil {
-								if _, err := s.stalenessSvc.PropagateFromSupersession(bgCtx, oldID, newID); err != nil {
-									slog.Warn("staleness propagation failed", "oldId", oldID, "error", err)
-								}
-							}
-						}(existingID, m.ID, tenant.FromContext(ctx))
-						break
-					}
-				}
-			}
-		}
-	}
-
 	if err := s.memoryRepo.Create(ctx, m); err != nil {
 		return nil, err
 	}
 
-	// Create initial version
-	if s.versionRepo != nil {
-		go func() {
-			bgCtx := tenant.WithTenant(context.Background(), m.TenantID)
-			if err := s.versionRepo.CreateFromMemory(bgCtx, m, "create", "initial creation", m.CreatedBy); err != nil {
-				slog.Warn("failed to create initial version", "error", err, "memoryId", m.ID)
-			}
-		}()
-	}
-
-	// Audit log
-	if s.auditService != nil {
-		go s.auditService.LogMemoryCreated(tenant.WithTenant(context.Background(), m.TenantID), m)
-	}
+	s.syncGraph(ctx, m)
 
 	// 3. Triplet extraction — heavy (LLM). Routed through the durable scheduler
 	// when available, else a detached goroutine. Results stored in metadata.
@@ -566,19 +530,15 @@ func (s *MemoryService) UpdateMemory(ctx context.Context, id string, req dto.Upd
 		return nil, err
 	}
 
-	// Archive current version before updating
-	if s.versionRepo != nil {
-		go func() {
-			bgCtx := tenant.WithTenant(context.Background(), m.TenantID)
-			if err := s.versionRepo.CreateFromMemory(bgCtx, m, "update", req.ChangeReason, ""); err != nil {
-				slog.Warn("failed to create version", "error", err)
-			}
-		}()
-	}
-
 	// Apply updates
 	if req.Content != "" {
-		m.Content = req.Content
+		content := req.Content
+		if s.stripper != nil {
+			content = s.stripper.StripBeforeStorage(content)
+		}
+		content, _ = extractChainOfThought(content)
+		m.Content = content
+		m.SimHash = SimHashToHex(ComputeSimHash(content))
 	}
 	if req.Summary != "" {
 		m.Summary = req.Summary
@@ -597,7 +557,11 @@ func (s *MemoryService) UpdateMemory(ctx context.Context, id string, req dto.Upd
 		m.Metadata = metaJSON
 	}
 	if req.CodeExample != "" {
-		m.CodeExample = req.CodeExample
+		codeExample := req.CodeExample
+		if s.stripper != nil {
+			codeExample = s.stripper.StripBeforeStorage(codeExample)
+		}
+		m.CodeExample = codeExample
 	}
 	if req.ProgrammingLanguage != "" {
 		m.ProgrammingLanguage = req.ProgrammingLanguage
@@ -610,14 +574,19 @@ func (s *MemoryService) UpdateMemory(ctx context.Context, id string, req dto.Upd
 		m.Embedding = s.embeddingService.Embed(m.Content)
 	}
 
-	if err := s.memoryRepo.Update(ctx, m); err != nil {
-		return nil, err
+	var updateErr error
+	if repository, ok := s.memoryRepo.(interface {
+		UpdateWithReason(context.Context, *domain.Memory, string) error
+	}); ok {
+		updateErr = repository.UpdateWithReason(ctx, m, req.ChangeReason)
+	} else {
+		updateErr = s.memoryRepo.Update(ctx, m)
+	}
+	if updateErr != nil {
+		return nil, updateErr
 	}
 
-	// Audit
-	if s.auditService != nil {
-		go s.auditService.LogMemoryUpdated(tenant.WithTenant(context.Background(), m.TenantID), m)
-	}
+	s.syncGraph(ctx, m)
 
 	return m, nil
 }
@@ -628,12 +597,27 @@ func (s *MemoryService) DeleteMemory(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Audit
-	if s.auditService != nil {
-		go s.auditService.LogMemoryDeleted(tenant.WithTenant(context.Background(), tenant.FromContext(ctx)), id)
+	if writer, ok := s.memoryGraphRepo.(memoryGraphWriter); ok {
+		if err := writer.PurgeMemoryNodes(ctx, tenant.FromContext(ctx), []string{id}); err != nil {
+			slog.Warn("failed to remove deleted memory from graph projection", "memoryId", id, "error", err)
+		}
 	}
 
 	return nil
+}
+
+func (s *MemoryService) syncGraph(ctx context.Context, m *domain.Memory) {
+	writer, ok := s.memoryGraphRepo.(memoryGraphWriter)
+	if !ok || m == nil {
+		return
+	}
+	if err := writer.SaveToGraph(ctx, m); err != nil {
+		slog.Warn("failed to update graph projection", "memoryId", m.ID, "error", err)
+		return
+	}
+	if err := writer.CreateTagRelationships(ctx, m); err != nil {
+		slog.Warn("failed to update graph relationships", "memoryId", m.ID, "error", err)
+	}
 }
 
 // SearchMemories searches memories by text query, using vector search when available.
@@ -669,9 +653,9 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 	queryTokens := TokenizeQuery(req.Query)
 	scoredByID := make(map[string]scoredMemory)
 
-	addScored := func(m *domain.Memory, sim float64) {
+	addScored := func(m *domain.Memory, sim float64, graphHops int) {
 		existing, found := scoredByID[m.ID]
-		newTrace := ComputeHybridScore(m, sim, queryTokens, -1, req.Tags, DefaultScoringWeights)
+		newTrace := ComputeHybridScore(m, sim, queryTokens, graphHops, req.Tags, DefaultScoringWeights)
 		if !found || newTrace.FinalScore > existing.trace.FinalScore {
 			scoredByID[m.ID] = scoredMemory{memory: *m, trace: newTrace}
 		}
@@ -699,7 +683,28 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 						if isInactiveMemory(m, time.Now()) {
 							continue
 						}
-						addScored(m, scoreByID[m.ID])
+						addScored(m, scoreByID[m.ID], 0)
+					}
+
+					// Add graph neighbors as associative candidates. The graph
+					// repository currently returns IDs rather than path metadata,
+					// so direct/short traversal is conservatively scored as one hop.
+					if associator, ok := s.memoryGraphRepo.(memoryGraphAssociator); ok {
+						var relatedIDs []string
+						for _, seedID := range ids {
+							related, relErr := associator.FindRelated(ctx, seedID, 1, tenant.FromContext(ctx))
+							if relErr == nil {
+								relatedIDs = append(relatedIDs, related...)
+							}
+						}
+						if relatedMemories, relErr := s.memoryRepo.FindByIDsScoped(ctx, relatedIDs, req.Tags); relErr == nil {
+							for i := range relatedMemories {
+								m := &relatedMemories[i]
+								if !isInactiveMemory(m, time.Now()) {
+									addScored(m, 0, 1)
+								}
+							}
+						}
 					}
 				}
 			}
@@ -718,7 +723,7 @@ func (s *MemoryService) SearchMemories(ctx context.Context, req dto.SearchReques
 				if isInactiveMemory(m, time.Now()) {
 					continue
 				}
-				addScored(m, 0.3)
+				addScored(m, 0.3, -1)
 			}
 		}
 	}

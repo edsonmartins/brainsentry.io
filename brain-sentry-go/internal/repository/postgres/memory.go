@@ -22,6 +22,16 @@ type MemoryRepository struct {
 	pool *pgxpool.Pool
 }
 
+// MemoryHistoryEntry is one system-time version of a canonical memory.
+// Snapshot contains the domain state that was visible during [SystemFrom,
+// SystemTo), while Operation explains why that version was recorded.
+type MemoryHistoryEntry struct {
+	Memory     domain.Memory
+	Operation  string
+	SystemFrom time.Time
+	SystemTo   *time.Time
+}
+
 // NewMemoryRepository creates a new MemoryRepository.
 func NewMemoryRepository(pool *pgxpool.Pool) *MemoryRepository {
 	return &MemoryRepository{pool: pool}
@@ -113,6 +123,9 @@ func (r *MemoryRepository) Create(ctx context.Context, m *domain.Memory) error {
 	if err := r.insertTags(ctx, tx, m.ID, m.Tags); err != nil {
 		return err
 	}
+	if err := r.recordCanonicalMutation(ctx, tx, m, "create", "initial creation"); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }
@@ -175,6 +188,16 @@ func (r *MemoryRepository) List(ctx context.Context, page, size int) ([]domain.M
 
 // Update updates a memory.
 func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
+	return r.update(ctx, m, "update")
+}
+
+// UpdateWithReason atomically stores the memory and its human-readable
+// version reason. Callers without a reason use Update.
+func (r *MemoryRepository) UpdateWithReason(ctx context.Context, m *domain.Memory, changeReason string) error {
+	return r.update(ctx, m, changeReason)
+}
+
+func (r *MemoryRepository) update(ctx context.Context, m *domain.Memory, changeReason string) error {
 	tenantID := tenant.FromContext(ctx)
 	m.UpdatedAt = time.Now()
 
@@ -183,6 +206,12 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+	var currentVersion int
+	if err := tx.QueryRow(ctx, `SELECT version FROM memories
+		WHERE id=$1 AND tenant_id=$2 AND deleted_at IS NULL FOR UPDATE`, m.ID, tenantID).Scan(&currentVersion); err != nil {
+		return fmt.Errorf("locking memory for update: %w", err)
+	}
+	m.Version = currentVersion + 1
 
 	query := `UPDATE memories SET content=$1, summary=$2, category=$3, importance=$4,
 		validation_status=$5, embedding=$6, metadata=$7, source_type=$8, source_reference=$9,
@@ -191,7 +220,7 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 		access_count=$21, injection_count=$22, helpful_count=$23, not_helpful_count=$24
 		WHERE id=$25 AND tenant_id=$26`
 
-	_, err = tx.Exec(ctx, query,
+	tag, err := tx.Exec(ctx, query,
 		m.Content, m.Summary, m.Category, m.Importance,
 		m.ValidationStatus, m.Embedding, m.Metadata, m.SourceType, m.SourceReference,
 		m.UpdatedAt, m.Version, m.CodeExample, m.ProgrammingLanguage, m.MemoryType,
@@ -202,6 +231,9 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 	if err != nil {
 		return fmt.Errorf("updating memory: %w", err)
 	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("updating memory: %w", pgx.ErrNoRows)
+	}
 
 	// Replace tags
 	_, err = tx.Exec(ctx, `DELETE FROM memory_tags WHERE memory_id = $1`, m.ID)
@@ -211,6 +243,9 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 	if err := r.insertTags(ctx, tx, m.ID, m.Tags); err != nil {
 		return err
 	}
+	if err := r.recordCanonicalMutation(ctx, tx, m, "update", changeReason); err != nil {
+		return err
+	}
 
 	return tx.Commit(ctx)
 }
@@ -218,13 +253,35 @@ func (r *MemoryRepository) Update(ctx context.Context, m *domain.Memory) error {
 // Delete soft-deletes a memory by setting deleted_at timestamp.
 func (r *MemoryRepository) Delete(ctx context.Context, id string) error {
 	tenantID := tenant.FromContext(ctx)
-	_, err := r.pool.Exec(ctx,
-		`UPDATE memories SET deleted_at = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL`,
-		time.Now(), id, tenantID)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning delete transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := fmt.Sprintf(`SELECT %s FROM memories WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE`, memoryColumns)
+	m, err := scanMemory(tx.QueryRow(ctx, query, id, tenantID))
+	if err != nil {
+		return fmt.Errorf("loading memory for deletion: %w", err)
+	}
+	m.Tags, err = loadTagsTx(ctx, tx, id)
+	if err != nil {
+		return fmt.Errorf("loading tags for deletion: %w", err)
+	}
+	now := time.Now()
+	m.DeletedAt = &now
+	m.UpdatedAt = now
+	m.Version++
+	_, err = tx.Exec(ctx,
+		`UPDATE memories SET deleted_at = $1, updated_at = $1, version = $2 WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL`,
+		now, m.Version, id, tenantID)
 	if err != nil {
 		return fmt.Errorf("soft-deleting memory: %w", err)
 	}
-	return nil
+	if err := r.recordCanonicalMutation(ctx, tx, m, "delete", "delete"); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // FindByCategory returns memories filtered by category.
@@ -289,12 +346,12 @@ func (r *MemoryRepository) FullTextSearchScoped(ctx context.Context, query strin
 	// Use PostgreSQL full-text search with ts_rank for relevance ordering.
 	// plainto_tsquery handles user input safely (no special syntax needed).
 	q := fmt.Sprintf(`SELECT %s FROM memories WHERE tenant_id = $1
-		AND (to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')) @@ plainto_tsquery('english', $2))
+		AND (to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(summary,'')) @@ plainto_tsquery('simple', $2))
 		AND deleted_at IS NULL
 		AND (valid_from IS NULL OR valid_from <= NOW())
 		AND (valid_to IS NULL OR valid_to > NOW())
 		AND COALESCE(superseded_by, '') = ''%s
-		ORDER BY ts_rank(to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')), plainto_tsquery('english', $2)) DESC
+		ORDER BY ts_rank(to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(summary,'')), plainto_tsquery('simple', $2)) DESC
 		LIMIT $%d`, memoryColumns, scope, len(args))
 
 	rows, err := r.pool.Query(ctx, q, args...)
@@ -376,12 +433,12 @@ func (r *MemoryRepository) FullTextSearchSimilar(ctx context.Context, text strin
 	tsExpr := strings.Join(tokens, " or ")
 
 	q := fmt.Sprintf(`SELECT %s FROM memories WHERE tenant_id = $1
-		AND (to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')) @@ websearch_to_tsquery('english', $2))
+		AND (to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(summary,'')) @@ websearch_to_tsquery('simple', $2))
 		AND deleted_at IS NULL
 		AND (valid_from IS NULL OR valid_from <= NOW())
 		AND (valid_to IS NULL OR valid_to > NOW())
 		AND COALESCE(superseded_by, '') = ''
-		ORDER BY ts_rank(to_tsvector('english', coalesce(content,'') || ' ' || coalesce(summary,'')), websearch_to_tsquery('english', $2)) DESC
+		ORDER BY ts_rank(to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(summary,'')), websearch_to_tsquery('simple', $2)) DESC
 		LIMIT $3`, memoryColumns)
 
 	rows, err := r.pool.Query(ctx, q, tenantID, tsExpr, limit)
@@ -653,43 +710,54 @@ func (r *MemoryRepository) BoostAccessCount(ctx context.Context, id string, boos
 // updated_at so changed-since picks it up). Used when a resolution
 // promotes a surviving memory to CORRECTED.
 func (r *MemoryRepository) SetProvenance(ctx context.Context, id string, prov domain.Provenance) error {
-	tenantID := tenant.FromContext(ctx)
-	now := time.Now()
-	_, err := r.pool.Exec(ctx,
-		`UPDATE memories SET provenance = $1, updated_at = $2
-		WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL`,
-		string(prov), now, id, tenantID)
+	m, err := r.FindByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("setting provenance: %w", err)
+		return err
 	}
-	return nil
+	m.Provenance = prov
+	m.Version++
+	return r.Update(ctx, m)
 }
 
 func (r *MemoryRepository) SupersedeMemory(ctx context.Context, oldID, newID string) error {
-	tenantID := tenant.FromContext(ctx)
-	now := time.Now()
-	_, err := r.pool.Exec(ctx,
-		`UPDATE memories SET superseded_by = $1, valid_to = $2, updated_at = $3
-		WHERE id = $4 AND tenant_id = $5 AND deleted_at IS NULL`,
-		newID, now, now, oldID, tenantID)
+	m, err := r.FindByID(ctx, oldID)
 	if err != nil {
-		return fmt.Errorf("superseding memory: %w", err)
+		return err
 	}
-	return nil
+	now := time.Now()
+	m.SupersededBy = newID
+	m.ValidTo = &now
+	m.Version++
+	return r.Update(ctx, m)
 }
 
 // ExpireStaleMemories soft-deletes memories past their valid_to date.
 func (r *MemoryRepository) ExpireStaleMemories(ctx context.Context) (int64, error) {
 	tenantID := tenant.FromContext(ctx)
 	now := time.Now()
-	tag, err := r.pool.Exec(ctx,
-		`UPDATE memories SET deleted_at = $1
-		WHERE tenant_id = $2 AND valid_to IS NOT NULL AND valid_to < $3 AND deleted_at IS NULL`,
-		now, tenantID, now)
+	rows, err := r.pool.Query(ctx, `SELECT id FROM memories
+		WHERE tenant_id = $1 AND valid_to IS NOT NULL AND valid_to < $2 AND deleted_at IS NULL`, tenantID, now)
 	if err != nil {
-		return 0, fmt.Errorf("expiring stale memories: %w", err)
+		return 0, fmt.Errorf("finding stale memories: %w", err)
 	}
-	return tag.RowsAffected(), nil
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	var expired int64
+	for _, id := range ids {
+		if err := r.Delete(ctx, id); err != nil {
+			return expired, fmt.Errorf("expiring stale memory %s: %w", id, err)
+		}
+		expired++
+	}
+	return expired, nil
 }
 
 // FindActiveMemories returns memories that are currently valid (within valid_from/valid_to range).
@@ -739,6 +807,53 @@ func (r *MemoryRepository) FindByRecordedRange(ctx context.Context, from, to tim
 	return scanMemories(rows)
 }
 
+// FindHistoryRange returns every recorded version whose system-time interval
+// overlaps the requested range. Unlike FindByRecordedRange, this includes
+// prior and deleted versions and is therefore suitable for the bi-temporal
+// graph rather than only for a list of current memories.
+func (r *MemoryRepository) FindHistoryRange(ctx context.Context, from, to time.Time, limit int) ([]MemoryHistoryEntry, error) {
+	tenantID := tenant.FromContext(ctx)
+	if limit <= 0 {
+		limit = 500
+	}
+	if to.IsZero() {
+		to = time.Now()
+	}
+	var fromArg any
+	if !from.IsZero() {
+		fromArg = from
+	}
+	rows, err := r.pool.Query(ctx, `SELECT snapshot, tags, operation, system_from, system_to
+		FROM memory_history
+		WHERE tenant_id = $1
+		  AND system_from <= $2
+		  AND ($3::timestamptz IS NULL OR system_to IS NULL OR system_to >= $3)
+		ORDER BY system_from ASC
+		LIMIT $4`, tenantID, to, fromArg, limit)
+	if err != nil {
+		return nil, fmt.Errorf("finding memory history range: %w", err)
+	}
+	defer rows.Close()
+	entries := make([]MemoryHistoryEntry, 0)
+	for rows.Next() {
+		var snapshot []byte
+		var tags []string
+		var entry MemoryHistoryEntry
+		if err := rows.Scan(&snapshot, &tags, &entry.Operation, &entry.SystemFrom, &entry.SystemTo); err != nil {
+			return nil, fmt.Errorf("scanning memory history range: %w", err)
+		}
+		if err := json.Unmarshal(snapshot, &entry.Memory); err != nil {
+			return nil, fmt.Errorf("decoding memory history range: %w", err)
+		}
+		entry.Memory.Tags = tags
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating memory history range: %w", err)
+	}
+	return entries, nil
+}
+
 // FindAsOf returns memories valid at a specific point in time and recorded
 // in the system no later than that point. Implements bi-temporal "time travel"
 // queries — how the system saw the world at instant `asOf`.
@@ -747,20 +862,38 @@ func (r *MemoryRepository) FindAsOf(ctx context.Context, asOf time.Time, limit i
 	if limit <= 0 {
 		limit = 100
 	}
-	query := fmt.Sprintf(`SELECT %s FROM memories
+	rows, err := r.pool.Query(ctx, `SELECT snapshot, tags FROM memory_history
 		WHERE tenant_id = $1
-		  AND deleted_at IS NULL
-		  AND recorded_at <= $2
+		  AND system_from <= $2
+		  AND (system_to IS NULL OR system_to > $2)
 		  AND (valid_from IS NULL OR valid_from <= $2)
 		  AND (valid_to IS NULL OR valid_to > $2)
-		ORDER BY recorded_at DESC
-		LIMIT $3`, memoryColumns)
-	rows, err := r.pool.Query(ctx, query, tenantID, asOf, limit)
+		  AND operation <> 'delete'
+		  AND snapshot->>'deletedAt' IS NULL
+		ORDER BY system_from DESC
+		LIMIT $3`, tenantID, asOf, limit)
 	if err != nil {
 		return nil, fmt.Errorf("finding as_of memories: %w", err)
 	}
 	defer rows.Close()
-	return scanMemories(rows)
+	memories := make([]domain.Memory, 0)
+	for rows.Next() {
+		var snapshot []byte
+		var tags []string
+		if err := rows.Scan(&snapshot, &tags); err != nil {
+			return nil, fmt.Errorf("scanning as_of memory: %w", err)
+		}
+		var m domain.Memory
+		if err := json.Unmarshal(snapshot, &m); err != nil {
+			return nil, fmt.Errorf("decoding as_of memory: %w", err)
+		}
+		m.Tags = tags
+		memories = append(memories, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating as_of memories: %w", err)
+	}
+	return memories, nil
 }
 
 // FindChangedSince returns memories created OR updated at/after `since`,

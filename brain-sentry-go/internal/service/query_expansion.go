@@ -9,9 +9,9 @@ import (
 
 // ExpandedQuery holds the original query and its LLM-generated reformulations.
 type ExpandedQuery struct {
-	Original      string   `json:"original"`
+	Original       string   `json:"original"`
 	Reformulations []string `json:"reformulations"`
-	Entities      []string `json:"entities"`
+	Entities       []string `json:"entities"`
 }
 
 // QueryExpansionService generates query reformulations using LLM for better search recall.
@@ -52,7 +52,7 @@ func (s *QueryExpansionService) Expand(ctx context.Context, query string) *Expan
 
 	response, err := s.llm.Chat(ctx, []ChatMessage{
 		{Role: "system", Content: queryExpansionPrompt},
-		{Role: "user", Content: "Search query: " + query},
+		{Role: "user", Content: "Search query data: " + frameLLMData("query-expansion", "external-query", query)},
 	})
 	if err != nil {
 		slog.Warn("query expansion LLM failed, using fallback", "error", err)

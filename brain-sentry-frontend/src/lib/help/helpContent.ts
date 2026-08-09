@@ -308,14 +308,14 @@ export const helpContent: Record<string, HelpEntry> = {
       "A partir de uma memória escolhida, enxergar suas vizinhas diretas e indiretas. Útil para investigar o contexto completo de uma decisão ou insight.",
       "Saber que existe uma memória não basta — é preciso ver o que está ao redor dela. Esta visão traz, em um raio de alguns passos, tudo que se liga ao ponto escolhido.",
       [
-        "Escolha a memória-semente pelo identificador",
+        "Escolha a memória-semente pelo resumo; o identificador continua disponível para consultas exatas",
         "Ajuste o alcance (até 4 passos)",
         "Cores indicam a distância do centro — quanto mais perto, mais vivo",
         "Clique em qualquer nó para re-centrar ali",
         "Histórico permite voltar à semente anterior",
       ],
       [
-        { numero: 1, acao: "Cole um identificador de memória no campo", esperado: "Botão Explorar fica ativo" },
+        { numero: 1, acao: "Escolha uma memória pelo resumo ou cole seu identificador", esperado: "A memória fica pronta para exploração" },
         { numero: 2, acao: "Clique em Explorar", esperado: "Aparece a semente destacada no centro" },
         { numero: 3, acao: "Aumente para 3 passos", esperado: "A rede cresce e surgem conexões indiretas" },
         { numero: 4, acao: "Clique em um nó distante e confirme o re-centrar", esperado: "A vizinhança é recalculada ao redor dele" },
@@ -331,14 +331,14 @@ export const helpContent: Record<string, HelpEntry> = {
       "From a chosen memory, see its direct and indirect neighbours. Useful to investigate the full context of a decision or insight.",
       "Knowing a memory exists isn't enough — you must see what surrounds it. This view brings, within a few hops, everything tied to the chosen point.",
       [
-        "Pick the seed memory by id",
+        "Pick the seed memory by summary; its id remains available for exact lookups",
         "Adjust the reach (up to 4 hops)",
         "Colours show distance from the centre — closer is brighter",
         "Click any node to re-centre there",
         "History lets you go back to the previous seed",
       ],
       [
-        { numero: 1, acao: "Paste a memory id in the field", esperado: "Explore button becomes active" },
+        { numero: 1, acao: "Choose a memory by summary or paste its id", esperado: "The memory is ready to explore" },
         { numero: 2, acao: "Click Explore", esperado: "Seed appears highlighted at the centre" },
         { numero: 3, acao: "Bump to 3 hops", esperado: "The web grows, indirect links appear" },
         { numero: 4, acao: "Click a far node and re-centre", esperado: "Neighbourhood is recomputed around it" },
@@ -358,7 +358,8 @@ export const helpContent: Record<string, HelpEntry> = {
       "Decisões são avaliadas com o conhecimento disponível no momento. Esta visão permite responder: em tal dia, o que estávamos sabendo sobre esse assunto?",
       [
         "Eixo horizontal é o tempo, linhas horizontais separam categorias",
-        "Cada ponto é uma memória, posicionada pela data em que foi registrada",
+        "Cada ponto é uma versão histórica, posicionada quando o sistema a registrou",
+        "Linhas tracejadas ligam versões da mesma memória",
         "Setas vermelhas mostram quando uma memória foi substituída",
         "Janelas pré-definidas: 24 horas, 7 dias, 30 dias ou tudo",
       ],
@@ -369,7 +370,7 @@ export const helpContent: Record<string, HelpEntry> = {
       ],
       [
         "Pontos desbotados foram substituídos — já não valem",
-        "A data 'válida a partir de' indica quando a memória passou a valer, não quando foi registrada",
+        "A data 'válida a partir de' indica quando a memória passou a valer; o tempo do sistema indica quando a versão foi conhecida",
       ],
     ),
     en: pt(
@@ -379,7 +380,8 @@ export const helpContent: Record<string, HelpEntry> = {
       "Decisions are judged against the knowledge available at the time. This view answers: on that day, what did we know on this topic?",
       [
         "Horizontal axis is time, horizontal lanes separate categories",
-        "Each dot is a memory, placed by its recorded date",
+        "Each dot is a historical version, placed when the system recorded it",
+        "Dashed lines connect versions of the same memory",
         "Red arrows show when a memory was replaced",
         "Preset windows: 24h, 7 days, 30 days or all",
       ],
@@ -390,7 +392,7 @@ export const helpContent: Record<string, HelpEntry> = {
       ],
       [
         "Faded dots were superseded — no longer active",
-        "'Valid from' is when it started being true, not when it was recorded",
+        "'Valid from' says when it became true; system time says when that version became known",
       ],
     ),
   },

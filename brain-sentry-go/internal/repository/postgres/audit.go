@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/integraltech/brainsentry/internal/domain"
@@ -33,14 +34,22 @@ func scanAuditLogs(rows pgx.Rows) ([]domain.AuditLog, error) {
 	var logs []domain.AuditLog
 	for rows.Next() {
 		var a domain.AuditLog
+		var eventType, userID, sessionID, userRequest, reasoning, outcome, errorMessage pgtype.Text
 		err := rows.Scan(
-			&a.ID, &a.EventType, &a.Timestamp, &a.UserID, &a.SessionID, &a.UserRequest,
-			&a.Decision, &a.Reasoning, &a.Confidence, &a.InputData, &a.OutputData,
-			&a.LatencyMs, &a.LLMCalls, &a.TokensUsed, &a.Outcome, &a.ErrorMessage, &a.UserFeedback, &a.TenantID,
+			&a.ID, &eventType, &a.Timestamp, &userID, &sessionID, &userRequest,
+			&a.Decision, &reasoning, &a.Confidence, &a.InputData, &a.OutputData,
+			&a.LatencyMs, &a.LLMCalls, &a.TokensUsed, &outcome, &errorMessage, &a.UserFeedback, &a.TenantID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scanning audit log: %w", err)
 		}
+		a.EventType = eventType.String
+		a.UserID = userID.String
+		a.SessionID = sessionID.String
+		a.UserRequest = userRequest.String
+		a.Reasoning = reasoning.String
+		a.Outcome = outcome.String
+		a.ErrorMessage = errorMessage.String
 		logs = append(logs, a)
 	}
 	return logs, nil
